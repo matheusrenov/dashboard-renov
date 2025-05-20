@@ -1,6 +1,7 @@
+
 import dash
 from dash import dcc, html, dash_table, ctx
-from dash.dependencies import Input, Output
+from dash.dependencies import Input, Output, State
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -37,34 +38,34 @@ def encontrar_coluna_padrao(colunas, nome_padrao):
     return None
 
 def process_data(contents):
-    content_type, content_string = contents.split(',')
-    decoded = base64.b64decode(content_string)
-    df = pd.read_excel(io.BytesIO(decoded))
-    print("Colunas detectadas:", df.columns.tolist())
+    try:
+        content_type, content_string = contents.split(',')
+        decoded = base64.b64decode(content_string)
+        df = pd.read_excel(io.BytesIO(decoded))
+        df.columns = df.columns.str.strip()
+        print("Colunas detectadas:", df.columns.tolist())
 
-    df.columns = df.columns.str.strip()
+        col_map = {}
+        for padrao in REQUIRED_COLUMNS:
+            encontrado = encontrar_coluna_padrao(df.columns, padrao)
+            if encontrado:
+                col_map[padrao] = encontrado
+            else:
+                raise ValueError(f"Coluna obrigatória ausente: {padrao}")
 
-    print("Pré-visualização do DataFrame carregado:")
-    print(df.head())
-    print("Colunas do DataFrame carregado:", df.columns.tolist())
+        df.rename(columns={v: k for k, v in col_map.items()}, inplace=True)
 
-    col_map = {}
-    for padrao in REQUIRED_COLUMNS:
-        encontrado = encontrar_coluna_padrao(df.columns, padrao)
-        if encontrado:
-            col_map[padrao] = encontrado
-        else:
-            raise ValueError(f"Coluna obrigatória ausente: {padrao}")
-
-    df.rename(columns={v: k for k, v in col_map.items()}, inplace=True)
-
-    df['Criado em'] = pd.to_datetime(df['Criado em'], errors='coerce')
-    df = df[df['Criado em'].notna()]
-    df['Mês'] = df['Criado em'].dt.month
-    return df
+        df['Criado em'] = pd.to_datetime(df['Criado em'], errors='coerce')
+        df = df[df['Criado em'].notna()]
+        df['Mês'] = df['Criado em'].dt.month
+        return df
+    except Exception as e:
+        print(f"Erro ao processar dados: {e}")
+        return pd.DataFrame()
 
 app.layout = dbc.Container(fluid=True, children=[
     html.H1("Dashboard de Resultados", style={"textAlign": "center", "color": "white", "backgroundColor": "black", "padding": "10px"}),
+
     dcc.Upload(
         id='upload-data',
         children=html.Div(['Arraste ou selecione o arquivo BD.xlsx']),
@@ -75,32 +76,49 @@ app.layout = dbc.Container(fluid=True, children=[
         },
         multiple=False
     ),
+
     dbc.Row([
         dbc.Col(dcc.Dropdown(id='month-filter', placeholder='Selecione o mês'), md=4),
         dbc.Col(dcc.Dropdown(id='rede-filter', placeholder='Selecione Nome da rede'), md=4),
         dbc.Col(dcc.Dropdown(id='situacao-filter', placeholder='Situação do Voucher', multi=True), md=4)
     ], className='mb-4'),
+
     dbc.Row(id='kpi-container', className='mb-4'),
+
     dbc.Row([
         dbc.Col(dcc.Graph(id='vouchers-gerados'), md=4),
         dbc.Col(dcc.Graph(id='vouchers-utilizados'), md=4),
         dbc.Col(dcc.Graph(id='ticket-medio'), md=4)
     ], className='mb-4'),
+
     dbc.Row([
         dbc.Col(html.Div(id='top-filiais'), md=6),
         dbc.Col(html.Div(id='top-vendedores'), md=6)
     ], className='mb-4'),
+
     dbc.Row([
         dbc.Col(dcc.Graph(id='top-dispositivos'), md=12)
     ]),
+
     dbc.Row([
         dbc.Col(html.Button("Exportar Tabela (Excel)", id="btn-export-excel", className="btn btn-dark"), width="auto"),
         dbc.Col(html.Button("Exportar Painel (PDF)", id="btn-export-pdf", className="btn btn-secondary"), width="auto"),
         dcc.Download(id="download-dataframe-xlsx")
     ], style={'margin': '20px'}),
+
     dcc.Store(id='hidden-data'),
     dcc.Store(id='filtered-data')
 ])
+
+@app.callback(
+    Output('hidden-data', 'data'),
+    Input('upload-data', 'contents')
+)
+def store_uploaded_data(contents):
+    if contents:
+        df = process_data(contents)
+        return df.to_json(date_format='iso', orient='split')
+    return None
 
 @app.callback(
     Output('filtered-data', 'data'),
@@ -112,13 +130,16 @@ app.layout = dbc.Container(fluid=True, children=[
 def aplicar_filtros(json_data, mes, rede, situacoes):
     if json_data is None:
         return dash.no_update
+
     df = pd.read_json(io.StringIO(json_data), orient='split')
+
     if mes:
         df = df[df['Mês'] == mes]
     if rede:
         df = df[df['Nome da rede'] == rede]
     if situacoes:
         df = df[df['Situacao do voucher'].isin(situacoes)]
+
     return df.to_json(date_format='iso', orient='split')
 
 @app.callback(
