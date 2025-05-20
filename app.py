@@ -118,7 +118,7 @@ def aplicar_filtros(json_data, mes, rede, situacoes):
     Output('vouchers-gerados', 'figure'),
     Output('vouchers-utilizados', 'figure'),
     Output('ticket-medio', 'figure'),
-    Output('top-filiais', 'figure'),
+    Output('top-filiais', 'children'),
     Input('filtered-data', 'data')
 )
 def update_dashboard(json_data):
