@@ -40,8 +40,7 @@ def process_data(contents):
     content_type, content_string = contents.split(',')
     decoded = base64.b64decode(content_string)
     df = pd.read_excel(io.BytesIO(decoded))
-    print("Colunas detectadas:", df.columns.tolist())  # ✅ CORRETO
-
+    print("Colunas detectadas:", df.columns.tolist())
 
     df.columns = df.columns.str.strip()
 
@@ -66,7 +65,6 @@ def process_data(contents):
 
 app.layout = dbc.Container(fluid=True, children=[
     html.H1("Dashboard de Resultados", style={"textAlign": "center", "color": "white", "backgroundColor": "black", "padding": "10px"}),
-
     dcc.Upload(
         id='upload-data',
         children=html.Div(['Arraste ou selecione o arquivo BD.xlsx']),
@@ -77,36 +75,29 @@ app.layout = dbc.Container(fluid=True, children=[
         },
         multiple=False
     ),
-
     dbc.Row([
         dbc.Col(dcc.Dropdown(id='month-filter', placeholder='Selecione o mês'), md=4),
         dbc.Col(dcc.Dropdown(id='rede-filter', placeholder='Selecione Nome da rede'), md=4),
         dbc.Col(dcc.Dropdown(id='situacao-filter', placeholder='Situação do Voucher', multi=True), md=4)
     ], className='mb-4'),
-
     dbc.Row(id='kpi-container', className='mb-4'),
-
     dbc.Row([
         dbc.Col(dcc.Graph(id='vouchers-gerados'), md=4),
         dbc.Col(dcc.Graph(id='vouchers-utilizados'), md=4),
         dbc.Col(dcc.Graph(id='ticket-medio'), md=4)
     ], className='mb-4'),
-
     dbc.Row([
         dbc.Col(html.Div(id='top-filiais'), md=6),
         dbc.Col(html.Div(id='top-vendedores'), md=6)
     ], className='mb-4'),
-
     dbc.Row([
         dbc.Col(dcc.Graph(id='top-dispositivos'), md=12)
     ]),
-
     dbc.Row([
         dbc.Col(html.Button("Exportar Tabela (Excel)", id="btn-export-excel", className="btn btn-dark"), width="auto"),
         dbc.Col(html.Button("Exportar Painel (PDF)", id="btn-export-pdf", className="btn btn-secondary"), width="auto"),
         dcc.Download(id="download-dataframe-xlsx")
     ], style={'margin': '20px'}),
-
     dcc.Store(id='hidden-data'),
     dcc.Store(id='filtered-data')
 ])
@@ -121,16 +112,13 @@ app.layout = dbc.Container(fluid=True, children=[
 def aplicar_filtros(json_data, mes, rede, situacoes):
     if json_data is None:
         return dash.no_update
-
     df = pd.read_json(io.StringIO(json_data), orient='split')
-
     if mes:
         df = df[df['Mês'] == mes]
     if rede:
         df = df[df['Nome da rede'] == rede]
     if situacoes:
         df = df[df['Situacao do voucher'].isin(situacoes)]
-
     return df.to_json(date_format='iso', orient='split')
 
 @app.callback(
@@ -169,6 +157,3 @@ def update_dashboard(json_data):
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
-
-Adiciona print de debug para colunas
-Corrige sintaxe do print (Python 3)
