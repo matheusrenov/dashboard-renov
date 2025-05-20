@@ -18,10 +18,11 @@ REQUIRED_COLUMNS = ['Criado em', 'Situacao do voucher', 'Valor do voucher', 'Nom
 
 COLUMN_ALIASES = {
     'Criado em': ['Criado em', 'Data de criação', 'Data criação'],
-    'Situacao do voucher': ['Situacao do voucher', 'Situação do voucher'],
+    'Situacao do voucher': ['Situacao do voucher', 'Situação do voucher', 'Situação Voucher', 'Status do voucher'],
     'Valor do voucher': ['Valor do voucher', 'Valor Voucher', 'Valor'],
-    'Nome da rede': ['Nome da rede', 'Rede']
+    'Nome da rede': ['Nome da rede', 'Rede', 'Nome Rede']
 }
+
 
 def encontrar_coluna_padrao(colunas, nome_padrao):
     for alias in COLUMN_ALIASES[nome_padrao]:
