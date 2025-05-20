@@ -5,18 +5,16 @@ from dash.dependencies import Input, Output
 import pandas as pd
 import plotly.express as px
 import dash_bootstrap_components as dbc
-import base64
 import io
+import base64
 import os
 import calendar
-
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP], suppress_callback_exceptions=True)
 server = app.server
 app.title = "Dashboard de Resultados"
 
 REQUIRED_COLUMNS = ['Criado em', 'Situacao do voucher', 'Valor do voucher', 'Nome da rede']
-
 COLUMN_ALIASES = {
     'Criado em': ['Criado em', 'Data de criação', 'Data criação'],
     'Situacao do voucher': ['Situacao do voucher', 'Situação do voucher'],
@@ -36,7 +34,6 @@ def process_data(contents):
     decoded = base64.b64decode(content_string)
     df = pd.read_excel(io.BytesIO(decoded))
     df.columns = df.columns.str.strip()
-
     col_map = {}
     for padrao in REQUIRED_COLUMNS:
         encontrado = encontrar_coluna_padrao(df.columns, padrao)
@@ -44,7 +41,6 @@ def process_data(contents):
             col_map[padrao] = encontrado
         else:
             raise ValueError(f"Coluna obrigatória ausente: {padrao}")
-
     df.rename(columns={v: k for k, v in col_map.items()}, inplace=True)
     df['Criado em'] = pd.to_datetime(df['Criado em'], errors='coerce')
     df = df[df['Criado em'].notna()]
@@ -52,7 +48,7 @@ def process_data(contents):
     return df
 
 app.layout = dbc.Container(fluid=True, children=[
-    html.H1("Dashboard de Resultados", style={"textAlign": "center"}),
+    html.H1("Dashboard de Resultados", style={"textAlign": "center", "color": "white", "backgroundColor": "black", "padding": "10px"}),
 
     dcc.Upload(
         id='upload-data',
@@ -77,46 +73,91 @@ app.layout = dbc.Container(fluid=True, children=[
         dbc.Col(dcc.Graph(id='vouchers-gerados'), md=4),
         dbc.Col(dcc.Graph(id='vouchers-utilizados'), md=4),
         dbc.Col(dcc.Graph(id='ticket-medio'), md=4)
-    ])
+    ], className='mb-4'),
+
+    dbc.Row([
+        dbc.Col(html.Div(id='top-filiais'), md=6),
+        dbc.Col(html.Div(id='top-vendedores'), md=6)
+    ], className='mb-4'),
+
+    dbc.Row([
+        dbc.Col(dcc.Graph(id='top-dispositivos'), md=12)
+    ]),
+
+    dcc.Store(id='hidden-data'),
+    dcc.Store(id='filtered-data')
 ])
 
 @app.callback(
     Output('month-filter', 'options'),
     Output('rede-filter', 'options'),
     Output('situacao-filter', 'options'),
+    Output('hidden-data', 'data'),
+    Input('upload-data', 'contents')
+)
+def update_filters(contents):
+    if contents is None:
+        return [], [], [], None
+    df = process_data(contents)
+    month_opts = [{'label': calendar.month_name[m], 'value': m} for m in sorted(df['Mês'].dropna().unique())]
+    rede_opts = [{'label': r, 'value': r} for r in sorted(df['Nome da rede'].dropna().unique())]
+    sit_opts = [{'label': s, 'value': s} for s in sorted(df['Situacao do voucher'].dropna().unique())]
+    return month_opts, rede_opts, sit_opts, df.to_json(date_format='iso', orient='split')
+
+@app.callback(
+    Output('filtered-data', 'data'),
+    Input('hidden-data', 'data'),
+    Input('month-filter', 'value'),
+    Input('rede-filter', 'value'),
+    Input('situacao-filter', 'value')
+)
+def aplicar_filtros(json_data, mes, rede, situacoes):
+    if json_data is None:
+        return dash.no_update
+    df = pd.read_json(io.StringIO(json_data), orient='split')
+    if mes:
+        df = df[df['Mês'] == mes]
+    if rede:
+        df = df[df['Nome da rede'] == rede]
+    if situacoes:
+        df = df[df['Situacao do voucher'].isin(situacoes)]
+    return df.to_json(date_format='iso', orient='split')
+
+@app.callback(
     Output('kpi-container', 'children'),
     Output('vouchers-gerados', 'figure'),
     Output('vouchers-utilizados', 'figure'),
     Output('ticket-medio', 'figure'),
-    Input('upload-data', 'contents')
+    Output('top-filiais', 'children'),
+    Output('top-vendedores', 'children'),
+    Output('top-dispositivos', 'figure'),
+    Input('filtered-data', 'data')
 )
-def update_dashboard(contents):
-    if not contents:
-        return [], [], [], [], {}, {}, {}
-
-    try:
-        df = process_data(contents)
-    except Exception as e:
-        return [], [], [], [html.Div(f"Erro ao processar dados: {str(e)}")], {}, {}, {}
-
-    month_options = [{'label': calendar.month_name[m], 'value': m} for m in sorted(df['Mês'].unique())]
-    rede_options = [{'label': r, 'value': r} for r in df['Nome da rede'].dropna().unique()]
-    situacoes = [{'label': s, 'value': s} for s in df['Situacao do voucher'].dropna().unique()]
-
+def update_dashboard(json_data):
+    if json_data is None:
+        return [dash.no_update] * 7
+    df = pd.read_json(io.StringIO(json_data), orient='split')
     df_utilizados = df[df['Situacao do voucher'] == 'UTILIZADO']
     total_gerados = len(df)
     total_utilizados = len(df_utilizados)
     valor_total = df_utilizados['Valor do voucher'].sum()
     ticket_medio = df_utilizados['Valor do voucher'].mean() if total_utilizados else 0
     conversao = (total_utilizados / total_gerados) * 100 if total_gerados else 0
-
     kpis = [html.Div(f"Total: {total_gerados} | Utilizados: {total_utilizados} | Conversão: {conversao:.2f}% | Ticket Médio: R$ {ticket_medio:,.2f}")]
 
     fig_gerados = px.histogram(df, x='Criado em', title='Vouchers Gerados por Dia')
     fig_utilizados = px.histogram(df_utilizados, x='Criado em', title='Vouchers Utilizados por Dia')
     fig_ticket = px.line(df_utilizados.groupby('Criado em')['Valor do voucher'].mean().reset_index(), x='Criado em', y='Valor do voucher', title='Ticket Médio Diário')
 
-    return month_options, rede_options, situacoes, kpis, fig_gerados, fig_utilizados, fig_ticket
+    top_filiais = dash_table.DataTable(columns=[{'name': 'Nome da rede', 'id': 'Nome da rede'}, {'name': 'Quantidade', 'id': 'Quantidade'}],
+        data=df_utilizados['Nome da rede'].value_counts().reset_index().rename(columns={'index': 'Nome da rede', 'Nome da rede': 'Quantidade'}).to_dict('records'))
+
+    top_vendedores = dash_table.DataTable(columns=[{'name': 'Nome do vendedor', 'id': 'Nome do vendedor'}, {'name': 'Quantidade', 'id': 'Quantidade'}],
+        data=df_utilizados['Nome do vendedor'].value_counts().reset_index().rename(columns={'index': 'Nome do vendedor', 'Nome do vendedor': 'Quantidade'}).to_dict('records'))
+
+    top_dispositivos = px.bar(df['Descrição'].value_counts().nlargest(10).reset_index(), x='index', y='Descrição', title='Top 10 Dispositivos Mais Avaliados')
+
+    return kpis, fig_gerados, fig_utilizados, fig_ticket, top_filiais, top_vendedores, top_dispositivos
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
