@@ -40,7 +40,8 @@ def process_data(contents):
     content_type, content_string = contents.split(',')
     decoded = base64.b64decode(content_string)
     df = pd.read_excel(io.BytesIO(decoded))
-    print("Colunas detectadas:", df.columns.tolist())
+    print("Colunas detectadas:", df.columns.tolist())  # ✅ CORRETO
+
 
     df.columns = df.columns.str.strip()
 
@@ -170,3 +171,4 @@ if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
 
 Adiciona print de debug para colunas
+Corrige sintaxe do print (Python 3)
