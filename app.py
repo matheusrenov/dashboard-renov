@@ -156,4 +156,4 @@ def update_dashboard(json_data):
     return kpis, fig_gerados, fig_utilizados, fig_ticket, top_filiais, top_vendedores, top_dispositivos
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
+    app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 8070)))
