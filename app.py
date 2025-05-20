@@ -4,6 +4,7 @@ from dash import dcc, html, dash_table, ctx
 from dash.dependencies import Input, Output
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import dash_bootstrap_components as dbc
 import datetime
 import base64
