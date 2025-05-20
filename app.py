@@ -104,25 +104,6 @@ def upload(contents):
     return df.to_json(date_format='iso', orient='split')
 
 @app.callback(
-    Output('filtered-data', 'data'),
-    Input('hidden-data', 'data'),
-    Input('month-filter', 'value'),
-    Input('rede-filter', 'value'),
-    Input('situacao-filter', 'value')
-)
-def aplicar_filtros(json_data, mes, rede, situacoes):
-    if json_data is None:
-        return dash.no_update
-    df = pd.read_json(io.StringIO(json_data), orient='split')
-    if mes:
-        df = df[df['Mês'] == mes]
-    if rede:
-        df = df[df['Nome da rede'] == rede]
-    if situacoes:
-        df = df[df['Situacao do voucher'].isin(situacoes)]
-    return df.to_json(date_format='iso', orient='split')
-
-@app.callback(
     Output('kpi-container', 'children'),
     Output('vouchers-gerados', 'figure'),
     Output('vouchers-utilizados', 'figure'),
@@ -150,15 +131,30 @@ def update_dashboard(json_data):
     fig_utilizados = px.histogram(df_utilizados, x='Criado em', title='Vouchers Utilizados por Dia')
     fig_ticket = px.line(df_utilizados.groupby('Criado em')['Valor do voucher'].mean().reset_index(), x='Criado em', y='Valor do voucher', title='Ticket Médio Diário')
 
-    top_filiais = dash_table.DataTable(columns=[{'name': 'Nome da rede', 'id': 'Nome da rede'}, {'name': 'Quantidade', 'id': 'Quantidade'}],
-        data=df_utilizados['Nome da rede'].value_counts().reset_index().rename(columns={'index': 'Nome da rede', 'Nome da rede': 'Quantidade'}).to_dict('records'))
+    # Proteções para colunas ausentes
+    if 'Nome do vendedor' in df_utilizados.columns:
+        top_vendedores = dash_table.DataTable(
+            columns=[{'name': 'Nome do vendedor', 'id': 'Nome do vendedor'}, {'name': 'Quantidade', 'id': 'Quantidade'}],
+            data=df_utilizados['Nome do vendedor'].value_counts().reset_index().rename(columns={'index': 'Nome do vendedor', 'Nome do vendedor': 'Quantidade'}).to_dict('records')
+        )
+    else:
+        top_vendedores = html.Div("Coluna 'Nome do vendedor' não encontrada.")
 
-    top_vendedores = dash_table.DataTable(columns=[{'name': 'Nome do vendedor', 'id': 'Nome do vendedor'}, {'name': 'Quantidade', 'id': 'Quantidade'}],
-        data=df_utilizados['Nome do vendedor'].value_counts().reset_index().rename(columns={'index': 'Nome do vendedor', 'Nome do vendedor': 'Quantidade'}).to_dict('records'))
+    if 'Descrição' in df.columns:
+        top_dispositivos = px.bar(
+            df['Descrição'].value_counts().nlargest(10).reset_index(),
+            x='index', y='Descrição', title='Top 10 Dispositivos Mais Avaliados'
+        )
+    else:
+        top_dispositivos = go.Figure().update_layout(title="Coluna 'Descrição' não encontrada.")
 
-    top_dispositivos = px.bar(df['Descrição'].value_counts().nlargest(10).reset_index(), x='index', y='Descrição', title='Top 10 Dispositivos Mais Avaliados')
+    top_filiais = dash_table.DataTable(
+        columns=[{'name': 'Nome da rede', 'id': 'Nome da rede'}, {'name': 'Quantidade', 'id': 'Quantidade'}],
+        data=df_utilizados['Nome da rede'].value_counts().reset_index().rename(columns={'index': 'Nome da rede', 'Nome da rede': 'Quantidade'}).to_dict('records')
+    )
 
     return kpis, fig_gerados, fig_utilizados, fig_ticket, top_filiais, top_vendedores, top_dispositivos
+
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
