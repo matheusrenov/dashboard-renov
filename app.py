@@ -1,7 +1,7 @@
 
 import dash
 from dash import dcc, html, dash_table, ctx
-from dash.dependencies import Input, Output, State
+from dash.dependencies import Input, Output
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -38,30 +38,26 @@ def encontrar_coluna_padrao(colunas, nome_padrao):
     return None
 
 def process_data(contents):
-    try:
-        content_type, content_string = contents.split(',')
-        decoded = base64.b64decode(content_string)
-        df = pd.read_excel(io.BytesIO(decoded))
-        df.columns = df.columns.str.strip()
-        print("Colunas detectadas:", df.columns.tolist())
+    content_type, content_string = contents.split(',')
+    decoded = base64.b64decode(content_string)
+    df = pd.read_excel(io.BytesIO(decoded))
+    df.columns = df.columns.str.strip()
+    print("Colunas detectadas:", df.columns.tolist())
 
-        col_map = {}
-        for padrao in REQUIRED_COLUMNS:
-            encontrado = encontrar_coluna_padrao(df.columns, padrao)
-            if encontrado:
-                col_map[padrao] = encontrado
-            else:
-                raise ValueError(f"Coluna obrigatória ausente: {padrao}")
+    col_map = {}
+    for padrao in REQUIRED_COLUMNS:
+        encontrado = encontrar_coluna_padrao(df.columns, padrao)
+        if encontrado:
+            col_map[padrao] = encontrado
+        else:
+            raise ValueError(f"Coluna obrigatória ausente: {padrao}")
 
-        df.rename(columns={v: k for k, v in col_map.items()}, inplace=True)
+    df.rename(columns={v: k for k, v in col_map.items()}, inplace=True)
 
-        df['Criado em'] = pd.to_datetime(df['Criado em'], errors='coerce')
-        df = df[df['Criado em'].notna()]
-        df['Mês'] = df['Criado em'].dt.month
-        return df
-    except Exception as e:
-        print(f"Erro ao processar dados: {e}")
-        return pd.DataFrame()
+    df['Criado em'] = pd.to_datetime(df['Criado em'], errors='coerce')
+    df = df[df['Criado em'].notna()]
+    df['Mês'] = df['Criado em'].dt.month
+    return df
 
 app.layout = dbc.Container(fluid=True, children=[
     html.H1("Dashboard de Resultados", style={"textAlign": "center", "color": "white", "backgroundColor": "black", "padding": "10px"}),
@@ -109,16 +105,6 @@ app.layout = dbc.Container(fluid=True, children=[
     dcc.Store(id='hidden-data'),
     dcc.Store(id='filtered-data')
 ])
-
-@app.callback(
-    Output('hidden-data', 'data'),
-    Input('upload-data', 'contents')
-)
-def store_uploaded_data(contents):
-    if contents:
-        df = process_data(contents)
-        return df.to_json(date_format='iso', orient='split')
-    return None
 
 @app.callback(
     Output('filtered-data', 'data'),
@@ -170,9 +156,19 @@ def update_dashboard(json_data):
     fig_utilizados = px.histogram(df_utilizados, x='Criado em', title='Vouchers Utilizados por Dia')
     fig_ticket = px.line(df_utilizados.groupby('Criado em')['Valor do voucher'].mean().reset_index(), x='Criado em', y='Valor do voucher', title='Ticket Médio Diário')
 
-    top_filiais = dash_table.DataTable(columns=[{'name': i, 'id': i} for i in ['Nome da rede']], data=df_utilizados['Nome da rede'].value_counts().reset_index().rename(columns={'index': 'Nome da rede', 'Nome da rede': 'Quantidade'}).to_dict('records'))
-    top_vendedores = dash_table.DataTable(columns=[{'name': i, 'id': i} for i in ['Nome do vendedor']], data=df_utilizados['Nome do vendedor'].value_counts().reset_index().rename(columns={'index': 'Nome do vendedor', 'Nome do vendedor': 'Quantidade'}).to_dict('records'))
-    top_dispositivos = px.bar(df['Descrição'].value_counts().nlargest(10).reset_index(), x='index', y='Descrição', title='Top 10 Dispositivos Mais Avaliados')
+    top_filiais = dash_table.DataTable(columns=[{'name': i, 'id': i} for i in ['Nome da rede']], 
+                                       data=df_utilizados['Nome da rede'].value_counts().reset_index().rename(columns={'index': 'Nome da rede', 'Nome da rede': 'Quantidade'}).to_dict('records'))
+
+    if 'Nome do vendedor' in df_utilizados.columns:
+        top_vendedores = dash_table.DataTable(columns=[{'name': i, 'id': i} for i in ['Nome do vendedor']], 
+                                              data=df_utilizados['Nome do vendedor'].value_counts().reset_index().rename(columns={'index': 'Nome do vendedor', 'Nome do vendedor': 'Quantidade'}).to_dict('records'))
+    else:
+        top_vendedores = html.Div("Coluna 'Nome do vendedor' não encontrada.")
+
+    if 'Descrição' in df.columns:
+        top_dispositivos = px.bar(df['Descrição'].value_counts().nlargest(10).reset_index(), x='index', y='Descrição', title='Top 10 Dispositivos Mais Avaliados')
+    else:
+        top_dispositivos = go.Figure().update_layout(title="Coluna 'Descrição' não encontrada.")
 
     return kpis, fig_gerados, fig_utilizados, fig_ticket, top_filiais, top_vendedores, top_dispositivos
 
