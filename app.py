@@ -107,11 +107,19 @@ def process_data(contents):
         df.columns = df.columns.str.strip()
         df['Criado em'] = pd.to_datetime(df['Criado em'], errors='coerce')
         df = df[df['Criado em'].notna()]
-        df['Mês'] = df['Criado em'].dt.month_name(locale='pt_BR')
+        
+        # Nome do mês manualmente traduzido
+        mes_map = {
+            1: "Janeiro", 2: "Fevereiro", 3: "Março", 4: "Abril",
+            5: "Maio", 6: "Junho", 7: "Julho", 8: "Agosto",
+            9: "Setembro", 10: "Outubro", 11: "Novembro", 12: "Dezembro"
+        }
+        df['Mês'] = df['Criado em'].dt.month.map(mes_map)
         return df
     except Exception as e:
         print(f"Erro ao processar: {e}")
         return None
+
 
 @app.callback(Output('hidden-data', 'data'), Input('upload-data', 'contents'))
 def carregar_dados(contents):
