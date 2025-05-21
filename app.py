@@ -71,15 +71,9 @@ def processar_arquivo(conteudo, nome_arquivo):
         content_type, content_string = conteudo.split(',')
         decoded = base64.b64decode(content_string)
         df = pd.read_excel(io.BytesIO(decoded))
-
-        # Verificações básicas
-        if 'Criado em' not in df.columns or 'Situação do voucher' not in df.columns:
-            return None, [], [], [], "❌ Colunas obrigatórias não encontradas."
-
+        
         df['Criado em'] = pd.to_datetime(df['Criado em'], errors='coerce')
         df.dropna(subset=['Criado em'], inplace=True)
-
-        # Adiciona coluna de mês
         df['Mês'] = df['Criado em'].dt.month_name().str.capitalize()
 
         meses = sorted(df['Mês'].dropna().unique().tolist())
@@ -93,6 +87,7 @@ def processar_arquivo(conteudo, nome_arquivo):
         return df.to_dict('records'), options_meses, options_redes, options_situacao, ""
     except Exception as e:
         return None, [], [], [], f"Erro ao processar arquivo: {e}"
+
 
 # Callback principal
 @app.callback(
