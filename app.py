@@ -1,119 +1,117 @@
-import dash
-from dash import Dash, dcc, html, Input, Output, State, ctx, dash_table
-import dash_bootstrap_components as dbc
-import pandas as pd
-import plotly.express as px
+import os
 import base64
 import io
-from datetime import datetime
+import pandas as pd
+import plotly.express as px
+import dash
+from dash import dcc, html, Input, Output, State, dash_table
+import dash_bootstrap_components as dbc
 
-# App inicial
-app = Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP], suppress_callback_exceptions=True)
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 server = app.server
 
-# Layout base
-app.layout = dbc.Container([
-    html.H2("Dashboard de Resultados", style={"textAlign": "center", "marginTop": "20px"}),
-    
-    # Upload
+app.title = "Dashboard de Resultados"
+
+app.layout = html.Div([
+    html.H2("Dashboard de Resultados", className="text-center mt-3 mb-4"),
+
     dcc.Upload(
         id='upload-data',
         children=html.Div(['📁 Arraste ou selecione o arquivo .xlsx']),
         style={
-            'width': '100%', 'height': '60px', 'lineHeight': '60px',
-            'borderWidth': '2px', 'borderStyle': 'dashed',
-            'borderRadius': '5px', 'textAlign': 'center',
-            'marginBottom': '10px'
+            'width': '100%',
+            'height': '60px',
+            'lineHeight': '60px',
+            'borderWidth': '2px',
+            'borderStyle': 'dashed',
+            'borderRadius': '5px',
+            'textAlign': 'center',
+            'marginBottom': '20px',
         },
         multiple=False
     ),
 
-    html.Div(id='upload-error', style={'color': 'red', 'textAlign': 'center'}),
+    html.Div(id='erro-upload', style={'color': 'red', 'textAlign': 'center'}),
 
-    # Filtros
-    dbc.Row([
-        dbc.Col(dcc.Dropdown(id='month-filter', placeholder='Mês'), md=4),
-        dbc.Col(dcc.Dropdown(id='rede-filter', placeholder='Nome da rede'), md=4),
-        dbc.Col(dcc.Dropdown(id='situacao-filter', placeholder='Situação do voucher'), md=4),
-    ], style={"marginTop": "10px"}),
+    html.Div([
+        dbc.Row([
+            dbc.Col(dcc.Dropdown(id='month-filter', placeholder="Mês"), md=3),
+            dbc.Col(dcc.Dropdown(id='rede-filter', placeholder="Nome da rede"), md=5),
+            dbc.Col(dcc.Dropdown(id='situacao-filter', placeholder="Situação do voucher"), md=4),
+        ], className="mb-3"),
 
-    dcc.Store(id='filtered-data'),
+        html.Div(id='kpi-cards', className="mb-4"),
 
-    # KPIs
-    html.Div(id='kpi-cards', style={'marginTop': '20px'}),
+        dbc.Row([
+            dbc.Col(dcc.Graph(id='grafico-gerados'), md=4),
+            dbc.Col(dcc.Graph(id='grafico-utilizados'), md=4),
+            dbc.Col(dcc.Graph(id='grafico-ticket'), md=4),
+        ]),
+        
+        html.Hr(),
 
-    # Gráficos
-    dbc.Row([
-        dbc.Col(dcc.Graph(id='grafico-gerados'), md=4),
-        dbc.Col(dcc.Graph(id='grafico-utilizados'), md=4),
-        dbc.Col(dcc.Graph(id='grafico-ticket'), md=4)
+        html.H5("Ranking de Vendedores", className="mt-4 mb-2"),
+        dash_table.DataTable(id='tabela-vendedores', style_table={'overflowX': 'auto'}, style_cell={'textAlign': 'left'}, page_size=20),
+
+        html.Hr(),
+
+        html.H5("Top Dispositivos", className="mt-4 mb-2"),
+        dcc.Graph(id='grafico-top-dispositivos'),
     ]),
 
-    # Tabela e ranking
-    dbc.Row([
-        dbc.Col(dash_table.DataTable(id='tabela-vendedores', style_table={'overflowX': 'auto'}), md=6),
-        dbc.Col(dcc.Graph(id='grafico-top-dispositivos'), md=6)
-    ])
-], fluid=True)
+    dcc.Store(id='filtered-data')
+])
 
-# Callback para carregar o arquivo e preparar os filtros
 @app.callback(
     Output('month-filter', 'options'),
-    Output('month-filter', 'value'),
     Output('rede-filter', 'options'),
     Output('situacao-filter', 'options'),
+    Output('month-filter', 'value'),
     Output('filtered-data', 'data'),
-    Output('upload-error', 'children'),
+    Output('erro-upload', 'children'),
     Input('upload-data', 'contents'),
-    State('upload-data', 'filename')
+    State('upload-data', 'filename'),
 )
-def carregar_arquivo(contents, filename):
+def atualizar_filtros(contents, filename):
     if contents is None:
-        return [], None, [], [], None, None
+        return [], [], [], None, None, ""
 
     content_type, content_string = contents.split(',')
     decoded = base64.b64decode(content_string)
     try:
         df = pd.read_excel(io.BytesIO(decoded))
-
-        # Padroniza colunas
-        df.columns = [col.strip().lower().replace(" ", "_") for col in df.columns]
-
-        # Renomeia colunas esperadas
-        renomear = {
-            'criado_em': 'criado_em',
-            'situação_do_voucher': 'situacao_do_voucher',
-            'situação_do_voucher': 'situacao_do_voucher',
-            'nome_da_rede': 'nome_da_rede',
-        }
-
-        for key in renomear:
-            if key in df.columns:
-                df.rename(columns={key: renomear[key]}, inplace=True)
-
-        # Converte datas
-        df['criado_em'] = pd.to_datetime(df['criado_em'], errors='coerce')
-
-        # Filtros
-        df['mes'] = df['criado_em'].dt.strftime('%b')  # abreviação
-        meses = sorted(df['mes'].dropna().unique(), key=lambda x: datetime.strptime(x, "%b").month)
-        redes = sorted(df['nome_da_rede'].dropna().unique()) if 'nome_da_rede' in df else []
-        situacoes = sorted(df['situacao_do_voucher'].dropna().unique()) if 'situacao_do_voucher' in df else []
-
-        ultimo_mes = meses[-1] if meses else None
-
-        return (
-            [{'label': m, 'value': m} for m in meses],
-            ultimo_mes,
-            [{'label': r, 'value': r} for r in redes],
-            [{'label': s, 'value': s} for s in situacoes],
-            df.to_dict('records'),
-            None
-        )
     except Exception as e:
-        return [], None, [], [], None, f"Erro ao processar arquivo: {str(e)}"
+        return [], [], [], None, None, f"Erro ao processar arquivo: {e}"
 
-# Callback principal para atualizar dashboard
+    df.columns = df.columns.str.strip().str.lower()
+
+    col_map = {
+        'mês': 'mes',
+        'nome da rede': 'rede',
+        'situação do voucher': 'situacao',
+        'criado em': 'criado_em',
+        'valor do voucher': 'valor',
+        'nome do vendedor': 'vendedor',
+        'nome da filial': 'filial'
+    }
+
+    df.rename(columns={c: col_map.get(c, c) for c in df.columns}, inplace=True)
+
+    if 'criado_em' in df.columns:
+        df['criado_em'] = pd.to_datetime(df['criado_em'], errors='coerce')
+    else:
+        return [], [], [], None, None, "Erro: coluna 'Criado em' não encontrada."
+
+    df['mes'] = df['criado_em'].dt.strftime('%b')
+
+    month_options = [{'label': m, 'value': m} for m in sorted(df['mes'].dropna().unique())]
+    rede_options = [{'label': r, 'value': r} for r in sorted(df['rede'].dropna().unique())]
+    situacao_options = [{'label': s, 'value': s} for s in sorted(df['situacao'].dropna().unique())]
+
+    latest_month = df['mes'].dropna().sort_values().unique()[-1] if len(df['mes'].dropna()) > 0 else None
+
+    return month_options, rede_options, situacao_options, latest_month, df.to_json(date_format='iso', orient='split'), ""
+
 @app.callback(
     Output('kpi-cards', 'children'),
     Output('grafico-gerados', 'figure'),
@@ -127,74 +125,80 @@ def carregar_arquivo(contents, filename):
     Input('situacao-filter', 'value'),
     Input('filtered-data', 'data'),
 )
-def atualizar_dashboard(mes, rede, situacao, data):
-    if data is None:
-        return [html.Div("Nenhum dado carregado.")], {}, {}, {}, [], [], {}
+def atualizar_dashboard(mes, rede, situacao, data_json):
+    if data_json is None:
+        raise dash.exceptions.PreventUpdate
 
-    df = pd.DataFrame(data)
+    df = pd.read_json(data_json, orient='split')
 
-    # Filtros
+    # Garantir datetime
+    if not pd.api.types.is_datetime64_any_dtype(df['criado_em']):
+        df['criado_em'] = pd.to_datetime(df['criado_em'], errors='coerce')
+
     if mes:
-        df = df[df['criado_em'].dt.strftime('%b') == mes]
+        try:
+            df = df[df['criado_em'].dt.strftime('%b') == mes]
+        except Exception as e:
+            print(f"[ERRO] Filtro por mês falhou: {e}")
+
     if rede:
-        df = df[df['nome_da_rede'] == rede]
+        df = df[df['rede'] == rede]
+
     if situacao:
-        df = df[df['situacao_do_voucher'] == situacao]
+        df = df[df['situacao'] == situacao]
 
     # KPIs
-    total_vouchers = len(df)
-    dispositivos = df['dispositivo'].nunique() if 'dispositivo' in df else 0
-    captacao = df['valor_do_voucher'].sum() if 'valor_do_voucher' in df else 0
-    ticket_medio = df['valor_do_voucher'].mean() if 'valor_do_voucher' in df else 0
-    usados = df[df['situacao_do_voucher'] == 'UTILIZADO'] if 'situacao_do_voucher' in df else pd.DataFrame()
-    conversao = (len(usados) / total_vouchers) * 100 if total_vouchers > 0 else 0
+    dispositivos = len(df)
+    utilizados = df[df['situacao'] == 'UTILIZADO']
+    captacao = utilizados['valor'].sum()
+    ticket_medio = utilizados['valor'].mean()
+    conversao = len(utilizados) / dispositivos * 100 if dispositivos > 0 else 0
 
     kpis = dbc.Row([
         dbc.Col(html.Div([
-            html.H5("📄 Vouchers Gerados", style={'color': 'white'}),
-            html.H3(f"{total_vouchers}", style={'color': 'white'})
-        ], className="p-3", style={"background": "#1e1e1e", "border": "2px solid turquoise", "borderRadius": "10px"}), md=3),
-
+            html.H6("📦 Vouchers Gerados"),
+            html.H4(f"{dispositivos}")
+        ], className="p-3 bg-dark text-white border rounded"), md=3),
         dbc.Col(html.Div([
-            html.H5("📦 Dispositivos Captados", style={'color': 'white'}),
-            html.H3(f"{dispositivos}", style={'color': 'white'})
-        ], className="p-3", style={"background": "#1e1e1e", "border": "2px solid turquoise", "borderRadius": "10px"}), md=3),
-
+            html.H6("💰 Captação Total"),
+            html.H4(f"R$ {captacao:,.2f}".replace('.', '_').replace(',', '.').replace('_', ','))
+        ], className="p-3 bg-dark text-white border rounded"), md=3),
         dbc.Col(html.Div([
-            html.H5("💰 Captação Total", style={'color': 'white'}),
-            html.H3(f"R$ {captacao:,.2f}", style={'color': 'white'})
-        ], className="p-3", style={"background": "#1e1e1e", "border": "2px solid turquoise", "borderRadius": "10px"}), md=3),
-
+            html.H6("📊 Ticket Médio"),
+            html.H4(f"R$ {ticket_medio:,.2f}".replace('.', '_').replace(',', '.').replace('_', ','))
+        ], className="p-3 bg-dark text-white border rounded"), md=3),
         dbc.Col(html.Div([
-            html.H5("📊 Ticket Médio", style={'color': 'white'}),
-            html.H3(f"R$ {ticket_medio:,.2f}", style={'color': 'white'})
-        ], className="p-3", style={"background": "#1e1e1e", "border": "2px solid turquoise", "borderRadius": "10px"}), md=3),
-
-        dbc.Col(html.Div([
-            html.H5("📈 Conversão", style={'color': 'white'}),
-            html.H3(f"{conversao:.2f}%", style={'color': 'white'})
-        ], className="p-3", style={"background": "#1e1e1e", "border": "2px solid turquoise", "borderRadius": "10px"}), md=3),
+            html.H6("📈 Conversão"),
+            html.H4(f"{conversao:.2f}%")
+        ], className="p-3 bg-dark text-white border rounded"), md=3),
     ])
 
     # Gráficos
-    fig_gerados = px.line(df, x='criado_em', title='Vouchers Gerados por Dia')
-    fig_utilizados = px.line(df[df['situacao_do_voucher'] == 'UTILIZADO'], x='criado_em', title='Vouchers Utilizados por Dia') if 'situacao_do_voucher' in df else px.line(title='Sem dados de utilização')
-    fig_ticket = px.line(df, x='criado_em', y='valor_do_voucher', title='Ticket Médio Diário') if 'valor_do_voucher' in df else px.line(title='Sem dados de ticket')
+    fig_gerados = px.line(df, x='criado_em', title="Vouchers Gerados por Dia")
+    fig_utilizados = px.line(utilizados, x='criado_em', title="Vouchers Utilizados por Dia")
+    fig_ticket = px.line(utilizados, x='criado_em', y='valor', title="Ticket Médio Diário")
 
-    # Ranking vendedores
-    if 'nome_do_vendedor' in df:
-        top_vend = df[df['situacao_do_voucher'] == 'UTILIZADO'].groupby(['nome_do_vendedor', 'nome_da_filial']).size().reset_index(name='qtd')
-        top_vend = top_vend.sort_values(by='qtd', ascending=False).reset_index(drop=True)
-        top_vend.insert(0, 'Ranking', top_vend.index + 1)
-        tabela_vendedores = top_vend.to_dict('records')
-        colunas_vendedores = [{"name": i.replace("_", " ").title(), "id": i} for i in top_vend.columns]
-    else:
-        tabela_vendedores, colunas_vendedores = [], []
+    for fig in [fig_gerados, fig_utilizados, fig_ticket]:
+        fig.update_layout(xaxis_title="Data", yaxis_title="", template="simple_white", xaxis_tickformat="%d %b")
+
+    # Ranking
+    ranking = utilizados.groupby(['vendedor', 'filial'])['valor'].count().reset_index(name='vouchers_utilizados')
+    ranking.sort_values(by='vouchers_utilizados', ascending=False, inplace=True)
+    ranking.insert(0, 'Ranking', range(1, len(ranking) + 1))
+
+    ranking_data = ranking.to_dict('records')
+    ranking_columns = [{"name": i, "id": i} for i in ranking.columns]
 
     # Top dispositivos
-    fig_dispositivos = px.bar(df, x='descricao', title='Top Dispositivos') if 'descricao' in df else px.bar(title='Sem dispositivos')
+    if 'descricao' in df.columns:
+        top_dispositivos = df['descricao'].value_counts().head(10).reset_index()
+        top_dispositivos.columns = ['descricao', 'quantidade']
+        fig_dispositivos = px.bar(top_dispositivos, x='descricao', y='quantidade', title="Top Dispositivos")
+        fig_dispositivos.update_layout(xaxis_tickangle=-45)
+    else:
+        fig_dispositivos = {}
 
-    return kpis, fig_gerados, fig_utilizados, fig_ticket, tabela_vendedores, colunas_vendedores, fig_dispositivos
+    return kpis, fig_gerados, fig_utilizados, fig_ticket, ranking_data, ranking_columns, fig_dispositivos
 
-if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=8080)
+if __name__ == "__main__":
+    app.run(debug=True, host="0.0.0.0", port=int(os.environ.get("PORT", 8050)))
