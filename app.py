@@ -188,11 +188,13 @@ def update_dashboard(json_data):
     conversao = (total_utilizados / total_gerados) * 100 if total_gerados else 0
 
     kpis = [
-        dbc.Col(kpi_card("Dispositivos Captados", str(total_utilizados), "📦"), md=3),
-        dbc.Col(kpi_card("Captação Total", f"R$ {valor_total:,.2f}", "💰"), md=3),
-        dbc.Col(kpi_card("Ticket Médio", f"R$ {ticket_medio:,.2f}", "📊"), md=3),
-        dbc.Col(kpi_card("Conversão", f"{conversao:.2f}%", "📈"), md=3)
-    ]
+    dbc.Col(kpi_card("Vouchers Gerados", str(len(df)), "🧾"), md=2),
+    dbc.Col(kpi_card("Dispositivos Captados", str(total_utilizados), "📦"), md=2),
+    dbc.Col(kpi_card("Captação Total", f"R$ {valor_total:,.2f}", "💰"), md=2),
+    dbc.Col(kpi_card("Ticket Médio", f"R$ {ticket_medio:,.2f}", "📊"), md=3),
+    dbc.Col(kpi_card("Conversão", f"{conversao:.2f}%", "📈"), md=3)
+]
+
 
     fig_gerados = px.histogram(df, x='Criado em', title='Vouchers Gerados por Dia')
     fig_utilizados = px.histogram(df_utilizados, x='Criado em', title='Vouchers Utilizados por Dia')
