@@ -96,19 +96,34 @@ def carregar_dados(contents):
     Output('situacao-filter', 'options'),
     Output('month-filter', 'value'),
     Output('filtered-data', 'data'),
-    Input('raw-data', 'data')
+    Input('hidden-data', 'data')
 )
 def atualizar_filtros(json_data):
     if json_data is None:
         return [], [], [], None, None
+
     df = pd.read_json(io.StringIO(json_data), orient='split')
-    meses = sorted(df['Mês'].dropna().unique(), key=lambda x: datetime.strptime(x, "%B"), reverse=True)
+
+    ordem_meses = [
+        "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+        "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+    ]
+    meses = sorted(df['Mês'].dropna().unique(), key=lambda x: ordem_meses.index(x), reverse=True)
     redes = sorted(df['Nome da rede'].dropna().unique())
     situacoes = sorted(df['Situacao do voucher'].dropna().unique())
+
     mes_recente = df['Criado em'].max().month
-    nome_mes = df[df['Criado em'].dt.month == mes_recente]['Mês'].iloc[0]
+    nome_mes = ordem_meses[mes_recente - 1]
     df_filtrado = df[df['Mês'] == nome_mes]
-    return [{'label': m, 'value': m} for m in meses], [{'label': r, 'value': r} for r in redes], [{'label': s, 'value': s} for s in situacoes], nome_mes, df_filtrado.to_json(date_format='iso', orient='split')
+
+    return (
+        [{'label': m, 'value': m} for m in meses],
+        [{'label': r, 'value': r} for r in redes],
+        [{'label': s, 'value': s} for s in situacoes],
+        nome_mes,
+        df_filtrado.to_json(date_format='iso', orient='split')
+    )
+
 
 # Callback principal
 @app.callback(
