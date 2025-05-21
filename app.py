@@ -1,3 +1,4 @@
+# ⚙️ IMPORTS (inalterado)
 import dash
 from dash import dcc, html, Input, Output, State, ctx, dash_table
 import dash_bootstrap_components as dbc
@@ -12,7 +13,7 @@ app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP], suppress_
 server = app.server
 app.title = "Dashboard de Resultados"
 
-# Util para mapear alias de colunas
+# 🔁 ALIAS + COLUNAS OBRIGATÓRIAS
 COLUMN_ALIASES = {
     'Criado em': ['Criado em', 'Data de criação', 'Data criação'],
     'Situacao do voucher': ['Situacao do voucher', 'Situação do voucher'],
@@ -22,9 +23,9 @@ COLUMN_ALIASES = {
     'Nome da filial': ['Nome da filial', 'Filial'],
     'Descrição': ['Descrição', 'Descricao', 'Produto']
 }
-
 REQUIRED_COLUMNS = list(COLUMN_ALIASES.keys())
 
+# 🔎 Funções auxiliares
 def encontrar_coluna_padrao(colunas, nome_padrao):
     for alias in COLUMN_ALIASES[nome_padrao]:
         for col in colunas:
@@ -56,10 +57,16 @@ def kpi_card(title, value, icon):
     return dbc.Card([
         dbc.CardBody([
             html.H6([icon, f" {title}"], className="card-title"),
-            html.H4(value, className="card-text"),
+            html.H3(value, className="card-text"),
         ])
-    ], className="mb-3")
+    ], style={
+        "backgroundColor": "#1a1a1a",
+        "color": "white",
+        "border": "2px solid #00C896",
+        "borderRadius": "10px"
+    })
 
+# 🖼️ LAYOUT
 app.layout = dbc.Container(fluid=True, children=[
     html.Div([
         html.H2("Dashboard de Resultados", style={"textAlign": "center"}),
@@ -97,6 +104,7 @@ app.layout = dbc.Container(fluid=True, children=[
     dcc.Store(id='filtered-data')
 ])
 
+# 📤 Callback: Upload
 @app.callback(
     Output('raw-data', 'data'),
     Input('upload-data', 'contents'),
@@ -111,34 +119,51 @@ def carregar_dados(contents):
         print(f"Erro ao carregar dados: {e}")
         return dash.no_update
 
+# 🔁 Callback: Filtros
 @app.callback(
     Output('month-filter', 'options'),
     Output('month-filter', 'value'),
     Output('rede-filter', 'options'),
     Output('situacao-filter', 'options'),
-    Output('filtered-data', 'data'),
     Input('raw-data', 'data')
 )
 def atualizar_filtros(json_data):
     if json_data is None:
-        return [], None, [], [], None
-
+        return [], None, [], []
     df = pd.read_json(io.StringIO(json_data), orient='split')
     meses = sorted(df['Mês'].dropna().unique(), key=lambda x: datetime.strptime(x, "%B"), reverse=True)
-    rede_options = sorted(df['Nome da rede'].dropna().unique())
+    redes = sorted(df['Nome da rede'].dropna().unique())
     situacoes = sorted(df['Situacao do voucher'].dropna().unique())
-
-    mes_mais_recente = meses[0] if meses else None
-    df_filtrado = df[df['Mês'] == mes_mais_recente] if mes_mais_recente else df
-
     return (
         [{'label': m, 'value': m} for m in meses],
-        mes_mais_recente,
-        [{'label': r, 'value': r} for r in rede_options],
-        [{'label': s, 'value': s} for s in situacoes],
-        df_filtrado.to_json(date_format='iso', orient='split')
+        meses[0],
+        [{'label': r, 'value': r} for r in redes],
+        [{'label': s, 'value': s} for s in situacoes]
     )
 
+# 🔁 Callback: Aplicar filtros manualmente
+@app.callback(
+    Output('filtered-data', 'data'),
+    Input('raw-data', 'data'),
+    Input('month-filter', 'value'),
+    Input('rede-filter', 'value'),
+    Input('situacao-filter', 'value'),
+)
+def aplicar_filtros(json_data, mes, rede, situacoes):
+    if json_data is None:
+        return dash.no_update
+
+    df = pd.read_json(io.StringIO(json_data), orient='split')
+    if mes:
+        df = df[df['Mês'] == mes]
+    if rede:
+        df = df[df['Nome da rede'] == rede]
+    if situacoes:
+        df = df[df['Situacao do voucher'].isin(situacoes)]
+
+    return df.to_json(date_format='iso', orient='split')
+
+# 📈 Callback: KPIs e gráficos
 @app.callback(
     Output('kpi-container', 'children'),
     Output('vouchers-gerados', 'figure'),
@@ -188,5 +213,6 @@ def update_dashboard(json_data):
 
     return kpis, fig_gerados, fig_utilizados, fig_ticket, top_vendedores_data, top_vendedores_columns, fig_dispositivos
 
+# 🔚
 if __name__ == '__main__':
     app.run(debug=True, host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
