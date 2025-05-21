@@ -1,5 +1,5 @@
 import dash
-from dash import dcc, html, dash_table, ctx
+from dash import dcc, html, dash_table
 from dash.dependencies import Input, Output
 import pandas as pd
 import plotly.express as px
@@ -7,6 +7,7 @@ import dash_bootstrap_components as dbc
 import base64
 import io
 import os
+import calendar
 from components.kpis import kpi_card
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP], suppress_callback_exceptions=True)
@@ -75,17 +76,44 @@ app.layout = dbc.Container(fluid=True, children=[
     dbc.Row(id='kpi-container', className='mb-4'),
 
     dbc.Row([
-        dbc.Col(dcc.Graph(id='vouchers-gerados'), md=4),
-        dbc.Col(dcc.Graph(id='vouchers-utilizados'), md=4),
-        dbc.Col(dcc.Graph(id='ticket-medio'), md=4)
+        dbc.Col(
+            dbc.Card([
+                dbc.CardHeader("Vouchers Gerados por Dia"),
+                dbc.CardBody(dcc.Graph(id='vouchers-gerados'))
+            ], className="h-100 shadow-sm"),
+            md=4
+        ),
+        dbc.Col(
+            dbc.Card([
+                dbc.CardHeader("Vouchers Utilizados por Dia"),
+                dbc.CardBody(dcc.Graph(id='vouchers-utilizados'))
+            ], className="h-100 shadow-sm"),
+            md=4
+        ),
+        dbc.Col(
+            dbc.Card([
+                dbc.CardHeader("Ticket Médio Diário"),
+                dbc.CardBody(dcc.Graph(id='ticket-medio'))
+            ], className="h-100 shadow-sm"),
+            md=4
+        )
     ], className='mb-4'),
 
     dbc.Row([
-        dbc.Col(dash_table.DataTable(id='top-vendedores'), md=12)
-    ], className='mb-4'),
-
-    dbc.Row([
-        dbc.Col(dcc.Graph(id='top-dispositivos'), md=12)
+        dbc.Col(
+            dbc.Card([
+                dbc.CardHeader("Ranking de Vendedores"),
+                dbc.CardBody(dash_table.DataTable(id='top-vendedores', style_table={'overflowX': 'auto'}))
+            ], className="shadow-sm"),
+            md=6
+        ),
+        dbc.Col(
+            dbc.Card([
+                dbc.CardHeader("Top 10 Dispositivos Mais Avaliados"),
+                dbc.CardBody(dcc.Graph(id='top-dispositivos'))
+            ], className="shadow-sm"),
+            md=6
+        )
     ], className='mb-4'),
 
     dcc.Store(id='hidden-data'),
@@ -115,13 +143,12 @@ def preencher_filtros(json_data):
     df = pd.read_json(io.StringIO(json_data), orient='split')
 
     meses = sorted(df['Mês'].dropna().unique())
-    redes = sorted(df['Nome da rede'].dropna().unique())
-    situacoes = sorted(df['Situacao do voucher'].dropna().unique())
+    nomes_meses = {i: calendar.month_name[i].capitalize() for i in meses}
 
     return (
-        [{'label': str(m), 'value': m} for m in meses],
-        [{'label': r, 'value': r} for r in redes],
-        [{'label': s, 'value': s} for s in situacoes]
+        [{'label': nomes_meses[m], 'value': m} for m in meses],
+        [{'label': r, 'value': r} for r in sorted(df['Nome da rede'].dropna().unique())],
+        [{'label': s, 'value': s} for s in sorted(df['Situacao do voucher'].dropna().unique())]
     )
 
 @app.callback(
@@ -173,22 +200,21 @@ def update_dashboard(json_data):
         dbc.Col(kpi_card("📦 Dispositivos Captados", str(total_utilizados), "", color="#00C896"), md=3),
         dbc.Col(kpi_card("💰 Captação Total", f"R$ {valor_total:,.2f}", "", color="#00C896"), md=3),
         dbc.Col(kpi_card("📊 Ticket Médio", f"R$ {ticket_medio:,.2f}", "", color="#00C896"), md=3),
-        dbc.Col(kpi_card("📈 Taxa de Conversão", f"{conversao:.2f}%", "", color="#00C896"), md=3)
+        dbc.Col(kpi_card("📈 Taxa de Conversão", f"{conversao:.2f}" + "%", "", color="#00C896"), md=3)
     ]
 
-    fig_gerados = px.histogram(df, x='Criado em', title='Vouchers Gerados por Dia')
-    fig_gerados.update_layout(template='plotly_dark', plot_bgcolor='rgba(0,0,0,0)')
+    fig_gerados = px.histogram(df, x='Criado em')
+    fig_gerados.update_layout(template='plotly_dark', title='Vouchers Gerados por Dia')
 
-    fig_utilizados = px.histogram(df_utilizados, x='Criado em', title='Vouchers Utilizados por Dia')
-    fig_utilizados.update_layout(template='plotly_dark', plot_bgcolor='rgba(0,0,0,0)')
+    fig_utilizados = px.histogram(df_utilizados, x='Criado em')
+    fig_utilizados.update_layout(template='plotly_dark', title='Vouchers Utilizados por Dia')
 
     fig_ticket = px.line(
         df_utilizados.groupby('Criado em')['Valor do voucher'].mean().reset_index(),
         x='Criado em',
-        y='Valor do voucher',
-        title='Ticket Médio Diário'
+        y='Valor do voucher'
     )
-    fig_ticket.update_layout(template='plotly_dark', plot_bgcolor='rgba(0,0,0,0)')
+    fig_ticket.update_layout(template='plotly_dark', title='Ticket Médio Diário')
 
     ranking_df = df_utilizados.groupby(['Nome do vendedor', 'Nome da filial', 'Nome da rede']).size().reset_index(name='Quantidade')
     ranking_df['Ranking'] = ranking_df['Quantidade'].rank(method='first', ascending=False).astype(int)
@@ -205,11 +231,10 @@ def update_dashboard(json_data):
         top_dispositivos_df,
         x='Descrição',
         y='Quantidade',
-        title='Top 10 Dispositivos Mais Avaliados',
         text='Quantidade'
     )
     fig_dispositivos.update_traces(textposition='outside')
-    fig_dispositivos.update_layout(template='plotly_dark', plot_bgcolor='rgba(0,0,0,0)')
+    fig_dispositivos.update_layout(template='plotly_dark', title='Top 10 Dispositivos Mais Avaliados')
 
     return kpis, fig_gerados, fig_utilizados, fig_ticket, top_vendedores_data, top_vendedores_columns, fig_dispositivos
 
