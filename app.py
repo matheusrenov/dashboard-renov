@@ -70,7 +70,7 @@ login_layout = dbc.Container([
         dbc.Col([
             dbc.Input(id="username", placeholder="Usuário", type="text", className="mb-2"),
             dbc.Input(id="password", placeholder="Senha", type="password", className="mb-2"),
-            dbc.Button("Entrar", id="login-button", color="primary", block=True),
+            dbc.Button("Entrar", id="login-button", color="primary", className="w-100"),
             html.Div(id="login-output", className="mt-2", style={"color": "red"})
         ], md=4)
     ], justify="center")
