@@ -3,18 +3,11 @@ from dash import dcc, html, dash_table, ctx
 from dash.dependencies import Input, Output
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
-import calendar
+import dash_bootstrap_components as dbc
 import base64
 import io
-import dash_bootstrap_components as dbc
-import datetime
-import flask
-from flask import send_file
 import os
-import json
 from components.kpis import kpi_card
-from components.charts import linha_faturamento
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP], suppress_callback_exceptions=True)
 server = app.server
@@ -56,7 +49,6 @@ def process_data(contents):
             raise ValueError(f"Coluna obrigatória ausente: {padrao}")
 
     df.rename(columns={v: k for k, v in col_map.items()}, inplace=True)
-
     df['Criado em'] = pd.to_datetime(df['Criado em'], errors='coerce')
     df = df[df['Criado em'].notna()]
     df['Mês'] = df['Criado em'].dt.month
@@ -96,7 +88,7 @@ app.layout = dbc.Container(fluid=True, children=[
 
     dbc.Row([
         dbc.Col(dcc.Graph(id='top-dispositivos'), md=12)
-    ]),
+    ], className='mb-4'),
 
     dcc.Store(id='hidden-data'),
     dcc.Store(id='filtered-data')
@@ -150,6 +142,7 @@ def update_dashboard(json_data):
 
     df = pd.read_json(io.StringIO(json_data), orient='split')
     df_utilizados = df[df['Situacao do voucher'] == 'UTILIZADO']
+
     total_gerados = len(df)
     total_utilizados = len(df_utilizados)
     valor_total = df_utilizados['Valor do voucher'].sum()
@@ -157,25 +150,32 @@ def update_dashboard(json_data):
     conversao = (total_utilizados / total_gerados) * 100 if total_gerados else 0
 
     kpis = [
-        dbc.Col(kpi_card("Vouchers Gerados", str(total_gerados), "", icon="🧾"), md=3),
-        dbc.Col(kpi_card("Vouchers Utilizados", str(total_utilizados), "", icon="✅"), md=3),
-        dbc.Col(kpi_card("Conversão", f"{conversao:.2f}%", "", icon="📈"), md=3),
-        dbc.Col(kpi_card("Ticket Médio", f"R$ {ticket_medio:,.2f}", "", icon="💸"), md=3)
+        dbc.Col(kpi_card("Dispositivos Captados", str(total_utilizados), "", icon="📦"), md=3),
+        dbc.Col(kpi_card("Captação Total", f"R$ {valor_total:,.2f}", "", icon="💰"), md=3),
+        dbc.Col(kpi_card("Ticket Médio", f"R$ {ticket_medio:,.2f}", "", icon="📊"), md=3),
+        dbc.Col(kpi_card("Taxa de Conversão", f"{conversao:.2f}%", "", icon="📈"), md=3)
     ]
 
     fig_gerados = px.histogram(df, x='Criado em', title='Vouchers Gerados por Dia')
     fig_utilizados = px.histogram(df_utilizados, x='Criado em', title='Vouchers Utilizados por Dia')
-    fig_ticket = px.line(df_utilizados.groupby('Criado em')['Valor do voucher'].mean().reset_index(), x='Criado em', y='Valor do voucher', title='Ticket Médio Diário')
+    fig_ticket = px.line(
+        df_utilizados.groupby('Criado em')['Valor do voucher'].mean().reset_index(),
+        x='Criado em',
+        y='Valor do voucher',
+        title='Ticket Médio Diário'
+    )
 
     ranking_df = df_utilizados.groupby(['Nome do vendedor', 'Nome da filial', 'Nome da rede']).size().reset_index(name='Quantidade')
     ranking_df['Ranking'] = ranking_df['Quantidade'].rank(method='first', ascending=False).astype(int)
     ranking_df = ranking_df.sort_values(by='Ranking')
     ranking_df = ranking_df[['Ranking', 'Nome do vendedor', 'Nome da filial', 'Nome da rede', 'Quantidade']]
+
     top_vendedores_data = ranking_df.to_dict('records')
     top_vendedores_columns = [{'name': col, 'id': col} for col in ranking_df.columns]
 
     top_dispositivos_df = df['Descrição'].value_counts().nlargest(10).reset_index()
     top_dispositivos_df.columns = ['Descrição', 'Quantidade']
+
     fig_dispositivos = px.bar(
         top_dispositivos_df,
         x='Descrição',
@@ -186,7 +186,6 @@ def update_dashboard(json_data):
     fig_dispositivos.update_traces(textposition='outside')
 
     return kpis, fig_gerados, fig_utilizados, fig_ticket, top_vendedores_data, top_vendedores_columns, fig_dispositivos
-
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
