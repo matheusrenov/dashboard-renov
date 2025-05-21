@@ -9,7 +9,7 @@ import os
 from datetime import datetime
 
 # Inicialização do app
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP], suppress_callback_exceptions=True)
 server = app.server
 
 # Layout principal
@@ -52,6 +52,7 @@ app.layout = dbc.Container(fluid=True, children=[
     ], className="mb-4"),
 
     dcc.Store(id='raw-data'),
+    dcc.Store(id='hidden-data'),
     dcc.Store(id='filtered-data')
 ])
 
