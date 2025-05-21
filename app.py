@@ -13,8 +13,6 @@ app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP], suppress_
 server = app.server
 app.title = "Dashboard de Resultados"
 
-export_path = "export_temp.xlsx"
-
 REQUIRED_COLUMNS = ['Criado em', 'Situacao do voucher', 'Valor do voucher', 'Nome da rede', 'Nome do vendedor', 'Nome da filial', 'Descrição']
 
 COLUMN_ALIASES = {
@@ -105,6 +103,28 @@ def carregar_dados(contents):
     return df.to_json(date_format='iso', orient='split')
 
 @app.callback(
+    Output('month-filter', 'options'),
+    Output('rede-filter', 'options'),
+    Output('situacao-filter', 'options'),
+    Input('hidden-data', 'data')
+)
+def preencher_filtros(json_data):
+    if json_data is None:
+        return [], [], []
+
+    df = pd.read_json(io.StringIO(json_data), orient='split')
+
+    meses = sorted(df['Mês'].dropna().unique())
+    redes = sorted(df['Nome da rede'].dropna().unique())
+    situacoes = sorted(df['Situacao do voucher'].dropna().unique())
+
+    return (
+        [{'label': str(m), 'value': m} for m in meses],
+        [{'label': r, 'value': r} for r in redes],
+        [{'label': s, 'value': s} for s in situacoes]
+    )
+
+@app.callback(
     Output('filtered-data', 'data'),
     Input('hidden-data', 'data'),
     Input('month-filter', 'value'),
@@ -150,20 +170,25 @@ def update_dashboard(json_data):
     conversao = (total_utilizados / total_gerados) * 100 if total_gerados else 0
 
     kpis = [
-        dbc.Col(kpi_card("Dispositivos Captados", str(total_utilizados), "", icon="📦"), md=3),
-        dbc.Col(kpi_card("Captação Total", f"R$ {valor_total:,.2f}", "", icon="💰"), md=3),
-        dbc.Col(kpi_card("Ticket Médio", f"R$ {ticket_medio:,.2f}", "", icon="📊"), md=3),
-        dbc.Col(kpi_card("Taxa de Conversão", f"{conversao:.2f}%", "", icon="📈"), md=3)
+        dbc.Col(kpi_card("📦 Dispositivos Captados", str(total_utilizados), "", color="#00C896"), md=3),
+        dbc.Col(kpi_card("💰 Captação Total", f"R$ {valor_total:,.2f}", "", color="#00C896"), md=3),
+        dbc.Col(kpi_card("📊 Ticket Médio", f"R$ {ticket_medio:,.2f}", "", color="#00C896"), md=3),
+        dbc.Col(kpi_card("📈 Taxa de Conversão", f"{conversao:.2f}%", "", color="#00C896"), md=3)
     ]
 
     fig_gerados = px.histogram(df, x='Criado em', title='Vouchers Gerados por Dia')
+    fig_gerados.update_layout(template='plotly_dark', plot_bgcolor='rgba(0,0,0,0)')
+
     fig_utilizados = px.histogram(df_utilizados, x='Criado em', title='Vouchers Utilizados por Dia')
+    fig_utilizados.update_layout(template='plotly_dark', plot_bgcolor='rgba(0,0,0,0)')
+
     fig_ticket = px.line(
         df_utilizados.groupby('Criado em')['Valor do voucher'].mean().reset_index(),
         x='Criado em',
         y='Valor do voucher',
         title='Ticket Médio Diário'
     )
+    fig_ticket.update_layout(template='plotly_dark', plot_bgcolor='rgba(0,0,0,0)')
 
     ranking_df = df_utilizados.groupby(['Nome do vendedor', 'Nome da filial', 'Nome da rede']).size().reset_index(name='Quantidade')
     ranking_df['Ranking'] = ranking_df['Quantidade'].rank(method='first', ascending=False).astype(int)
@@ -184,6 +209,7 @@ def update_dashboard(json_data):
         text='Quantidade'
     )
     fig_dispositivos.update_traces(textposition='outside')
+    fig_dispositivos.update_layout(template='plotly_dark', plot_bgcolor='rgba(0,0,0,0)')
 
     return kpis, fig_gerados, fig_utilizados, fig_ticket, top_vendedores_data, top_vendedores_columns, fig_dispositivos
 
