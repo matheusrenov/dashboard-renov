@@ -1,194 +1,200 @@
 import dash
+from dash import Dash, dcc, html, Input, Output, State, ctx, dash_table
 import dash_bootstrap_components as dbc
-from dash import dcc, html, Input, Output, State, callback_context, dash_table
 import pandas as pd
 import plotly.express as px
 import base64
 import io
 from datetime import datetime
 
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP], suppress_callback_exceptions=True)
+# App inicial
+app = Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP], suppress_callback_exceptions=True)
 server = app.server
 
-app.title = 'Dashboard de Resultados'
-
-# ========= Layout ========= #
+# Layout base
 app.layout = dbc.Container([
-    html.H2("Dashboard de Resultados", className="text-center my-4"),
-
+    html.H2("Dashboard de Resultados", style={"textAlign": "center", "marginTop": "20px"}),
+    
+    # Upload
     dcc.Upload(
         id='upload-data',
-        children=html.Div([
-            "📁 Arraste ou selecione o arquivo .xlsx"
-        ]),
+        children=html.Div(['📁 Arraste ou selecione o arquivo .xlsx']),
         style={
-            'width': '100%',
-            'height': '80px',
-            'lineHeight': '80px',
-            'borderWidth': '2px',
-            'borderStyle': 'dashed',
-            'borderRadius': '5px',
-            'textAlign': 'center',
+            'width': '100%', 'height': '60px', 'lineHeight': '60px',
+            'borderWidth': '2px', 'borderStyle': 'dashed',
+            'borderRadius': '5px', 'textAlign': 'center',
             'marginBottom': '10px'
         },
         multiple=False
     ),
 
+    html.Div(id='upload-error', style={'color': 'red', 'textAlign': 'center'}),
+
+    # Filtros
     dbc.Row([
-        dbc.Col(dcc.Dropdown(id='month-filter', placeholder="Mês"), md=4),
-        dbc.Col(dcc.Dropdown(id='rede-filter', placeholder="Nome da rede"), md=4),
-        dbc.Col(dcc.Dropdown(id='situacao-filter', placeholder="Situação do voucher"), md=4),
-    ], className="mb-4"),
+        dbc.Col(dcc.Dropdown(id='month-filter', placeholder='Mês'), md=4),
+        dbc.Col(dcc.Dropdown(id='rede-filter', placeholder='Nome da rede'), md=4),
+        dbc.Col(dcc.Dropdown(id='situacao-filter', placeholder='Situação do voucher'), md=4),
+    ], style={"marginTop": "10px"}),
 
     dcc.Store(id='filtered-data'),
 
-    dbc.Row([
-        dbc.Col(html.Div(id='kpi-vouchers-gerados'), md=3),
-        dbc.Col(html.Div(id='kpi-dispositivos'), md=3),
-        dbc.Col(html.Div(id='kpi-captacao'), md=3),
-        dbc.Col(html.Div(id='kpi-ticket-medio'), md=3),
-        dbc.Col(html.Div(id='kpi-conversao'), md=3),
-    ], className="mb-4"),
+    # KPIs
+    html.Div(id='kpi-cards', style={'marginTop': '20px'}),
 
+    # Gráficos
     dbc.Row([
         dbc.Col(dcc.Graph(id='grafico-gerados'), md=4),
         dbc.Col(dcc.Graph(id='grafico-utilizados'), md=4),
-        dbc.Col(dcc.Graph(id='grafico-ticket'), md=4),
-    ], className="mb-4"),
+        dbc.Col(dcc.Graph(id='grafico-ticket'), md=4)
+    ]),
 
+    # Tabela e ranking
     dbc.Row([
-        dbc.Col(dash_table.DataTable(id='tabela-vendedores',
-                                     style_table={'overflowX': 'auto'},
-                                     style_cell={'textAlign': 'left', 'minWidth': '100px', 'fontSize': 12}),
-                md=6),
+        dbc.Col(dash_table.DataTable(id='tabela-vendedores', style_table={'overflowX': 'auto'}), md=6),
         dbc.Col(dcc.Graph(id='grafico-top-dispositivos'), md=6)
     ])
 ], fluid=True)
 
-
-# ========= Callbacks ========= #
+# Callback para carregar o arquivo e preparar os filtros
 @app.callback(
-    Output('filtered-data', 'data'),
     Output('month-filter', 'options'),
     Output('month-filter', 'value'),
     Output('rede-filter', 'options'),
     Output('situacao-filter', 'options'),
+    Output('filtered-data', 'data'),
+    Output('upload-error', 'children'),
     Input('upload-data', 'contents'),
     State('upload-data', 'filename')
 )
-def load_and_prepare(content, filename):
-    if content is None:
-        return dash.no_update, [], None, [], []
+def carregar_arquivo(contents, filename):
+    if contents is None:
+        return [], None, [], [], None, None
 
-    content_type, content_string = content.split(',')
+    content_type, content_string = contents.split(',')
     decoded = base64.b64decode(content_string)
-
     try:
         df = pd.read_excel(io.BytesIO(decoded))
+
+        # Padroniza colunas
+        df.columns = [col.strip().lower().replace(" ", "_") for col in df.columns]
+
+        # Renomeia colunas esperadas
+        renomear = {
+            'criado_em': 'criado_em',
+            'situação_do_voucher': 'situacao_do_voucher',
+            'situação_do_voucher': 'situacao_do_voucher',
+            'nome_da_rede': 'nome_da_rede',
+        }
+
+        for key in renomear:
+            if key in df.columns:
+                df.rename(columns={key: renomear[key]}, inplace=True)
+
+        # Converte datas
+        df['criado_em'] = pd.to_datetime(df['criado_em'], errors='coerce')
+
+        # Filtros
+        df['mes'] = df['criado_em'].dt.strftime('%b')  # abreviação
+        meses = sorted(df['mes'].dropna().unique(), key=lambda x: datetime.strptime(x, "%b").month)
+        redes = sorted(df['nome_da_rede'].dropna().unique()) if 'nome_da_rede' in df else []
+        situacoes = sorted(df['situacao_do_voucher'].dropna().unique()) if 'situacao_do_voucher' in df else []
+
+        ultimo_mes = meses[-1] if meses else None
+
+        return (
+            [{'label': m, 'value': m} for m in meses],
+            ultimo_mes,
+            [{'label': r, 'value': r} for r in redes],
+            [{'label': s, 'value': s} for s in situacoes],
+            df.to_dict('records'),
+            None
+        )
     except Exception as e:
-        return dash.no_update, [], None, [], []
+        return [], None, [], [], None, f"Erro ao processar arquivo: {str(e)}"
 
-    # Tratamento da data
-    df['Criado em'] = pd.to_datetime(df['Criado em'], errors='coerce')
-
-    # Normalização de coluna com possíveis variações no nome
-    col_map = {col: col.strip().lower() for col in df.columns}
-    situacao_col = next((col for col in df.columns if 'situacao do voucher' in col.lower()), None)
-    if situacao_col is None:
-        return dash.no_update, [], None, [], []
-
-    # Opções de filtro
-    df['Mês'] = df['Criado em'].dt.strftime('%b')
-    meses = sorted(df['Mês'].dropna().unique(), key=lambda x: datetime.strptime(x, "%b"))
-    redes = sorted(df['Nome da rede'].dropna().unique())
-    situacoes = sorted(df[situacao_col].dropna().unique())
-
-    return df.to_json(date_format='iso', orient='split'), [{'label': m, 'value': m} for m in meses], meses[-1], [{'label': r, 'value': r} for r in redes], [{'label': s, 'value': s} for s in situacoes]
-
-
+# Callback principal para atualizar dashboard
 @app.callback(
-    Output('kpi-vouchers-gerados', 'children'),
-    Output('kpi-dispositivos', 'children'),
-    Output('kpi-captacao', 'children'),
-    Output('kpi-ticket-medio', 'children'),
-    Output('kpi-conversao', 'children'),
+    Output('kpi-cards', 'children'),
     Output('grafico-gerados', 'figure'),
     Output('grafico-utilizados', 'figure'),
     Output('grafico-ticket', 'figure'),
     Output('tabela-vendedores', 'data'),
     Output('tabela-vendedores', 'columns'),
     Output('grafico-top-dispositivos', 'figure'),
-    Input('filtered-data', 'data'),
     Input('month-filter', 'value'),
     Input('rede-filter', 'value'),
-    Input('situacao-filter', 'value')
+    Input('situacao-filter', 'value'),
+    Input('filtered-data', 'data'),
 )
-def atualizar_dashboard(json_data, mes, rede, situacao):
-    if json_data is None:
-        raise dash.exceptions.PreventUpdate
+def atualizar_dashboard(mes, rede, situacao, data):
+    if data is None:
+        return [html.Div("Nenhum dado carregado.")], {}, {}, {}, [], [], {}
 
-    df = pd.read_json(json_data, orient='split')
-    df['Criado em'] = pd.to_datetime(df['Criado em'], errors='coerce')
-    df['Mês'] = df['Criado em'].dt.strftime('%b')
+    df = pd.DataFrame(data)
 
-    situacao_col = next((col for col in df.columns if 'situacao do voucher' in col.lower()), None)
-
+    # Filtros
     if mes:
-        df = df[df['Mês'] == mes]
+        df = df[df['criado_em'].dt.strftime('%b') == mes]
     if rede:
-        df = df[df['Nome da rede'] == rede]
+        df = df[df['nome_da_rede'] == rede]
     if situacao:
-        df = df[df[situacao_col] == situacao]
+        df = df[df['situacao_do_voucher'] == situacao]
 
     # KPIs
     total_vouchers = len(df)
-    dispositivos = df['Número de série'].nunique()
-    captacao = df[df[situacao_col] == 'UTILIZADO']['Valor do voucher'].sum()
-    ticket = df[df[situacao_col] == 'UTILIZADO']['Valor do voucher'].mean()
-    conversao = (df[df[situacao_col] == 'UTILIZADO'].shape[0] / df.shape[0]) * 100 if df.shape[0] > 0 else 0
+    dispositivos = df['dispositivo'].nunique() if 'dispositivo' in df else 0
+    captacao = df['valor_do_voucher'].sum() if 'valor_do_voucher' in df else 0
+    ticket_medio = df['valor_do_voucher'].mean() if 'valor_do_voucher' in df else 0
+    usados = df[df['situacao_do_voucher'] == 'UTILIZADO'] if 'situacao_do_voucher' in df else pd.DataFrame()
+    conversao = (len(usados) / total_vouchers) * 100 if total_vouchers > 0 else 0
 
-    def card_kpi(title, value):
-        return dbc.Card([
-            dbc.CardBody([
-                html.H6(title, className="card-title"),
-                html.H4(value, className="card-text")
-            ])
-        ], style={'background': '#1e1e1e', 'color': 'white', 'border': '1px solid #1abc9c'})
+    kpis = dbc.Row([
+        dbc.Col(html.Div([
+            html.H5("📄 Vouchers Gerados", style={'color': 'white'}),
+            html.H3(f"{total_vouchers}", style={'color': 'white'})
+        ], className="p-3", style={"background": "#1e1e1e", "border": "2px solid turquoise", "borderRadius": "10px"}), md=3),
+
+        dbc.Col(html.Div([
+            html.H5("📦 Dispositivos Captados", style={'color': 'white'}),
+            html.H3(f"{dispositivos}", style={'color': 'white'})
+        ], className="p-3", style={"background": "#1e1e1e", "border": "2px solid turquoise", "borderRadius": "10px"}), md=3),
+
+        dbc.Col(html.Div([
+            html.H5("💰 Captação Total", style={'color': 'white'}),
+            html.H3(f"R$ {captacao:,.2f}", style={'color': 'white'})
+        ], className="p-3", style={"background": "#1e1e1e", "border": "2px solid turquoise", "borderRadius": "10px"}), md=3),
+
+        dbc.Col(html.Div([
+            html.H5("📊 Ticket Médio", style={'color': 'white'}),
+            html.H3(f"R$ {ticket_medio:,.2f}", style={'color': 'white'})
+        ], className="p-3", style={"background": "#1e1e1e", "border": "2px solid turquoise", "borderRadius": "10px"}), md=3),
+
+        dbc.Col(html.Div([
+            html.H5("📈 Conversão", style={'color': 'white'}),
+            html.H3(f"{conversao:.2f}%", style={'color': 'white'})
+        ], className="p-3", style={"background": "#1e1e1e", "border": "2px solid turquoise", "borderRadius": "10px"}), md=3),
+    ])
 
     # Gráficos
-    fig_gerados = px.line(df, x='Criado em', title='Vouchers Gerados por Dia') if not df.empty else px.line()
-    fig_utilizados = px.line(df[df[situacao_col] == 'UTILIZADO'], x='Criado em', title='Vouchers Utilizados por Dia') if not df.empty else px.line()
-    fig_ticket = px.line(df[df[situacao_col] == 'UTILIZADO'], x='Criado em', y='Valor do voucher', title='Ticket Médio Diário') if not df.empty else px.line()
+    fig_gerados = px.line(df, x='criado_em', title='Vouchers Gerados por Dia')
+    fig_utilizados = px.line(df[df['situacao_do_voucher'] == 'UTILIZADO'], x='criado_em', title='Vouchers Utilizados por Dia') if 'situacao_do_voucher' in df else px.line(title='Sem dados de utilização')
+    fig_ticket = px.line(df, x='criado_em', y='valor_do_voucher', title='Ticket Médio Diário') if 'valor_do_voucher' in df else px.line(title='Sem dados de ticket')
 
     # Ranking vendedores
-    ranking = df[df[situacao_col] == 'UTILIZADO'].groupby(['Nome do vendedor', 'Nome da filial'])['Número do voucher'].count().reset_index()
-    ranking = ranking.rename(columns={'Número do voucher': 'Qtd'})
-    ranking = ranking.sort_values(by='Qtd', ascending=False).head(20).reset_index(drop=True)
-    ranking.insert(0, 'Ranking', range(1, len(ranking) + 1))
-
-    data = ranking.to_dict('records')
-    columns = [{"name": col, "id": col} for col in ranking.columns]
+    if 'nome_do_vendedor' in df:
+        top_vend = df[df['situacao_do_voucher'] == 'UTILIZADO'].groupby(['nome_do_vendedor', 'nome_da_filial']).size().reset_index(name='qtd')
+        top_vend = top_vend.sort_values(by='qtd', ascending=False).reset_index(drop=True)
+        top_vend.insert(0, 'Ranking', top_vend.index + 1)
+        tabela_vendedores = top_vend.to_dict('records')
+        colunas_vendedores = [{"name": i.replace("_", " ").title(), "id": i} for i in top_vend.columns]
+    else:
+        tabela_vendedores, colunas_vendedores = [], []
 
     # Top dispositivos
-    top_dispositivos = df[df[situacao_col] == 'UTILIZADO']['Descrição'].value_counts().reset_index()
-    top_dispositivos.columns = ['Descrição', 'Quantidade']
-    fig_top_dispositivos = px.bar(top_dispositivos.head(10), x='Descrição', y='Quantidade', title='Top Dispositivos')
+    fig_dispositivos = px.bar(df, x='descricao', title='Top Dispositivos') if 'descricao' in df else px.bar(title='Sem dispositivos')
 
-    return (
-        card_kpi("📊 Vouchers Gerados", f"{total_vouchers}"),
-        card_kpi("📦 Dispositivos Captados", f"{dispositivos}"),
-        card_kpi("💰 Captação Total", f"R$ {captacao:,.2f}"),
-        card_kpi("📉 Ticket Médio", f"R$ {ticket:,.2f}"),
-        card_kpi("📈 Conversão", f"{conversao:.2f}%"),
-        fig_gerados,
-        fig_utilizados,
-        fig_ticket,
-        data,
-        columns,
-        fig_top_dispositivos
-    )
+    return kpis, fig_gerados, fig_utilizados, fig_ticket, tabela_vendedores, colunas_vendedores, fig_dispositivos
 
-
-# ========= Run ========= #
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=8080)
