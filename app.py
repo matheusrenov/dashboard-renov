@@ -64,6 +64,10 @@ def processar_arquivo(contents, filename):
             if col not in df.columns:
                 return dash.no_update, dash.no_update, f"❌ Coluna obrigatória não encontrada: {col}"
 
+        # 🔁 Converter datas
+        df['criado em'] = pd.to_datetime(df['criado em'], errors='coerce')
+        df = df.dropna(subset=['criado em'])
+
         # KPI - Vouchers Gerados
         total_gerados = df.shape[0]
 
@@ -103,25 +107,17 @@ def processar_arquivo(contents, filename):
             ], body=True, color="dark", inverse=True), md=3),
         ])
 
-        # 📅 Preparar gráficos
-        df['criado em'] = pd.to_datetime(df['criado em'], errors='coerce')
+        # 📊 Preparar gráficos
         df['mes'] = df['criado em'].dt.strftime('%b')
 
+        df_gerados = df.groupby(df['criado em'].dt.date).size().reset_index(name='Qtd')
+        fig_gerados = px.line(df_gerados, x='criado em', y='Qtd', title="📆 Vouchers Gerados por Dia")
 
-        fig_gerados = px.line(
-            df.groupby(df['criado em'].dt.date),
-            x='criado em', y='Qtd', title="📆 Vouchers Gerados por Dia"
-        )
+        df_utilizados = usados.groupby(usados['criado em'].dt.date).size().reset_index(name='Qtd')
+        fig_utilizados = px.line(df_utilizados, x='criado em', y='Qtd', title="📆 Vouchers Utilizados por Dia")
 
-        fig_utilizados = px.line(
-            usados.groupby(usados['criacao'].dt.date).size().reset_index(name='Qtd'),
-            x='criado em', y='Qtd', title="📆 Vouchers Utilizados por Dia"
-        )
-
-        fig_ticket = px.line(
-            usados.groupby(usados['criacao'].dt.date)['valor do voucher'].mean().reset_index(name='Média'),
-            x='criado em', y='Média', title="🎫 Ticket Médio Diário"
-        )
+        df_ticket = usados.groupby(usados['criado em'].dt.date)['valor do voucher'].mean().reset_index(name='Média')
+        fig_ticket = px.line(df_ticket, x='criado em', y='Média', title="🎫 Ticket Médio Diário")
 
         graficos = dbc.Row([
             dbc.Col(dcc.Graph(figure=fig_gerados), md=4),
