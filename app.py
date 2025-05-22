@@ -59,7 +59,7 @@ def processar_arquivo(contents, filename):
         df.columns = [unidecode(col).strip().lower() for col in df.columns]
 
         # 🛡️ Checagem de colunas necessárias
-        colunas_esperadas = ['imei', 'criacao', 'valor do voucher', 'situacao do voucher']
+        colunas_esperadas = ['imei', 'criado em', 'valor do voucher', 'situacao do voucher']
         for col in colunas_esperadas:
             if col not in df.columns:
                 return dash.no_update, dash.no_update, f"❌ Coluna obrigatória não encontrada: {col}"
@@ -68,7 +68,7 @@ def processar_arquivo(contents, filename):
         total_gerados = df.shape[0]
 
         # KPI - Dispositivos Captados
-        dispositivos = df['imei'].nunique()
+        dispositivos = df['Imei'].nunique()
 
         # KPI - Captação Total
         captacao = df['valor do voucher'].sum()
@@ -104,22 +104,23 @@ def processar_arquivo(contents, filename):
         ])
 
         # 📅 Preparar gráficos
-        df['criacao'] = pd.to_datetime(df['criacao'], errors='coerce')
-        df['mes'] = df['criacao'].dt.strftime('%b')
+        df['criado em'] = pd.to_datetime(df['criado em'], errors='coerce')
+        df['mes'] = df['criado em'].dt.strftime('%b')
+
 
         fig_gerados = px.line(
-            df.groupby(df['criacao'].dt.date).size().reset_index(name='Qtd'),
-            x='criacao', y='Qtd', title="📆 Vouchers Gerados por Dia"
+            df.groupby(df['criado em'].dt.date),
+            x='criado em', y='Qtd', title="📆 Vouchers Gerados por Dia"
         )
 
         fig_utilizados = px.line(
             usados.groupby(usados['criacao'].dt.date).size().reset_index(name='Qtd'),
-            x='criacao', y='Qtd', title="📆 Vouchers Utilizados por Dia"
+            x='criado em', y='Qtd', title="📆 Vouchers Utilizados por Dia"
         )
 
         fig_ticket = px.line(
             usados.groupby(usados['criacao'].dt.date)['valor do voucher'].mean().reset_index(name='Média'),
-            x='criacao', y='Média', title="🎫 Ticket Médio Diário"
+            x='criado em', y='Média', title="🎫 Ticket Médio Diário"
         )
 
         graficos = dbc.Row([
