@@ -68,7 +68,7 @@ def processar_arquivo(contents, filename):
         total_gerados = df.shape[0]
 
         # KPI - Dispositivos Captados
-        dispositivos = df['Imei'].nunique()
+        dispositivos = df['imei'].nunique()
 
         # KPI - Captação Total
         captacao = df['valor do voucher'].sum()
