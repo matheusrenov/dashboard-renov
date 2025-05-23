@@ -172,17 +172,43 @@ def gerar_grafico_rede_mes(df):
     df['criado em'] = pd.to_datetime(df['criado em'], errors='coerce')
     df['mes_curto'] = df['criado em'].dt.strftime('%b')
     df['mes_ordem'] = df['criado em'].dt.month
-    df['mes_curto'] = pd.Categorical(df['mes_curto'], categories=["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], ordered=True)
-    agrupado = (df.groupby(['mes_curto', 'mes_ordem', 'nome da rede']).size().reset_index(name='Qtd')
+    df = df.dropna(subset=['mes_curto', 'nome da rede'])
+
+    # Usar apenas os meses presentes no dataset ordenadamente
+    meses_presentes = df[['mes_ordem', 'mes_curto']].drop_duplicates().sort_values('mes_ordem')
+    categorias_ordenadas = list(meses_presentes['mes_curto'])
+
+    df['mes_curto'] = pd.Categorical(df['mes_curto'], categories=categorias_ordenadas, ordered=True)
+
+    agrupado = (df.groupby(['mes_curto', 'mes_ordem', 'nome da rede'])
+                  .size()
+                  .reset_index(name='Qtd')
                   .sort_values(['mes_ordem', 'Qtd'], ascending=[True, False]))
-    fig = px.bar(agrupado, x='nome da rede', y='Qtd', color='mes_curto', barmode='group',
-                 title="🏢 Vouchers por Rede e Mês", text='Qtd', color_discrete_sequence=px.colors.qualitative.Plotly)
+
+    fig = px.bar(
+        agrupado,
+        x='nome da rede',
+        y='Qtd',
+        color='mes_curto',
+        barmode='group',
+        title="🏢 Vouchers por Rede e Mês",
+        text='Qtd',
+        color_discrete_sequence=px.colors.qualitative.Plotly,
+        category_orders={"mes_curto": categorias_ordenadas}
+    )
+
     fig.update_traces(texttemplate='%{text:.0f}', textposition='outside')
-    fig.update_layout(plot_bgcolor='white', paper_bgcolor='white',
-                      xaxis=dict(title='Rede', showgrid=False),
-                      yaxis=dict(title='Qtd', showgrid=False),
-                      margin=dict(l=20, r=20, t=50, b=30), showlegend=True)
+    fig.update_layout(
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+        xaxis=dict(title='Rede', showgrid=False),
+        yaxis=dict(title='Qtd', showgrid=False),
+        margin=dict(l=20, r=20, t=50, b=30),
+        showlegend=True
+    )
+
     return html.Div(dcc.Graph(figure=fig), style={'marginTop': '20px'})
+
 
 def gerar_tabela(df):
     usados = df[df['situacao do voucher'].str.lower() == 'utilizado']
