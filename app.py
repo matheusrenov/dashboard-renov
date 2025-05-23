@@ -162,23 +162,29 @@ def gerar_graficos_mensais(df):
     df = df.copy()
     usados = df[df['situacao do voucher'].str.lower() == 'utilizado']
 
+    # Detecta apenas os meses que possuem dados
+    meses_presentes = sorted(df['mes_curto'].dropna().unique(), key=lambda x: datetime.strptime(x, "%b").month)
+
     def fig_bar(dados, y, title):
-        fig = px.bar(dados, x='mes_curto', y=y, text=y, title=title)
+        fig = px.bar(dados, x='mes_curto', y=y, text=y, title=title,
+                     category_orders={'mes_curto': meses_presentes})
         fig.update_traces(texttemplate='%{text:.0f}', textposition='outside')
         fig.update_layout(plot_bgcolor='white', paper_bgcolor='white', showlegend=False,
                           xaxis=dict(showgrid=False), yaxis=dict(showgrid=False),
                           margin=dict(l=20, r=20, t=50, b=30))
         return fig
 
-    fig1 = fig_bar(df.groupby(['mes_curto']).size().reset_index(name='Qtd'), 'Qtd', "📅 Vouchers Gerados por Mês")
-    fig2 = fig_bar(usados.groupby(['mes_curto']).size().reset_index(name='Qtd'), 'Qtd', "📅 Vouchers Utilizados por Mês")
-    fig3 = fig_bar(usados.groupby(['mes_curto'])['valor do voucher'].mean().reset_index(name='Média'), 'Média', "💳 Ticket Médio por Mês")
+    fig1 = fig_bar(df.groupby('mes_curto').size().reset_index(name='Qtd'), 'Qtd', "📅 Vouchers Gerados por Mês")
+    fig2 = fig_bar(usados.groupby('mes_curto').size().reset_index(name='Qtd'), 'Qtd', "📅 Vouchers Utilizados por Mês")
+    fig3 = fig_bar(usados.groupby('mes_curto')['valor do voucher'].mean().reset_index(name='Média'), 'Média', "💳 Ticket Médio por Mês")
 
     return dbc.Row([
         dbc.Col(dcc.Graph(figure=fig1), md=4),
         dbc.Col(dcc.Graph(figure=fig2), md=4),
         dbc.Col(dcc.Graph(figure=fig3), md=4),
     ])
+
+
 
 def gerar_graficos_rede(df):
     usados = df[df['situacao do voucher'].str.lower() == 'utilizado']
