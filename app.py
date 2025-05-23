@@ -135,28 +135,49 @@ def gerar_kpis(df):
         ], body=True, color="dark", inverse=True, style={"border": "2px solid lime"}), md=2),
     ], justify='between', style={'marginBottom': 30})
 def gerar_graficos_mensais(df):
+    df['criado em'] = pd.to_datetime(df['criado em'], errors='coerce')
+    df['mes_curto'] = df['criado em'].dt.strftime('%b')  # Ex: Jan, Feb...
+    df['mes_num'] = df['criado em'].dt.month
+    df = df.sort_values('mes_num')  # garante a ordem correta
+
     usados = df[df['situacao do voucher'].str.lower() == 'utilizado']
-    df['criado em'] = pd.to_datetime(df['criado em'])
-    df['mes_curto'] = df['criado em'].dt.strftime('%b')
 
-    meses_ordem = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    # Vouchers Gerados por Mês
+    fig_gerados = px.bar(
+        df.groupby(['mes_curto', 'mes_num']).size().reset_index(name='Qtd').sort_values('mes_num'),
+        x='mes_curto', y='Qtd', text='Qtd', title="📅 Vouchers Gerados por Mês"
+    )
 
-    gerados = df.groupby('mes_curto').size().reindex(meses_ordem).dropna()
-    utilizados = usados.groupby('mes_curto').size().reindex(meses_ordem).dropna()
-    ticket_mensal = usados.groupby('mes_curto')['valor do voucher'].mean().reindex(meses_ordem).dropna()
+    # Vouchers Utilizados por Mês
+    fig_utilizados = px.bar(
+        usados.groupby(['mes_curto', 'mes_num']).size().reset_index(name='Qtd').sort_values('mes_num'),
+        x='mes_curto', y='Qtd', text='Qtd', title="📅 Vouchers Utilizados por Mês"
+    )
 
-    fig1 = px.bar(gerados, x=gerados.index, y=gerados.values, title="📅 Vouchers Gerados por Mês",
-                  labels={"x": "criado em", "y": "Qtd"}, text_auto='.0f')
-    fig2 = px.bar(utilizados, x=utilizados.index, y=utilizados.values, title="📅 Vouchers Utilizados por Mês",
-                  labels={"x": "criado em", "y": "Qtd"}, text_auto='.0f')
-    fig3 = px.bar(ticket_mensal, x=ticket_mensal.index, y=ticket_mensal.values, title="🎟 Ticket Médio por Mês",
-                  labels={"x": "criado em", "y": "Média"}, text_auto='.0f')
+    # Ticket Médio por Mês
+    fig_ticket = px.bar(
+        usados.groupby(['mes_curto', 'mes_num'])['valor do voucher'].mean().reset_index(name='Média').sort_values('mes_num'),
+        x='mes_curto', y='Média', text='Média', title="💳 Ticket Médio por Mês"
+    )
+
+    # Aplicar estilo a todos os gráficos
+    for fig in [fig_gerados, fig_utilizados, fig_ticket]:
+        fig.update_traces(texttemplate='%{text:.0f}', textposition='outside')
+        fig.update_layout(
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            showlegend=False,
+            xaxis=dict(showgrid=False),
+            yaxis=dict(showgrid=False),
+            margin=dict(l=20, r=20, t=50, b=30),
+        )
 
     return dbc.Row([
-        dbc.Col(dcc.Graph(figure=fig1), md=4),
-        dbc.Col(dcc.Graph(figure=fig2), md=4),
-        dbc.Col(dcc.Graph(figure=fig3), md=4)
+        dbc.Col(dcc.Graph(figure=fig_gerados), md=4),
+        dbc.Col(dcc.Graph(figure=fig_utilizados), md=4),
+        dbc.Col(dcc.Graph(figure=fig_ticket), md=4),
     ])
+
 
 def gerar_graficos(df):
     usados = df[df['situacao do voucher'].str.lower() == 'utilizado']
