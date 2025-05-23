@@ -60,6 +60,8 @@ def processar_arquivo(contents, filename):
                 return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, f"❌ Coluna obrigatória não encontrada: {col}"
 
         df['criado em'] = pd.to_datetime(df['criado em'], errors='coerce')
+        df['mes_curto'] = df['criado em'].dt.strftime('%b')  # Ex: Jan, Feb, Mar
+        df['mes_curto'] = pd.Categorical(df['mes_curto'], categories=["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], ordered=True)
         df['mes'] = df['criado em'].dt.strftime('%b')
         df['dia'] = df['criado em'].dt.day.astype(str)
         df['mes_ordem'] = df['criado em'].dt.month
