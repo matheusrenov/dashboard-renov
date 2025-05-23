@@ -112,13 +112,25 @@ def gerar_kpis(df):
     usados = df[df['situacao do voucher'].str.lower() == 'utilizado']
     conversao = len(usados) / total_gerados * 100 if total_gerados > 0 else 0
 
+    card_style = {
+        'border': '2px solid #00FF88',
+        'borderRadius': '10px',
+        'boxShadow': '0 0 10px #00FF88',
+        'textAlign': 'center',
+        'padding': '15px',
+        'backgroundColor': '#111',
+        'color': 'white',
+        'height': '100%',
+    }
+
     return dbc.Row([
-        dbc.Col(dbc.Card([html.H5("📊 Vouchers Gerados"), html.H3(f"{total_gerados}")], body=True, color="dark", inverse=True), md=2),
-        dbc.Col(dbc.Card([html.H5("📦 Dispositivos Captados"), html.H3(f"{dispositivos}")], body=True, color="dark", inverse=True), md=2),
-        dbc.Col(dbc.Card([html.H5("💰 Captação Total"), html.H3(f"R$ {captacao:,.2f}")], body=True, color="dark", inverse=True), md=2),
-        dbc.Col(dbc.Card([html.H5("🎯 Ticket Médio"), html.H3(f"R$ {ticket:,.2f}")], body=True, color="dark", inverse=True), md=2),
-        dbc.Col(dbc.Card([html.H5("📈 Conversão"), html.H3(f"{conversao:.2f}%")], body=True, color="dark", inverse=True), md=2),
-    ])
+        dbc.Col(dbc.Card([html.H5("📊 Vouchers Gerados"), html.H3(f"{total_gerados}")], style=card_style), md=2),
+        dbc.Col(dbc.Card([html.H5("📦 Dispositivos Captados"), html.H3(f"{dispositivos}")], style=card_style), md=2),
+        dbc.Col(dbc.Card([html.H5("💰 Captação Total"), html.H3(f"R$ {captacao:,.2f}")], style=card_style), md=2),
+        dbc.Col(dbc.Card([html.H5("🎯 Ticket Médio"), html.H3(f"R$ {ticket:,.2f}")], style=card_style), md=2),
+        dbc.Col(dbc.Card([html.H5("📈 Conversão"), html.H3(f"{conversao:.2f}%")], style=card_style), md=2),
+    ], justify='between', className='mb-4')
+
 
 # 📊 Gráficos
 def gerar_graficos(df):
