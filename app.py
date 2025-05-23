@@ -6,17 +6,15 @@ import dash
 from dash import dcc, html, Input, Output, State, ctx, dash_table
 import dash_bootstrap_components as dbc
 import plotly.express as px
+import plotly.graph_objs as go
 from unidecode import unidecode
 from datetime import datetime
 
-# 🔧 App init
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP], suppress_callback_exceptions=True)
 server = app.server
 
-# 🎨 Layout
 app.layout = html.Div([
     html.H2("Dashboard de Resultados", style={'textAlign': 'center'}),
-
     dcc.Upload(
         id='upload-data',
         children=html.Div(['📁 Arraste ou selecione o arquivo .xlsx']),
@@ -28,19 +26,18 @@ app.layout = html.Div([
         multiple=False
     ),
     html.Div(id='error-upload', style={'color': 'red', 'textAlign': 'center', 'marginTop': 10}),
-
     html.Div(id='filtros'),
-
     html.Div(id='kpi-cards', style={'marginTop': '20px'}),
-    html.Div(id='graficos', style={'marginTop': '20px'}),
+    html.Div(id='graficos-mensais', style={'marginTop': '20px'}),
+    html.Div(id='graficos-diarios', style={'marginTop': '20px'}),
     html.Div(id='ranking-vendedores', style={'marginTop': '20px'})
 ])
 
-# 📦 Cria dropdowns após upload
 @app.callback(
     Output('filtros', 'children'),
     Output('kpi-cards', 'children'),
-    Output('graficos', 'children'),
+    Output('graficos-diarios', 'children'),
+    Output('graficos-mensais', 'children'),
     Output('ranking-vendedores', 'children'),
     Output('error-upload', 'children'),
     Input('upload-data', 'contents'),
@@ -49,7 +46,7 @@ app.layout = html.Div([
 )
 def processar_arquivo(contents, filename):
     if not contents:
-        return dash.no_update, dash.no_update, dash.no_update, dash.no_update, ""
+        return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, ""
 
     try:
         content_type, content_string = contents.split(',')
@@ -58,15 +55,15 @@ def processar_arquivo(contents, filename):
 
         df.columns = [unidecode(col).strip().lower() for col in df.columns]
 
-        colunas_esperadas = ['imei', 'criado em', 'valor do voucher', 'situacao do voucher', 'nome do vendedor', 'nome da filial', 'nome da rede']
+        colunas_esperadas = ['imei', 'criado em', 'valor do voucher', 'valor do dispositivo', 'situacao do voucher', 'nome do vendedor', 'nome da filial', 'nome da rede']
         for col in colunas_esperadas:
             if col not in df.columns:
-                return dash.no_update, dash.no_update, dash.no_update, dash.no_update, f"❌ Coluna obrigatória não encontrada: {col}"
+                return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, f"❌ Coluna obrigatória não encontrada: {col}"
 
         df['criado em'] = pd.to_datetime(df['criado em'], errors='coerce')
         df['mes'] = df['criado em'].dt.strftime('%B')
+        df['mes-num'] = df['criado em'].dt.month
 
-        # Guardar dataset para callbacks
         app.df_original = df
 
         filtros_layout = dbc.Row([
@@ -75,16 +72,16 @@ def processar_arquivo(contents, filename):
             dbc.Col(dcc.Dropdown(id='filtro-situacao', options=[{'label': s, 'value': s} for s in sorted(df['situacao do voucher'].dropna().unique())], multi=True, placeholder="Situação do voucher"), md=4),
         ], style={'marginTop': '20px'})
 
-        return filtros_layout, gerar_kpis(df), gerar_graficos(df), gerar_tabela(df), ""
+        df_filtrado = df  # full initial
+        return filtros_layout, gerar_kpis(df_filtrado), gerar_graficos(df_filtrado), gerar_graficos_mensal(df_filtrado), gerar_tabela(df_filtrado), ""
 
     except Exception as e:
-        return dash.no_update, dash.no_update, dash.no_update, dash.no_update, f"Erro ao processar arquivo: {str(e)}"
+        return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, f"Erro ao processar arquivo: {str(e)}"
 
-
-# 🧠 Callback para filtros
 @app.callback(
     Output('kpi-cards', 'children', allow_duplicate=True),
-    Output('graficos', 'children', allow_duplicate=True),
+    Output('graficos-diarios', 'children', allow_duplicate=True),
+    Output('graficos-mensais', 'children', allow_duplicate=True),
     Output('ranking-vendedores', 'children', allow_duplicate=True),
     Input('filtro-mes', 'value'),
     Input('filtro-rede', 'value'),
@@ -93,7 +90,6 @@ def processar_arquivo(contents, filename):
 )
 def atualizar_dashboard(meses, redes, situacoes):
     df = app.df_original.copy()
-
     if meses:
         df = df[df['mes'].isin(meses)]
     if redes:
@@ -101,9 +97,8 @@ def atualizar_dashboard(meses, redes, situacoes):
     if situacoes:
         df = df[df['situacao do voucher'].isin(situacoes)]
 
-    return gerar_kpis(df), gerar_graficos(df), gerar_tabela(df)
+    return gerar_kpis(df), gerar_graficos(df), gerar_graficos_mensal(df), gerar_tabela(df)
 
-# 🔢 KPIs
 def gerar_kpis(df):
     total_gerados = len(df)
     dispositivos = df[df['situacao do voucher'].str.lower() == 'utilizado'].shape[0]
@@ -112,117 +107,72 @@ def gerar_kpis(df):
     usados = df[df['situacao do voucher'].str.lower() == 'utilizado']
     conversao = len(usados) / total_gerados * 100 if total_gerados > 0 else 0
 
-    card_style = {
-        'border': '2px solid #00FF88',
-        'borderRadius': '10px',
-        'boxShadow': '0 0 10px #00FF88',
-        'textAlign': 'center',
-        'padding': '15px',
-        'backgroundColor': '#111',
-        'color': 'white',
-        'height': '100%',
-    }
+    estilo_card = {'border': '2px solid limegreen', 'boxShadow': '0 0 10px lime', 'textAlign': 'center'}
 
     return dbc.Row([
-        dbc.Col(dbc.Card([html.H5("📊 Vouchers Gerados"), html.H3(f"{total_gerados}")], style=card_style), md=2),
-        dbc.Col(dbc.Card([html.H5("📦 Dispositivos Captados"), html.H3(f"{dispositivos}")], style=card_style), md=2),
-        dbc.Col(dbc.Card([html.H5("💰 Captação Total"), html.H3(f"R$ {captacao:,.2f}")], style=card_style), md=2),
-        dbc.Col(dbc.Card([html.H5("🎯 Ticket Médio"), html.H3(f"R$ {ticket:,.2f}")], style=card_style), md=2),
-        dbc.Col(dbc.Card([html.H5("📈 Conversão"), html.H3(f"{conversao:.2f}%")], style=card_style), md=2),
-    ], justify='between', className='mb-4')
-
-
-# 📊 Gráficos
-def gerar_graficos(df):
-    df['criado em'] = pd.to_datetime(df['criado em'], errors='coerce')
-    usados = df[df['situacao do voucher'].str.lower() == 'utilizado'].copy()
-
-    df['dia'] = df['criado em'].dt.day
-    df['mes_ano'] = df['criado em'].dt.to_period('M').astype(str)
-    usados['dia'] = usados['criado em'].dt.day
-    usados['mes_ano'] = usados['criado em'].dt.to_period('M').astype(str)
-
-    line_color = '#00FF88'
-    avg_color = '#FFD700'
-    flat_color = '#4444FF'
-    background_color = '#000000'
-
-    # ──────────────── 📆 Vouchers Gerados - MENSAL
-    gerados_mensal = df.groupby('mes_ano').size().reset_index(name='Qtd')
-    fig_gerados_mensal = px.line(gerados_mensal, x='mes_ano', y='Qtd', title="📅 Vouchers Gerados por Mês")
-    fig_gerados_mensal.update_traces(mode='lines+markers+text', text=gerados_mensal['Qtd'], textposition='top center', line=dict(color=line_color), marker=dict(color=line_color))
-
-    # ──────────────── 📆 Vouchers Utilizados - MENSAL
-    utilizados_mensal = usados.groupby('mes_ano').size().reset_index(name='Qtd')
-    fig_utilizados_mensal = px.line(utilizados_mensal, x='mes_ano', y='Qtd', title="📅 Vouchers Utilizados por Mês")
-    fig_utilizados_mensal.update_traces(mode='lines+markers+text', text=utilizados_mensal['Qtd'], textposition='top center', line=dict(color=line_color), marker=dict(color=line_color))
-
-    # ──────────────── 🎫 Ticket Médio - MENSAL
-    ticket_mensal = usados.groupby('mes_ano')['valor do voucher'].mean().reset_index(name='Média')
-    fig_ticket_mensal = px.line(ticket_mensal, x='mes_ano', y='Média', title="🎫 Ticket Médio Mensal")
-    fig_ticket_mensal.update_traces(mode='lines+markers+text', text=ticket_mensal['Média'].round(0), textposition='top center', line=dict(color=line_color), marker=dict(color=line_color))
-
-    # ──────────────── 📆 Vouchers Gerados - DIÁRIO
-    gerados_df = df.groupby('dia').size().reset_index(name='Qtd')
-    gerados_df['Média Móvel'] = gerados_df['Qtd'].rolling(window=3, min_periods=1).mean()
-    media_simples_gerados = gerados_df['Qtd'].mean()
-
-    fig_gerados = px.line(gerados_df, x='dia', y='Qtd', title="📅 Vouchers Gerados por Dia")
-    fig_gerados.add_scatter(x=gerados_df['dia'], y=gerados_df['Média Móvel'], mode='lines', name='Média Móvel', line=dict(color=avg_color, dash='dash'), showlegend=True)
-    fig_gerados.add_hline(y=media_simples_gerados, line_dash="dot", line_color=flat_color, annotation_text="Média", annotation_position="top right")
-    fig_gerados.update_traces(selector=dict(name='Qtd'), mode='lines+markers+text', text=gerados_df['Qtd'], textposition='top center', line=dict(color=line_color), marker=dict(color=line_color))
-
-    # ──────────────── 📆 Vouchers Utilizados - DIÁRIO
-    utilizados_df = usados.groupby('dia').size().reset_index(name='Qtd')
-    utilizados_df['Média Móvel'] = utilizados_df['Qtd'].rolling(window=3, min_periods=1).mean()
-    media_simples_utilizados = utilizados_df['Qtd'].mean()
-
-    fig_utilizados = px.line(utilizados_df, x='dia', y='Qtd', title="📅 Vouchers Utilizados por Dia")
-    fig_utilizados.add_scatter(x=utilizados_df['dia'], y=utilizados_df['Média Móvel'], mode='lines', name='Média Móvel', line=dict(color=avg_color, dash='dash'), showlegend=True)
-    fig_utilizados.add_hline(y=media_simples_utilizados, line_dash="dot", line_color=flat_color, annotation_text="Média", annotation_position="top right")
-    fig_utilizados.update_traces(selector=dict(name='Qtd'), mode='lines+markers+text', text=utilizados_df['Qtd'], textposition='top center', line=dict(color=line_color), marker=dict(color=line_color))
-
-    # ──────────────── 🎫 Ticket Médio - DIÁRIO
-    ticket_df = usados.groupby('dia')['valor do voucher'].mean().reset_index(name='Média')
-    ticket_df['Média Móvel'] = ticket_df['Média'].rolling(window=3, min_periods=1).mean()
-    media_simples_ticket = ticket_df['Média'].mean()
-
-    fig_ticket = px.line(ticket_df, x='dia', y='Média', title="🎫 Ticket Médio Diário")
-    fig_ticket.add_scatter(x=ticket_df['dia'], y=ticket_df['Média Móvel'], mode='lines', name='Média Móvel', line=dict(color=avg_color, dash='dash'), showlegend=True)
-    fig_ticket.add_hline(y=media_simples_ticket, line_dash="dot", line_color=flat_color, annotation_text="Média", annotation_position="top right")
-    fig_ticket.update_traces(selector=dict(name='Média'), mode='lines+markers+text', text=ticket_df['Média'].round(0), textposition='top center', line=dict(color=line_color), marker=dict(color=line_color))
-
-    for fig in [fig_gerados, fig_utilizados, fig_ticket, fig_gerados_mensal, fig_utilizados_mensal, fig_ticket_mensal]:
-        fig.update_layout(
-            paper_bgcolor=background_color,
-            plot_bgcolor=background_color,
-            font=dict(color='white'),
-            title_font=dict(size=16),
-            margin=dict(l=30, r=30, t=40, b=30),
-            xaxis=dict(showgrid=False, tickmode='linear', dtick=1, showline=False, zeroline=False),
-            yaxis=dict(showgrid=False, showline=False, zeroline=False),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5)
-        )
-
-    return html.Div([
-        dbc.Row([
-            dbc.Col(dcc.Graph(figure=fig_gerados_mensal), md=4),
-            dbc.Col(dcc.Graph(figure=fig_utilizados_mensal), md=4),
-            dbc.Col(dcc.Graph(figure=fig_ticket_mensal), md=4),
-        ]),
-        dbc.Row([
-            dbc.Col(dcc.Graph(figure=fig_gerados), md=4),
-            dbc.Col(dcc.Graph(figure=fig_utilizados), md=4),
-            dbc.Col(dcc.Graph(figure=fig_ticket), md=4),
-        ])
+        dbc.Col(dbc.Card([html.H5("📊 Vouchers Gerados"), html.H3(f"{total_gerados}")], body=True, color="dark", inverse=True, style=estilo_card), md=2),
+        dbc.Col(dbc.Card([html.H5("📦 Dispositivos Captados"), html.H3(f"{dispositivos}")], body=True, color="dark", inverse=True, style=estilo_card), md=2),
+        dbc.Col(dbc.Card([html.H5("💰 Captação Total"), html.H3(f"R$ {captacao:,.2f}")], body=True, color="dark", inverse=True, style=estilo_card), md=2),
+        dbc.Col(dbc.Card([html.H5("🎯 Ticket Médio"), html.H3(f"R$ {ticket:,.2f}")], body=True, color="dark", inverse=True, style=estilo_card), md=2),
+        dbc.Col(dbc.Card([html.H5("📈 Conversão"), html.H3(f"{conversao:.2f}%")], body=True, color="dark", inverse=True, style=estilo_card), md=2),
     ])
 
+def criar_figura(df, titulo, y, media_col=False):
+    if df.empty: return go.Figure()
 
+    diario = df.groupby(df['criado em'].dt.day)[y].sum().reset_index()
+    media = diario[y].mean()
+    movel = diario[y].rolling(3).mean()
 
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=diario['criado em'], y=diario[y], mode='lines+markers+text',
+                             text=diario[y], textposition='top center',
+                             line=dict(color='lime'), name=titulo))
+    fig.add_trace(go.Scatter(x=diario['criado em'], y=movel,
+                             mode='lines', line=dict(color='lime', dash='dash'),
+                             name='Média Móvel', showlegend=True))
+    fig.add_trace(go.Scatter(x=diario['criado em'], y=[media]*len(diario),
+                             mode='lines', line=dict(color='blue', dash='dot'),
+                             name='Média'))
 
+    fig.update_layout(
+        title=titulo, paper_bgcolor='black', plot_bgcolor='black',
+        font=dict(color='white'), xaxis=dict(title='dia', tickmode='linear'),
+        yaxis=dict(title='Qtd' if y != 'valor do voucher' else 'Média'),
+        margin=dict(l=40, r=10, t=50, b=40)
+    )
+    return fig
 
+def gerar_graficos(df):
+    usados = df[df['situacao do voucher'].str.lower() == 'utilizado']
+    fig_gerados = criar_figura(df.assign(valor=1), "📅 Vouchers Gerados por Dia", 'valor')
+    fig_utilizados = criar_figura(usados.assign(valor=1), "📅 Vouchers Utilizados por Dia", 'valor')
+    fig_ticket = criar_figura(usados, "🎫 Ticket Médio Diário", 'valor do voucher')
 
-# 🏆 Ranking
+    return dbc.Row([
+        dbc.Col(dcc.Graph(figure=fig_gerados), md=4),
+        dbc.Col(dcc.Graph(figure=fig_utilizados), md=4),
+        dbc.Col(dcc.Graph(figure=fig_ticket), md=4),
+    ])
+
+def gerar_graficos_mensal(df):
+    if df.empty: return html.Div()
+
+    usados = df[df['situacao do voucher'].str.lower() == 'utilizado']
+
+    df['mes'] = pd.to_datetime(df['criado em']).dt.strftime('%b')
+    usados['mes'] = pd.to_datetime(usados['criado em']).dt.strftime('%b')
+
+    fig1 = px.line(df.groupby('mes').size().reset_index(name='Qtd'), x='mes', y='Qtd', title="📆 Vouchers Gerados por Mês")
+    fig2 = px.line(usados.groupby('mes').size().reset_index(name='Qtd'), x='mes', y='Qtd', title="📆 Vouchers Utilizados por Mês")
+    fig3 = px.line(usados.groupby('mes')['valor do voucher'].mean().reset_index(name='Média'), x='mes', y='Média', title="🎟️ Ticket Médio por Mês")
+
+    return dbc.Row([
+        dbc.Col(dcc.Graph(figure=fig1), md=4),
+        dbc.Col(dcc.Graph(figure=fig2), md=4),
+        dbc.Col(dcc.Graph(figure=fig3), md=4),
+    ])
+
 def gerar_tabela(df):
     usados = df[df['situacao do voucher'].str.lower() == 'utilizado']
     ranking = usados.groupby(['nome do vendedor', 'nome da filial', 'nome da rede']).size().reset_index(name='Qtd')
@@ -239,6 +189,5 @@ def gerar_tabela(df):
         )
     ])
 
-# 🔥 Run
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=int(os.environ.get("PORT", 8080)))
