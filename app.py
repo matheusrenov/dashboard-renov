@@ -64,7 +64,6 @@ def processar_arquivo(contents, filename):
         df['criado em'] = pd.to_datetime(df['criado em'], errors='coerce')
         df['mes_curto'] = df['criado em'].dt.strftime('%b')
         df['mes_num'] = df['criado em'].dt.month
-        df['mes_curto'] = pd.Categorical(df['mes_curto'], categories=["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], ordered=True)
         df['mes'] = df['criado em'].dt.strftime('%b')
         df['dia'] = df['criado em'].dt.day.astype(str)
         df['mes_ordem'] = df['criado em'].dt.month
@@ -160,18 +159,21 @@ def gerar_graficos(df):
 
 def gerar_graficos_mensais(df):
     df = df.copy()
+    df['mes_curto'] = df['criado em'].dt.strftime('%b')
     usados = df[df['situacao do voucher'].str.lower() == 'utilizado']
 
-    # Detecta apenas os meses que possuem dados
-    meses_presentes = sorted(df['mes_curto'].dropna().unique(), key=lambda x: datetime.strptime(x, "%b").month)
+    # Detecta meses únicos presentes e ordena
+    meses_presentes = sorted(df['mes_curto'].unique(), key=lambda x: datetime.strptime(x, "%b").month)
 
     def fig_bar(dados, y, title):
         fig = px.bar(dados, x='mes_curto', y=y, text=y, title=title,
                      category_orders={'mes_curto': meses_presentes})
         fig.update_traces(texttemplate='%{text:.0f}', textposition='outside')
-        fig.update_layout(plot_bgcolor='white', paper_bgcolor='white', showlegend=False,
-                          xaxis=dict(showgrid=False), yaxis=dict(showgrid=False),
-                          margin=dict(l=20, r=20, t=50, b=30))
+        fig.update_layout(
+            plot_bgcolor='white', paper_bgcolor='white', showlegend=False,
+            xaxis=dict(showgrid=False), yaxis=dict(showgrid=False),
+            margin=dict(l=20, r=20, t=50, b=30)
+        )
         return fig
 
     fig1 = fig_bar(df.groupby('mes_curto').size().reset_index(name='Qtd'), 'Qtd', "📅 Vouchers Gerados por Mês")
@@ -183,6 +185,7 @@ def gerar_graficos_mensais(df):
         dbc.Col(dcc.Graph(figure=fig2), md=4),
         dbc.Col(dcc.Graph(figure=fig3), md=4),
     ])
+
 
 
 
