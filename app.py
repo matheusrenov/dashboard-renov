@@ -107,7 +107,7 @@ def atualizar_dashboard(meses, redes, situacoes):
 def gerar_kpis(df):
     total_gerados = len(df)
     dispositivos = df[df['situacao do voucher'].str.lower() == 'utilizado'].shape[0]
-    captacao = df['valor do voucher'].sum()
+    captacao = df[df['situacao do voucher'].str.lower() == 'utilizado']['valor do dispositivo'].sum()
     ticket = captacao / dispositivos if dispositivos > 0 else 0
     usados = df[df['situacao do voucher'].str.lower() == 'utilizado']
     conversao = len(usados) / total_gerados * 100 if total_gerados > 0 else 0
