@@ -137,15 +137,43 @@ def gerar_graficos(df):
     df['criado em'] = pd.to_datetime(df['criado em'], errors='coerce')
     usados = df[df['situacao do voucher'].str.lower() == 'utilizado']
 
-    fig_gerados = px.line(df.groupby(df['criado em'].dt.date).size().reset_index(name='Qtd'), x='criado em', y='Qtd', title="📅 Vouchers Gerados por Dia")
-    fig_utilizados = px.line(usados.groupby(usados['criado em'].dt.date).size().reset_index(name='Qtd'), x='criado em', y='Qtd', title="📅 Vouchers Utilizados por Dia")
-    fig_ticket = px.line(usados.groupby(usados['criado em'].dt.date)['valor do voucher'].mean().reset_index(name='Média'), x='criado em', y='Média', title="🎫 Ticket Médio Diário")
+    # 🎨 Customização visual
+    line_color = '#00FF88'
+    background_color = '#000000'
+    grid_color = '#444'
+
+    fig_gerados = px.line(
+        df.groupby(df['criado em'].dt.date).size().reset_index(name='Qtd'),
+        x='criado em', y='Qtd', title="📅 Vouchers Gerados por Dia"
+    )
+    fig_utilizados = px.line(
+        usados.groupby(usados['criado em'].dt.date).size().reset_index(name='Qtd'),
+        x='criado em', y='Qtd', title="📅 Vouchers Utilizados por Dia"
+    )
+    fig_ticket = px.line(
+        usados.groupby(usados['criado em'].dt.date)['valor do voucher'].mean().reset_index(name='Média'),
+        x='criado em', y='Média', title="🎫 Ticket Médio Diário"
+    )
+
+    # ⚙️ Layout personalizado
+    for fig in [fig_gerados, fig_utilizados, fig_ticket]:
+        fig.update_traces(line=dict(color=line_color), marker=dict(color=line_color))
+        fig.update_layout(
+            paper_bgcolor=background_color,
+            plot_bgcolor=background_color,
+            font=dict(color='white'),
+            title_font=dict(size=16),
+            margin=dict(l=30, r=30, t=40, b=30),
+            xaxis=dict(gridcolor=grid_color, zeroline=False),
+            yaxis=dict(gridcolor=grid_color, zeroline=False),
+        )
 
     return dbc.Row([
         dbc.Col(dcc.Graph(figure=fig_gerados), md=4),
         dbc.Col(dcc.Graph(figure=fig_utilizados), md=4),
         dbc.Col(dcc.Graph(figure=fig_ticket), md=4),
     ])
+
 
 # 🏆 Ranking
 def gerar_tabela(df):
