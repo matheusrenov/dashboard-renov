@@ -30,7 +30,7 @@ app.layout = html.Div([
     html.Div(id='kpi-cards', style={'marginTop': '20px'}),
     html.Div(id='graficos-mensais', style={'marginTop': '20px'}),
     html.Div(id='graficos', style={'marginTop': '20px'}),
-    html.Div(id='graficos-rede-mes', style={'marginTop': '20px'}),
+    html.Div(id='graficos-rede', style={'marginTop': '40px'}),
     html.Div(id='ranking-vendedores', style={'marginTop': '20px'})
 ])
 
@@ -39,7 +39,7 @@ app.layout = html.Div([
     Output('kpi-cards', 'children'),
     Output('graficos-mensais', 'children'),
     Output('graficos', 'children'),
-    Output('graficos-rede-mes', 'children'),
+    Output('graficos-rede', 'children'),
     Output('ranking-vendedores', 'children'),
     Output('error-upload', 'children'),
     Input('upload-data', 'contents'),
@@ -56,14 +56,14 @@ def processar_arquivo(contents, filename):
         df = pd.read_excel(io.BytesIO(decoded))
 
         df.columns = [unidecode(col).strip().lower() for col in df.columns]
-
-        colunas_esperadas = ['imei', 'criado em', 'valor do voucher', 'valor do dispositivo', 'situacao do voucher', 'nome do vendedor', 'nome da filial', 'nome da rede']
-        for col in colunas_esperadas:
+        obrigatorias = ['imei', 'criado em', 'valor do voucher', 'valor do dispositivo', 'situacao do voucher', 'nome do vendedor', 'nome da filial', 'nome da rede']
+        for col in obrigatorias:
             if col not in df.columns:
                 return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, f"❌ Coluna obrigatória não encontrada: {col}"
 
         df['criado em'] = pd.to_datetime(df['criado em'], errors='coerce')
         df['mes_curto'] = df['criado em'].dt.strftime('%b')
+        df['mes_num'] = df['criado em'].dt.month
         df['mes_curto'] = pd.Categorical(df['mes_curto'], categories=["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], ordered=True)
         df['mes'] = df['criado em'].dt.strftime('%b')
         df['dia'] = df['criado em'].dt.day.astype(str)
@@ -77,7 +77,7 @@ def processar_arquivo(contents, filename):
             dbc.Col(dcc.Dropdown(id='filtro-situacao', options=[{'label': s, 'value': s} for s in sorted(df['situacao do voucher'].dropna().unique())], multi=True, placeholder="Situação do voucher"), md=4),
         ], style={'marginTop': '20px'})
 
-        return filtros_layout, gerar_kpis(df), gerar_graficos_mensais(df), gerar_graficos(df), gerar_grafico_rede_mes(df), gerar_tabela(df), ""
+        return filtros_layout, gerar_kpis(df), gerar_graficos_mensais(df), gerar_graficos(df), gerar_graficos_rede(df), gerar_tabela(df), ""
 
     except Exception as e:
         return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, f"Erro ao processar: {str(e)}"
@@ -86,7 +86,7 @@ def processar_arquivo(contents, filename):
     Output('kpi-cards', 'children', allow_duplicate=True),
     Output('graficos-mensais', 'children', allow_duplicate=True),
     Output('graficos', 'children', allow_duplicate=True),
-    Output('graficos-rede-mes', 'children', allow_duplicate=True),
+    Output('graficos-rede', 'children', allow_duplicate=True),
     Output('ranking-vendedores', 'children', allow_duplicate=True),
     Input('filtro-mes', 'value'),
     Input('filtro-rede', 'value'),
@@ -102,7 +102,7 @@ def atualizar_dashboard(meses, redes, situacoes):
     if situacoes:
         df = df[df['situacao do voucher'].isin(situacoes)]
 
-    return gerar_kpis(df), gerar_graficos_mensais(df), gerar_graficos(df), gerar_grafico_rede_mes(df), gerar_tabela(df)
+    return gerar_kpis(df), gerar_graficos_mensais(df), gerar_graficos(df), gerar_graficos_rede(df), gerar_tabela(df)
 
 def gerar_kpis(df):
     total_gerados = len(df)
@@ -119,57 +119,6 @@ def gerar_kpis(df):
         dbc.Col(dbc.Card([html.H5("📍 Ticket Médio"), html.H3(f"R$ {ticket:,.2f}")], body=True, color="dark", inverse=True, style={"border": "2px solid lime"}), md=2),
         dbc.Col(dbc.Card([html.H5("📈 Conversão"), html.H3(f"{conversao:.2f}%")], body=True, color="dark", inverse=True, style={"border": "2px solid lime"}), md=2),
     ], justify='between', style={'marginBottom': 30})
-
-def gerar_graficos_mensais(df):
-    df['mes_curto'] = df['criado em'].dt.strftime('%b')
-    df['mes_num'] = df['criado em'].dt.month
-    df = df.sort_values('mes_num')
-    usados = df[df['situacao do voucher'].str.lower() == 'utilizado']
-
-    def make_bar(data, y, title, y_title):
-        fig = px.bar(data, x='mes_curto', y=y, text=y, title=title)
-        fig.update_traces(texttemplate='%{text:.0f}', textposition='outside')
-        fig.update_layout(
-            plot_bgcolor='white', paper_bgcolor='white', showlegend=False,
-            xaxis=dict(showgrid=False), yaxis=dict(showgrid=False),
-            margin=dict(l=20, r=20, t=50, b=30), yaxis_title=y_title
-        )
-        return fig
-
-    fig1 = make_bar(df.groupby(['mes_curto']).size().reset_index(name='Qtd'), 'Qtd', "📅 Vouchers Gerados por Mês", 'Qtd')
-    fig2 = make_bar(usados.groupby(['mes_curto']).size().reset_index(name='Qtd'), 'Qtd', "📅 Vouchers Utilizados por Mês", 'Qtd')
-    fig3 = make_bar(usados.groupby(['mes_curto'])['valor do voucher'].mean().reset_index(name='Média'), 'Média', "💳 Ticket Médio por Mês", 'Média')
-
-    return dbc.Row([dbc.Col(dcc.Graph(figure=fig1), md=4), dbc.Col(dcc.Graph(figure=fig2), md=4), dbc.Col(dcc.Graph(figure=fig3), md=4)])
-
-def gerar_grafico_rede_mes(df):
-    usados = df[df['situacao do voucher'].str.lower() == 'utilizado']
-    df['mes_curto'] = df['criado em'].dt.strftime('%b')
-
-    fig_rede_gerados = px.bar(
-        df.groupby(['nome da rede', 'mes_curto']).size().reset_index(name='Qtd'),
-        x='nome da rede', y='Qtd', color='mes_curto', barmode='group',
-        title="🏢 Vouchers por Rede e Mês", text='Qtd'
-    )
-
-    fig_rede_utilizados = px.bar(
-        usados.groupby(['nome da rede', 'mes_curto']).size().reset_index(name='Qtd'),
-        x='nome da rede', y='Qtd', color='mes_curto', barmode='group',
-        title="📦 Vouchers Utilizados por Rede e Mês", text='Qtd'
-    )
-
-    for fig in [fig_rede_gerados, fig_rede_utilizados]:
-        fig.update_traces(textposition='outside')
-        fig.update_layout(
-            xaxis_tickangle=-45, showlegend=True, plot_bgcolor='white',
-            yaxis=dict(showgrid=False), xaxis=dict(showgrid=False),
-            margin=dict(l=30, r=30, t=50, b=80)
-        )
-
-    return html.Div([
-        html.Br(), dcc.Graph(figure=fig_rede_gerados),
-        html.Br(), dcc.Graph(figure=fig_rede_utilizados)
-    ])
 
 def gerar_graficos(df):
     usados = df[df['situacao do voucher'].str.lower() == 'utilizado']
@@ -193,7 +142,8 @@ def gerar_graficos(df):
         fig.update_layout(template='plotly_dark', title=title,
                           plot_bgcolor='black', paper_bgcolor='black',
                           xaxis=dict(title='dia', tickmode='linear'),
-                          yaxis_title=y_label)
+                          yaxis_title=y_label,
+                          margin=dict(t=30, b=40))
         fig.update_xaxes(showgrid=False)
         fig.update_yaxes(showgrid=False)
         return fig
@@ -206,6 +156,58 @@ def gerar_graficos(df):
         dbc.Col(dcc.Graph(figure=fig_gerados), md=4),
         dbc.Col(dcc.Graph(figure=fig_utilizados), md=4),
         dbc.Col(dcc.Graph(figure=fig_ticket), md=4),
+    ])
+
+def gerar_graficos_mensais(df):
+    df = df.copy()
+    usados = df[df['situacao do voucher'].str.lower() == 'utilizado']
+
+    def fig_bar(dados, y, title):
+        fig = px.bar(dados, x='mes_curto', y=y, text=y, title=title)
+        fig.update_traces(texttemplate='%{text:.0f}', textposition='outside')
+        fig.update_layout(plot_bgcolor='white', paper_bgcolor='white', showlegend=False,
+                          xaxis=dict(showgrid=False), yaxis=dict(showgrid=False),
+                          margin=dict(l=20, r=20, t=50, b=30))
+        return fig
+
+    fig1 = fig_bar(df.groupby(['mes_curto']).size().reset_index(name='Qtd'), 'Qtd', "📅 Vouchers Gerados por Mês")
+    fig2 = fig_bar(usados.groupby(['mes_curto']).size().reset_index(name='Qtd'), 'Qtd', "📅 Vouchers Utilizados por Mês")
+    fig3 = fig_bar(usados.groupby(['mes_curto'])['valor do voucher'].mean().reset_index(name='Média'), 'Média', "💳 Ticket Médio por Mês")
+
+    return dbc.Row([
+        dbc.Col(dcc.Graph(figure=fig1), md=4),
+        dbc.Col(dcc.Graph(figure=fig2), md=4),
+        dbc.Col(dcc.Graph(figure=fig3), md=4),
+    ])
+
+def gerar_graficos_rede(df):
+    usados = df[df['situacao do voucher'].str.lower() == 'utilizado']
+    ordem_meses = sorted(df['mes_curto'].unique(), key=lambda x: datetime.strptime(x, "%b").month)
+
+    base_kwargs = dict(x='nome da rede', y='Qtd', color='mes_curto', barmode='group', text='Qtd')
+
+    # Gerados
+    df_gerados = df.groupby(['nome da rede', 'mes_curto']).size().reset_index(name='Qtd')
+    df_gerados['mes_curto'] = pd.Categorical(df_gerados['mes_curto'], categories=ordem_meses, ordered=True)
+    df_gerados = df_gerados.sort_values(['Qtd'], ascending=False)
+
+    fig_gerados = px.bar(df_gerados, **base_kwargs, title="📊 Vouchers por Rede e Mês")
+    fig_gerados.update_traces(texttemplate='%{text}', textposition='outside')
+    fig_gerados.update_layout(margin=dict(t=30, b=100), xaxis_tickangle=-45)
+
+    # Utilizados
+    df_usados = usados.groupby(['nome da rede', 'mes_curto']).size().reset_index(name='Qtd')
+    df_usados['mes_curto'] = pd.Categorical(df_usados['mes_curto'], categories=ordem_meses, ordered=True)
+    df_usados = df_usados.sort_values(['Qtd'], ascending=False)
+
+    fig_usados = px.bar(df_usados, **base_kwargs, title="📦 Vouchers Utilizados por Rede e Mês")
+    fig_usados.update_traces(texttemplate='%{text}', textposition='outside')
+    fig_usados.update_layout(margin=dict(t=30, b=120), xaxis_tickangle=-45)
+
+    return html.Div([
+        dcc.Graph(figure=fig_gerados),
+        html.Div(style={'height': '20px'}),
+        dcc.Graph(figure=fig_usados)
     ])
 
 def gerar_tabela(df):
