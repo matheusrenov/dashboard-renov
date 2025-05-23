@@ -3,20 +3,19 @@ import base64
 import io
 import pandas as pd
 import dash
-from dash import Dash, html, dcc, Input, Output, State, callback_context, dash_table, no_update
+from dash import dcc, html, Input, Output, State, callback_context, dash_table
 import dash_bootstrap_components as dbc
 import plotly.express as px
 from unidecode import unidecode
 from datetime import datetime
 
-# Inicializa o app
-app = Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
+# 🚀 Inicialização do app
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP], suppress_callback_exceptions=True)
 server = app.server
 
-# Layout
+# 🧠 Layout principal
 app.layout = html.Div([
     html.H2("Dashboard de Resultados", style={'textAlign': 'center'}),
-
     dcc.Upload(
         id='upload-data',
         children=html.Div(['📁 Arraste ou selecione o arquivo .xlsx']),
@@ -27,110 +26,110 @@ app.layout = html.Div([
         },
         multiple=False
     ),
-
     html.Div(id='error-upload', style={'color': 'red', 'textAlign': 'center', 'marginTop': 10}),
-    html.Div(id='filtros', style={'marginTop': '20px'}),
-    html.Div(id='kpi-cards', style={'marginTop': '20px'}),
-    html.Div(id='graficos', style={'marginTop': '20px'}),
-    html.Div(id='ranking-vendedores', style={'marginTop': '20px'}),
+    html.Div(id='filtros', style={'marginTop': 20}),
+    html.Div(id='kpi-cards', style={'marginTop': 20}),
+    html.Div(id='graficos', style={'marginTop': 20}),
+    html.Div(id='ranking-vendedores', style={'marginTop': 20})
 ])
 
-# Callback principal
+# ♻️ Filtro dinâmico
 @app.callback(
     Output('filtros', 'children'),
+    Input('upload-data', 'contents'),
+    State('upload-data', 'filename')
+)
+def atualizar_filtros(contents, filename):
+    if contents is None:
+        return ""
+
+    try:
+        content_type, content_string = contents.split(',')
+        decoded = base64.b64decode(content_string)
+        df = pd.read_excel(io.BytesIO(decoded))
+        df.columns = [unidecode(col).strip().lower() for col in df.columns]
+
+        filtros = dbc.Row([
+            dbc.Col(dcc.Dropdown(
+                id='filtro-mes',
+                options=[{'label': m, 'value': m} for m in sorted(df['criado em'].dt.strftime('%B').unique())],
+                placeholder='Mês',
+                multi=True
+            ), md=4),
+            dbc.Col(dcc.Dropdown(
+                id='filtro-rede',
+                options=[{'label': r, 'value': r} for r in sorted(df['nome da rede'].dropna().unique())],
+                placeholder='Rede',
+                multi=True
+            ), md=4),
+            dbc.Col(dcc.Dropdown(
+                id='filtro-situacao',
+                options=[{'label': s, 'value': s} for s in sorted(df['situacao do voucher'].dropna().unique())],
+                placeholder='Situação do voucher',
+                multi=True
+            ), md=4)
+        ])
+        return filtros
+    except Exception as e:
+        return f"Erro ao carregar filtros: {str(e)}"
+
+# 🎯 Dashboard completo com filtros
+@app.callback(
     Output('kpi-cards', 'children'),
     Output('graficos', 'children'),
     Output('ranking-vendedores', 'children'),
     Output('error-upload', 'children'),
     Input('upload-data', 'contents'),
     State('upload-data', 'filename'),
-    prevent_initial_call=True
+    Input('filtro-mes', 'value'),
+    Input('filtro-rede', 'value'),
+    Input('filtro-situacao', 'value')
 )
-def processar_arquivo(contents, filename):
+def atualizar_dashboard(contents, filename, meses, redes, situacoes):
     if contents is None:
-        return no_update, no_update, no_update, no_update, ""
+        return dash.no_update, dash.no_update, dash.no_update, ""
 
     try:
         content_type, content_string = contents.split(',')
         decoded = base64.b64decode(content_string)
         df = pd.read_excel(io.BytesIO(decoded))
 
-        # Normaliza colunas
-        df.columns = [unidecode(c).strip().lower() for c in df.columns]
-
-        # Colunas obrigatórias
-        obrigatorias = ['imei', 'criado em', 'valor do voucher', 'situacao do voucher', 'nome do vendedor', 'nome da filial', 'nome da rede']
-        for col in obrigatorias:
-            if col not in df.columns:
-                return no_update, no_update, no_update, no_update, f"❌ Coluna obrigatória não encontrada: {col}"
-
-        # Conversão de data
+        df.columns = [unidecode(col).strip().lower() for col in df.columns]
         df['criado em'] = pd.to_datetime(df['criado em'], errors='coerce')
-        df['mes'] = df['criado em'].dt.strftime('%B').str.capitalize()
+        df = df.dropna(subset=['criado em'])
 
-        # Salva DataFrame no dcc.Store
-        filtros = dbc.Row([
-            dbc.Col(dcc.Dropdown(options=[{'label': m, 'value': m} for m in sorted(df['mes'].dropna().unique())],
-                                 multi=True, placeholder="Mês", id='filtro-mes'), md=4),
-            dbc.Col(dcc.Dropdown(options=[{'label': r, 'value': r} for r in sorted(df['nome da rede'].dropna().unique())],
-                                 multi=True, placeholder="Rede", id='filtro-rede'), md=4),
-            dbc.Col(dcc.Dropdown(options=[{'label': s, 'value': s} for s in sorted(df['situacao do voucher'].dropna().unique())],
-                                 multi=True, placeholder="Situação do voucher", id='filtro-situacao'), md=4),
-        ])
+        # Filtros aplicados
+        if meses:
+            df = df[df['criado em'].dt.strftime('%B').isin(meses)]
+        if redes:
+            df = df[df['nome da rede'].isin(redes)]
+        if situacoes:
+            df = df[df['situacao do voucher'].isin(situacoes)]
 
-        # Armazena temporariamente o DataFrame no servidor (pouco escalável, mas funcional para uso leve)
-        app.df = df
-
-        return filtros, no_update, no_update, no_update, ""
-
-    except Exception as e:
-        return no_update, no_update, no_update, no_update, f"Erro ao processar arquivo: {str(e)}"
-
-# Callback de atualização com filtros
-@app.callback(
-    Output('kpi-cards', 'children'),
-    Output('graficos', 'children'),
-    Output('ranking-vendedores', 'children'),
-    Input('filtro-mes', 'value'),
-    Input('filtro-rede', 'value'),
-    Input('filtro-situacao', 'value'),
-)
-def atualizar_dashboard(mes, rede, situacao):
-    try:
-        df = app.df.copy()
-
-        # Aplica filtros
-        if mes:
-            df = df[df['mes'].isin(mes)]
-        if rede:
-            df = df[df['nome da rede'].isin(rede)]
-        if situacao:
-            df = df[df['situacao do voucher'].isin(situacao)]
-
-        total_gerados = len(df)
+        # KPIs
+        total = df.shape[0]
         dispositivos = df['imei'].nunique()
         captacao = df['valor do voucher'].sum()
-        ticket = captacao / dispositivos if dispositivos > 0 else 0
-
-        utilizados = df[df['situacao do voucher'].str.lower() == 'utilizado']
-        conversao = len(utilizados) / total_gerados * 100 if total_gerados > 0 else 0
+        ticket = captacao / dispositivos if dispositivos else 0
+        usados = df[df['situacao do voucher'].str.lower() == 'utilizado']
+        conversao = len(usados) / total * 100 if total else 0
 
         kpis = dbc.Row([
-            dbc.Col(dbc.Card([html.H5("📊 Vouchers Gerados"), html.H3(f"{total_gerados}")], body=True, color="dark", inverse=True), md=2),
+            dbc.Col(dbc.Card([html.H5("📊 Vouchers Gerados"), html.H3(f"{total}")], body=True, color="dark", inverse=True), md=2),
             dbc.Col(dbc.Card([html.H5("📦 Dispositivos Captados"), html.H3(f"{dispositivos}")], body=True, color="dark", inverse=True), md=2),
             dbc.Col(dbc.Card([html.H5("💰 Captação Total"), html.H3(f"R$ {captacao:,.2f}")], body=True, color="dark", inverse=True), md=2),
             dbc.Col(dbc.Card([html.H5("🎫 Ticket Médio"), html.H3(f"R$ {ticket:,.2f}")], body=True, color="dark", inverse=True), md=2),
-            dbc.Col(dbc.Card([html.H5("📈 Conversão"), html.H3(f"{conversao:.2f}%")], body=True, color="dark", inverse=True), md=2),
+            dbc.Col(dbc.Card([html.H5("📈 Conversão"), html.H3(f"{conversao:.2f}%")], body=True, color="dark", inverse=True), md=2)
         ])
 
-        fig_gerados = px.line(df.groupby(df['criado em'].dt.date).size().reset_index(name='Qtd'),
-                              x='criado em', y='Qtd', title="📅 Vouchers Gerados por Dia")
+        # Gráficos
+        df['data'] = df['criado em'].dt.date
+        fig_gerados = px.line(df.groupby('data').size().reset_index(name='Qtd'), x='data', y='Qtd', title="📆 Vouchers Gerados por Dia")
 
-        fig_utilizados = px.line(utilizados.groupby(utilizados['criado em'].dt.date).size().reset_index(name='Qtd'),
-                                 x='criado em', y='Qtd', title="📅 Vouchers Utilizados por Dia")
+        usados['data'] = usados['criado em'].dt.date
+        fig_utilizados = px.line(usados.groupby('data').size().reset_index(name='Qtd'), x='data', y='Qtd', title="📆 Vouchers Utilizados por Dia")
 
-        fig_ticket = px.line(utilizados.groupby(utilizados['criado em'].dt.date)['valor do voucher'].mean().reset_index(name='Média'),
-                             x='criado em', y='Média', title="💸 Ticket Médio Diário")
+        fig_ticket = px.line(usados.groupby('data')['valor do voucher'].mean().reset_index(name='Média'), x='data', y='Média', title="🎫 Ticket Médio Diário")
 
         graficos = dbc.Row([
             dbc.Col(dcc.Graph(figure=fig_gerados), md=4),
@@ -138,31 +137,28 @@ def atualizar_dashboard(mes, rede, situacao):
             dbc.Col(dcc.Graph(figure=fig_ticket), md=4),
         ])
 
-        # Ranking de vendedores (apenas vouchers utilizados)
-        ranking = utilizados.groupby(['nome do vendedor', 'nome da filial', 'nome da rede']) \
-            .size().reset_index(name='Qtd').sort_values(by='Qtd', ascending=False).head(10)
+        # Ranking
+        ranking = usados.groupby(['nome do vendedor', 'nome da filial', 'nome da rede']).size().reset_index(name='Qtd')
+        ranking = ranking.sort_values(by='Qtd', ascending=False).head(10)
 
         tabela = dash_table.DataTable(
             columns=[
-                {"name": "nome do vendedor", "id": "nome do vendedor"},
-                {"name": "nome da filial", "id": "nome da filial"},
-                {"name": "nome da rede", "id": "nome da rede"},
-                {"name": "Qtd", "id": "Qtd"}
+                {"name": col, "id": col} for col in ranking.columns
             ],
             data=ranking.to_dict('records'),
             style_table={'overflowX': 'auto'},
-            style_header={'fontWeight': 'bold', 'backgroundColor': 'black', 'color': 'white'},
+            style_header={'backgroundColor': 'black', 'color': 'white'},
             style_cell={'textAlign': 'left'},
         )
 
         return kpis, graficos, html.Div([
-            html.H5("🏆 Top 10 Vendedores por Volume de Vouchers", style={'marginTop': '20px'}),
+            html.H5("🏆 Top 10 Vendedores por Volume de Vouchers"),
             tabela
-        ])
+        ]), ""
 
     except Exception as e:
-        return no_update, no_update, no_update
+        return dash.no_update, dash.no_update, dash.no_update, f"Erro ao processar arquivo: {str(e)}"
 
-# Executa o app
+# 🚀 Execução
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
