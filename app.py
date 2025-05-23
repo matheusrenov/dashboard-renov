@@ -1,4 +1,3 @@
-# ... (importações mantidas)
 import os
 import base64
 import io
@@ -7,6 +6,7 @@ import dash
 from dash import dcc, html, Input, Output, State, ctx, dash_table
 import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
+import plotly.express as px
 from unidecode import unidecode
 from datetime import datetime
 
@@ -18,23 +18,25 @@ app.layout = html.Div([
     dcc.Upload(
         id='upload-data',
         children=html.Div(['📁 Arraste ou selecione o arquivo .xlsx']),
-        style={'width': '100%', 'height': '60px', 'lineHeight': '60px', 'borderWidth': '1px',
-               'borderStyle': 'dashed', 'borderRadius': '5px', 'textAlign': 'center'},
+        style={
+            'width': '100%', 'height': '60px', 'lineHeight': '60px',
+            'borderWidth': '1px', 'borderStyle': 'dashed',
+            'borderRadius': '5px', 'textAlign': 'center'
+        },
         multiple=False
     ),
     html.Div(id='error-upload', style={'color': 'red', 'textAlign': 'center', 'marginTop': 10}),
     html.Div(id='filtros'),
     html.Div(id='kpi-cards', style={'marginTop': '20px'}),
-    html.Div(id='graficos-mes', style={'marginTop': '20px'}),
-    html.Div(id='graficos-dia', style={'marginTop': '20px'}),
+    html.Div(id='graficos-mensais', style={'marginTop': '20px'}),
+    html.Div(id='graficos', style={'marginTop': '20px'}),
     html.Div(id='ranking-vendedores', style={'marginTop': '20px'})
 ])
-
 @app.callback(
     Output('filtros', 'children'),
     Output('kpi-cards', 'children'),
-    Output('graficos-mes', 'children'),
-    Output('graficos-dia', 'children'),
+    Output('graficos-mensais', 'children'),
+    Output('graficos', 'children'),
     Output('ranking-vendedores', 'children'),
     Output('error-upload', 'children'),
     Input('upload-data', 'contents'),
@@ -51,38 +53,33 @@ def processar_arquivo(contents, filename):
         df = pd.read_excel(io.BytesIO(decoded))
 
         df.columns = [unidecode(col).strip().lower() for col in df.columns]
-        required = ['imei', 'criado em', 'valor do voucher', 'valor do dispositivo', 'situacao do voucher',
-                    'nome do vendedor', 'nome da filial', 'nome da rede']
-        for col in required:
+
+        colunas_esperadas = ['imei', 'criado em', 'valor do voucher', 'valor do dispositivo', 'situacao do voucher', 'nome do vendedor', 'nome da filial', 'nome da rede']
+        for col in colunas_esperadas:
             if col not in df.columns:
                 return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, f"❌ Coluna obrigatória não encontrada: {col}"
 
         df['criado em'] = pd.to_datetime(df['criado em'], errors='coerce')
-        df['mes'] = df['criado em'].dt.month_name().str[:3]
-        df['dia'] = df['criado em'].dt.day
+        df['mes'] = df['criado em'].dt.strftime('%b')
+        df['dia'] = df['criado em'].dt.day.astype(str)
+        df['mes_ordem'] = df['criado em'].dt.month
+
         app.df_original = df
 
-        filtros = dbc.Row([
-            dbc.Col(dcc.Dropdown(id='filtro-mes',
-                                 options=[{'label': m, 'value': m} for m in sorted(df['mes'].dropna().unique(), key=lambda x: datetime.strptime(x, '%b').month)],
-                                 multi=True, placeholder="Mês"), md=4),
-            dbc.Col(dcc.Dropdown(id='filtro-rede',
-                                 options=[{'label': r, 'value': r} for r in sorted(df['nome da rede'].dropna().unique())],
-                                 multi=True, placeholder="Rede"), md=4),
-            dbc.Col(dcc.Dropdown(id='filtro-situacao',
-                                 options=[{'label': s, 'value': s} for s in sorted(df['situacao do voucher'].dropna().unique())],
-                                 multi=True, placeholder="Situação do voucher"), md=4),
-        ])
+        filtros_layout = dbc.Row([
+            dbc.Col(dcc.Dropdown(id='filtro-mes', options=[{'label': m, 'value': m} for m in sorted(df['mes'].unique(), key=lambda x: datetime.strptime(x, "%b").month)], multi=True, placeholder="Mês"), md=4),
+            dbc.Col(dcc.Dropdown(id='filtro-rede', options=[{'label': r, 'value': r} for r in sorted(df['nome da rede'].dropna().unique())], multi=True, placeholder="Rede"), md=4),
+            dbc.Col(dcc.Dropdown(id='filtro-situacao', options=[{'label': s, 'value': s} for s in sorted(df['situacao do voucher'].dropna().unique())], multi=True, placeholder="Situação do voucher"), md=4),
+        ], style={'marginTop': '20px'})
 
-        return filtros, gerar_kpis(df), gerar_graficos_mes(df), gerar_graficos_dia(df), gerar_tabela(df), ""
+        return filtros_layout, gerar_kpis(df), gerar_graficos_mensais(df), gerar_graficos(df), gerar_tabela(df), ""
 
     except Exception as e:
         return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, f"Erro ao processar: {str(e)}"
-
 @app.callback(
     Output('kpi-cards', 'children', allow_duplicate=True),
-    Output('graficos-mes', 'children', allow_duplicate=True),
-    Output('graficos-dia', 'children', allow_duplicate=True),
+    Output('graficos-mensais', 'children', allow_duplicate=True),
+    Output('graficos', 'children', allow_duplicate=True),
     Output('ranking-vendedores', 'children', allow_duplicate=True),
     Input('filtro-mes', 'value'),
     Input('filtro-rede', 'value'),
@@ -91,89 +88,126 @@ def processar_arquivo(contents, filename):
 )
 def atualizar_dashboard(meses, redes, situacoes):
     df = app.df_original.copy()
+
     if meses:
         df = df[df['mes'].isin(meses)]
     if redes:
         df = df[df['nome da rede'].isin(redes)]
     if situacoes:
         df = df[df['situacao do voucher'].isin(situacoes)]
-    return gerar_kpis(df), gerar_graficos_mes(df), gerar_graficos_dia(df), gerar_tabela(df)
 
-# 🧠 Funções de Geração
+    return gerar_kpis(df), gerar_graficos_mensais(df), gerar_graficos(df), gerar_tabela(df)
+
 def gerar_kpis(df):
-    total = len(df)
-    usados = df[df['situacao do voucher'].str.lower() == 'utilizado']
-    captados = usados.shape[0]
-    captacao = usados['valor do dispositivo'].sum()
-    ticket = captacao / captados if captados else 0
-    conversao = (captados / total * 100) if total else 0
-
-    def kpi_card(titulo, valor):
-        return dbc.Col(dbc.Card([
-            html.H5(titulo),
-            html.H3(valor)
-        ], body=True, color="dark", inverse=True, style={'border': '3px solid lime'}), md=2)
+    total_gerados = len(df)
+    utilizados = df[df['situacao do voucher'].str.lower() == 'utilizado']
+    dispositivos = len(utilizados)
+    captacao = utilizados['valor do dispositivo'].sum()
+    ticket = captacao / dispositivos if dispositivos > 0 else 0
+    conversao = dispositivos / total_gerados * 100 if total_gerados > 0 else 0
 
     return dbc.Row([
-        kpi_card("📊 Vouchers Gerados", f"{total}"),
-        kpi_card("📦 Dispositivos Captados", f"{captados}"),
-        kpi_card("💰 Captação Total", f"R$ {captacao:,.2f}"),
-        kpi_card("🎯 Ticket Médio", f"R$ {ticket:,.2f}"),
-        kpi_card("📈 Conversão", f"{conversao:.2f}%"),
-    ], justify='center')
+        dbc.Col(dbc.Card([
+            html.H5("📊 Vouchers Gerados"),
+            html.H3(f"{total_gerados}")
+        ], body=True, color="dark", inverse=True, style={"border": "2px solid lime"}), md=2),
 
-def gerar_graficos_mes(df):
+        dbc.Col(dbc.Card([
+            html.H5("📦 Dispositivos Captados"),
+            html.H3(f"{dispositivos}")
+        ], body=True, color="dark", inverse=True, style={"border": "2px solid lime"}), md=2),
+
+        dbc.Col(dbc.Card([
+            html.H5("💰 Captação Total"),
+            html.H3(f"R$ {captacao:,.2f}")
+        ], body=True, color="dark", inverse=True, style={"border": "2px solid lime"}), md=2),
+
+        dbc.Col(dbc.Card([
+            html.H5("📍 Ticket Médio"),
+            html.H3(f"R$ {ticket:,.2f}")
+        ], body=True, color="dark", inverse=True, style={"border": "2px solid lime"}), md=2),
+
+        dbc.Col(dbc.Card([
+            html.H5("📈 Conversão"),
+            html.H3(f"{conversao:.2f}%")
+        ], body=True, color="dark", inverse=True, style={"border": "2px solid lime"}), md=2),
+    ], justify='between', style={'marginBottom': 30})
+def gerar_graficos_mensais(df):
     usados = df[df['situacao do voucher'].str.lower() == 'utilizado']
-    ordem_meses = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    df['criado em'] = pd.to_datetime(df['criado em'])
+    df['mes_curto'] = df['criado em'].dt.strftime('%b')
 
-    def grafico_bar(df, y, titulo, ytitle):
-        df['mes'] = pd.Categorical(df['mes'], categories=ordem_meses, ordered=True)
-        resumo = df.groupby('mes')[y].agg('mean' if y == 'valor do voucher' else 'count').reindex(ordem_meses).dropna()
-        fig = go.Figure(go.Bar(x=resumo.index, y=resumo.values, marker_color='royalblue', text=resumo.values, textposition='outside'))
-        fig.update_layout(paper_bgcolor='white', plot_bgcolor='white', title=titulo, margin=dict(t=30), height=300)
-        fig.update_yaxes(title=ytitle)
-        return dcc.Graph(figure=fig)
+    meses_ordem = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+    gerados = df.groupby('mes_curto').size().reindex(meses_ordem).dropna()
+    utilizados = usados.groupby('mes_curto').size().reindex(meses_ordem).dropna()
+    ticket_mensal = usados.groupby('mes_curto')['valor do voucher'].mean().reindex(meses_ordem).dropna()
+
+    fig1 = px.bar(gerados, x=gerados.index, y=gerados.values, title="📅 Vouchers Gerados por Mês",
+                  labels={"x": "criado em", "y": "Qtd"}, text_auto='.0f')
+    fig2 = px.bar(utilizados, x=utilizados.index, y=utilizados.values, title="📅 Vouchers Utilizados por Mês",
+                  labels={"x": "criado em", "y": "Qtd"}, text_auto='.0f')
+    fig3 = px.bar(ticket_mensal, x=ticket_mensal.index, y=ticket_mensal.values, title="🎟 Ticket Médio por Mês",
+                  labels={"x": "criado em", "y": "Média"}, text_auto='.0f')
 
     return dbc.Row([
-        dbc.Col(grafico_bar(df, 'valor do voucher', "📅 Vouchers Gerados por Mês", "Qtd"), md=4),
-        dbc.Col(grafico_bar(usados, 'valor do voucher', "📅 Vouchers Utilizados por Mês", "Qtd"), md=4),
-        dbc.Col(grafico_bar(usados, 'valor do voucher', "📈 Ticket Médio por Mês", "Média"), md=4),
+        dbc.Col(dcc.Graph(figure=fig1), md=4),
+        dbc.Col(dcc.Graph(figure=fig2), md=4),
+        dbc.Col(dcc.Graph(figure=fig3), md=4)
     ])
 
-def gerar_graficos_dia(df):
+def gerar_graficos(df):
     usados = df[df['situacao do voucher'].str.lower() == 'utilizado']
+    df['criado em'] = pd.to_datetime(df['criado em'])
+    df['dia'] = df['criado em'].dt.day
 
-    def plot_line(df, y, nome, titulo):
-        df_group = df.groupby('dia')[y].agg('count' if y != 'valor do voucher' else 'mean')
-        media = df_group.mean()
-        media_movel = df_group.rolling(3, min_periods=1).mean()
+    def make_fig(data, y_col, title, y_label):
+        series = data.groupby('dia')[y_col].mean() if y_col != 'Qtd' else data.groupby('dia').size()
+        serie_media_movel = series.rolling(window=3, min_periods=1).mean()
+        media_simples = series.mean()
+
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=df_group.index, y=df_group, name=nome, mode='lines+markers+text', text=df_group.round(2), textposition='top center', line=dict(color='lime')))
-        fig.add_trace(go.Scatter(x=media_movel.index, y=media_movel, name="Média Móvel", mode='lines', line=dict(dash='dash', color='lime')))
-        fig.add_hline(y=media, line_dash='dot', line_color='blue', annotation_text="Média", annotation_position="top left")
-        fig.update_layout(paper_bgcolor='black', plot_bgcolor='black', font_color='white', title=titulo, height=350)
-        return dcc.Graph(figure=fig)
+        fig.add_trace(go.Scatter(x=series.index, y=series.values, mode='lines+markers+text', name=title,
+                                 text=[f"{v:.0f}" for v in series.values],
+                                 textposition='top center',
+                                 line=dict(color='lime')))
+        fig.add_trace(go.Scatter(x=serie_media_movel.index, y=serie_media_movel.values, mode='lines',
+                                 name='Média Móvel', line=dict(color='lime', dash='dash')))
+        fig.add_trace(go.Scatter(x=series.index, y=[media_simples]*len(series), mode='lines',
+                                 name='Média', line=dict(color='blue', dash='dot')))
+        fig.update_layout(template='plotly_dark', title=title,
+                          plot_bgcolor='black', paper_bgcolor='black',
+                          xaxis=dict(title='dia', tickmode='linear'),
+                          yaxis_title=y_label)
+        fig.update_xaxes(showgrid=False)
+        fig.update_yaxes(showgrid=False)
+        return fig
+
+    fig_gerados = make_fig(df, 'Qtd', "📅 Vouchers Gerados por Dia", 'Qtd')
+    fig_utilizados = make_fig(usados, 'Qtd', "📅 Vouchers Utilizados por Dia", 'Qtd')
+    fig_ticket = make_fig(usados, 'valor do voucher', "🎫 Ticket Médio Diário", 'Média')
 
     return dbc.Row([
-        dbc.Col(plot_line(df, 'valor do voucher', "📅 Vouchers Gerados por Dia", "📅 Vouchers Gerados por Dia"), md=4),
-        dbc.Col(plot_line(usados, 'valor do voucher', "📅 Vouchers Utilizados por Dia", "📅 Vouchers Utilizados por Dia"), md=4),
-        dbc.Col(plot_line(usados, 'valor do voucher', "🎫 Ticket Médio Diário", "🎫 Ticket Médio Diário"), md=4),
+        dbc.Col(dcc.Graph(figure=fig_gerados), md=4),
+        dbc.Col(dcc.Graph(figure=fig_utilizados), md=4),
+        dbc.Col(dcc.Graph(figure=fig_ticket), md=4),
     ])
 
 def gerar_tabela(df):
     usados = df[df['situacao do voucher'].str.lower() == 'utilizado']
     ranking = usados.groupby(['nome do vendedor', 'nome da filial', 'nome da rede']).size().reset_index(name='Qtd')
-    top10 = ranking.sort_values(by='Qtd', ascending=False).head(10)
+    ranking = ranking.sort_values(by='Qtd', ascending=False).head(10)
+
     return html.Div([
         html.H5("🏆 Top 10 Vendedores por Volume de Vouchers"),
         dash_table.DataTable(
-            columns=[{"name": i, "id": i} for i in top10.columns],
-            data=top10.to_dict('records'),
+            columns=[{"name": i, "id": i} for i in ranking.columns],
+            data=ranking.to_dict('records'),
             style_table={'overflowX': 'auto'},
             style_cell={'textAlign': 'left'},
             style_header={'backgroundColor': 'black', 'color': 'white'}
         )
     ])
-
+# 🔥 Execução
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=int(os.environ.get("PORT", 8080)))
