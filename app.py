@@ -135,30 +135,42 @@ def gerar_kpis(df):
 # 📊 Gráficos
 def gerar_graficos(df):
     df['criado em'] = pd.to_datetime(df['criado em'], errors='coerce')
-    usados = df[df['situacao do voucher'].str.lower() == 'utilizado']
+    usados = df[df['situacao do voucher'].str.lower() == 'utilizado'].copy()
 
     line_color = '#00FF88'
+    avg_color = '#FFD700'
     background_color = '#000000'
 
-    df_dia = df.copy()
-    df_dia['dia'] = df_dia['criado em'].dt.day
+    df['dia'] = df['criado em'].dt.day
     usados['dia'] = usados['criado em'].dt.day
 
-    fig_gerados = px.line(
-        df_dia.groupby('dia').size().reset_index(name='Qtd'),
-        x='dia', y='Qtd', title="📅 Vouchers Gerados por Dia"
-    )
-    fig_utilizados = px.line(
-        usados.groupby('dia').size().reset_index(name='Qtd'),
-        x='dia', y='Qtd', title="📅 Vouchers Utilizados por Dia"
-    )
-    fig_ticket = px.line(
-        usados.groupby('dia')['valor do voucher'].mean().reset_index(name='Média'),
-        x='dia', y='Média', title="🎫 Ticket Médio Diário"
-    )
+    # 📊 Vouchers Gerados
+    gerados_df = df.groupby('dia').size().reset_index(name='Qtd')
+    gerados_df['Média'] = gerados_df['Qtd'].rolling(window=3, min_periods=1).mean()
+
+    fig_gerados = px.line(gerados_df, x='dia', y='Qtd', title="📅 Vouchers Gerados por Dia")
+    fig_gerados.add_scatter(x=gerados_df['dia'], y=gerados_df['Média'], mode='lines', name='Média Móvel', line=dict(color=avg_color, dash='dash'))
+
+    # 🟩 Anotação nos pontos
+    fig_gerados.update_traces(mode='lines+markers+text', text=gerados_df['Qtd'], textposition='top center', line=dict(color=line_color), marker=dict(color=line_color))
+
+    # 📊 Vouchers Utilizados
+    utilizados_df = usados.groupby('dia').size().reset_index(name='Qtd')
+    utilizados_df['Média'] = utilizados_df['Qtd'].rolling(window=3, min_periods=1).mean()
+
+    fig_utilizados = px.line(utilizados_df, x='dia', y='Qtd', title="📅 Vouchers Utilizados por Dia")
+    fig_utilizados.add_scatter(x=utilizados_df['dia'], y=utilizados_df['Média'], mode='lines', name='Média Móvel', line=dict(color=avg_color, dash='dash'))
+    fig_utilizados.update_traces(mode='lines+markers+text', text=utilizados_df['Qtd'], textposition='top center', line=dict(color=line_color), marker=dict(color=line_color))
+
+    # 📊 Ticket Médio Diário
+    ticket_df = usados.groupby('dia')['valor do voucher'].mean().reset_index(name='Média')
+    ticket_df['Média Móvel'] = ticket_df['Média'].rolling(window=3, min_periods=1).mean()
+
+    fig_ticket = px.line(ticket_df, x='dia', y='Média', title="🎫 Ticket Médio Diário")
+    fig_ticket.add_scatter(x=ticket_df['dia'], y=ticket_df['Média Móvel'], mode='lines', name='Média Móvel', line=dict(color=avg_color, dash='dash'))
+    fig_ticket.update_traces(mode='lines+markers+text', text=ticket_df['Média'].round(0), textposition='top center', line=dict(color=line_color), marker=dict(color=line_color))
 
     for fig in [fig_gerados, fig_utilizados, fig_ticket]:
-        fig.update_traces(line=dict(color=line_color), marker=dict(color=line_color))
         fig.update_layout(
             paper_bgcolor=background_color,
             plot_bgcolor=background_color,
@@ -176,7 +188,8 @@ def gerar_graficos(df):
                 showgrid=False,
                 showline=False,
                 zeroline=False
-            )
+            ),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5)
         )
 
     return dbc.Row([
@@ -184,6 +197,7 @@ def gerar_graficos(df):
         dbc.Col(dcc.Graph(figure=fig_utilizados), md=4),
         dbc.Col(dcc.Graph(figure=fig_ticket), md=4),
     ])
+
 
 
 
