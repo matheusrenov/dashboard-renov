@@ -139,6 +139,7 @@ def gerar_graficos(df):
 
     line_color = '#00FF88'
     avg_color = '#FFD700'
+    flat_color = '#4444FF'
     background_color = '#000000'
 
     df['dia'] = df['criado em'].dt.day
@@ -146,28 +147,32 @@ def gerar_graficos(df):
 
     # 📊 Vouchers Gerados
     gerados_df = df.groupby('dia').size().reset_index(name='Qtd')
-    gerados_df['Média'] = gerados_df['Qtd'].rolling(window=3, min_periods=1).mean()
+    gerados_df['Média Móvel'] = gerados_df['Qtd'].rolling(window=3, min_periods=1).mean()
+    media_simples_gerados = gerados_df['Qtd'].mean()
 
     fig_gerados = px.line(gerados_df, x='dia', y='Qtd', title="📅 Vouchers Gerados por Dia")
-    fig_gerados.add_scatter(x=gerados_df['dia'], y=gerados_df['Média'], mode='lines', name='Média Móvel', line=dict(color=avg_color, dash='dash'))
-
-    # 🟩 Anotação nos pontos
+    fig_gerados.add_scatter(x=gerados_df['dia'], y=gerados_df['Média Móvel'], mode='lines', name='Média Móvel', line=dict(color=avg_color, dash='dash'), showlegend=True)
+    fig_gerados.add_hline(y=media_simples_gerados, line_dash="dot", line_color=flat_color, annotation_text="Média", annotation_position="top right")
     fig_gerados.update_traces(mode='lines+markers+text', text=gerados_df['Qtd'], textposition='top center', line=dict(color=line_color), marker=dict(color=line_color))
 
     # 📊 Vouchers Utilizados
     utilizados_df = usados.groupby('dia').size().reset_index(name='Qtd')
-    utilizados_df['Média'] = utilizados_df['Qtd'].rolling(window=3, min_periods=1).mean()
+    utilizados_df['Média Móvel'] = utilizados_df['Qtd'].rolling(window=3, min_periods=1).mean()
+    media_simples_utilizados = utilizados_df['Qtd'].mean()
 
     fig_utilizados = px.line(utilizados_df, x='dia', y='Qtd', title="📅 Vouchers Utilizados por Dia")
-    fig_utilizados.add_scatter(x=utilizados_df['dia'], y=utilizados_df['Média'], mode='lines', name='Média Móvel', line=dict(color=avg_color, dash='dash'))
+    fig_utilizados.add_scatter(x=utilizados_df['dia'], y=utilizados_df['Média Móvel'], mode='lines', name='Média Móvel', line=dict(color=avg_color, dash='dash'), showlegend=True)
+    fig_utilizados.add_hline(y=media_simples_utilizados, line_dash="dot", line_color=flat_color, annotation_text="Média", annotation_position="top right")
     fig_utilizados.update_traces(mode='lines+markers+text', text=utilizados_df['Qtd'], textposition='top center', line=dict(color=line_color), marker=dict(color=line_color))
 
     # 📊 Ticket Médio Diário
     ticket_df = usados.groupby('dia')['valor do voucher'].mean().reset_index(name='Média')
     ticket_df['Média Móvel'] = ticket_df['Média'].rolling(window=3, min_periods=1).mean()
+    media_simples_ticket = ticket_df['Média'].mean()
 
     fig_ticket = px.line(ticket_df, x='dia', y='Média', title="🎫 Ticket Médio Diário")
-    fig_ticket.add_scatter(x=ticket_df['dia'], y=ticket_df['Média Móvel'], mode='lines', name='Média Móvel', line=dict(color=avg_color, dash='dash'))
+    fig_ticket.add_scatter(x=ticket_df['dia'], y=ticket_df['Média Móvel'], mode='lines', name='Média Móvel', line=dict(color=avg_color, dash='dash'), showlegend=True)
+    fig_ticket.add_hline(y=media_simples_ticket, line_dash="dot", line_color=flat_color, annotation_text="Média", annotation_position="top right")
     fig_ticket.update_traces(mode='lines+markers+text', text=ticket_df['Média'].round(0), textposition='top center', line=dict(color=line_color), marker=dict(color=line_color))
 
     for fig in [fig_gerados, fig_utilizados, fig_ticket]:
@@ -197,6 +202,7 @@ def gerar_graficos(df):
         dbc.Col(dcc.Graph(figure=fig_utilizados), md=4),
         dbc.Col(dcc.Graph(figure=fig_ticket), md=4),
     ])
+
 
 
 
