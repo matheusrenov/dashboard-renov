@@ -189,35 +189,58 @@ def gerar_graficos_mensais(df):
 
 
 
+# 🔥 SUBSTITUA SUA FUNÇÃO gerar_graficos_rede PELO CÓDIGO ABAIXO 🔥
 def gerar_graficos_rede(df):
     usados = df[df['situacao do voucher'].str.lower() == 'utilizado']
-    ordem_meses = sorted(df['mes_curto'].unique(), key=lambda x: datetime.strptime(x, "%b").month)
+
+    # Detecta meses únicos presentes nos dados e ordena corretamente
+    meses_presentes = sorted(
+        df['mes_curto'].dropna().unique(),
+        key=lambda x: datetime.strptime(x, "%b").month
+    )
 
     base_kwargs = dict(x='nome da rede', y='Qtd', color='mes_curto', barmode='group', text='Qtd')
 
-    # Gerados
+    # === Gerados por Rede e Mês ===
     df_gerados = df.groupby(['nome da rede', 'mes_curto']).size().reset_index(name='Qtd')
-    df_gerados['mes_curto'] = pd.Categorical(df_gerados['mes_curto'], categories=ordem_meses, ordered=True)
+    df_gerados['mes_curto'] = pd.Categorical(df_gerados['mes_curto'], categories=meses_presentes, ordered=True)
     df_gerados = df_gerados.sort_values(['Qtd'], ascending=False)
 
-    fig_gerados = px.bar(df_gerados, **base_kwargs, title="📊 Vouchers por Rede e Mês")
+    fig_gerados = px.bar(df_gerados, **base_kwargs, title="📊 Vouchers por Rede e Mês",
+                         category_orders={'mes_curto': meses_presentes})
     fig_gerados.update_traces(texttemplate='%{text}', textposition='outside')
-    fig_gerados.update_layout(margin=dict(t=30, b=100), xaxis_tickangle=-45)
+    fig_gerados.update_layout(
+        margin=dict(t=80, b=120),
+        xaxis_tickangle=-45,
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+        xaxis=dict(showgrid=False),
+        yaxis=dict(showgrid=False)
+    )
 
-    # Utilizados
+    # === Utilizados por Rede e Mês ===
     df_usados = usados.groupby(['nome da rede', 'mes_curto']).size().reset_index(name='Qtd')
-    df_usados['mes_curto'] = pd.Categorical(df_usados['mes_curto'], categories=ordem_meses, ordered=True)
+    df_usados['mes_curto'] = pd.Categorical(df_usados['mes_curto'], categories=meses_presentes, ordered=True)
     df_usados = df_usados.sort_values(['Qtd'], ascending=False)
 
-    fig_usados = px.bar(df_usados, **base_kwargs, title="📦 Vouchers Utilizados por Rede e Mês")
+    fig_usados = px.bar(df_usados, **base_kwargs, title="📦 Vouchers Utilizados por Rede e Mês",
+                        category_orders={'mes_curto': meses_presentes})
     fig_usados.update_traces(texttemplate='%{text}', textposition='outside')
-    fig_usados.update_layout(margin=dict(t=30, b=120), xaxis_tickangle=-45)
+    fig_usados.update_layout(
+        margin=dict(t=80, b=140),
+        xaxis_tickangle=-45,
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+        xaxis=dict(showgrid=False),
+        yaxis=dict(showgrid=False)
+    )
 
     return html.Div([
         dcc.Graph(figure=fig_gerados),
-        html.Div(style={'height': '20px'}),
+        html.Div(style={'height': '30px'}),
         dcc.Graph(figure=fig_usados)
     ])
+
 
 def gerar_tabela(df):
     usados = df[df['situacao do voucher'].str.lower() == 'utilizado']
