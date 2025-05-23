@@ -137,25 +137,26 @@ def gerar_graficos(df):
     df['criado em'] = pd.to_datetime(df['criado em'], errors='coerce')
     usados = df[df['situacao do voucher'].str.lower() == 'utilizado']
 
-    # 🎨 Customização visual
     line_color = '#00FF88'
     background_color = '#000000'
-    grid_color = '#444'
+
+    df_dia = df.copy()
+    df_dia['dia'] = df_dia['criado em'].dt.day
+    usados['dia'] = usados['criado em'].dt.day
 
     fig_gerados = px.line(
-        df.groupby(df['criado em'].dt.date).size().reset_index(name='Qtd'),
-        x='criado em', y='Qtd', title="📅 Vouchers Gerados por Dia"
+        df_dia.groupby('dia').size().reset_index(name='Qtd'),
+        x='dia', y='Qtd', title="📅 Vouchers Gerados por Dia"
     )
     fig_utilizados = px.line(
-        usados.groupby(usados['criado em'].dt.date).size().reset_index(name='Qtd'),
-        x='criado em', y='Qtd', title="📅 Vouchers Utilizados por Dia"
+        usados.groupby('dia').size().reset_index(name='Qtd'),
+        x='dia', y='Qtd', title="📅 Vouchers Utilizados por Dia"
     )
     fig_ticket = px.line(
-        usados.groupby(usados['criado em'].dt.date)['valor do voucher'].mean().reset_index(name='Média'),
-        x='criado em', y='Média', title="🎫 Ticket Médio Diário"
+        usados.groupby('dia')['valor do voucher'].mean().reset_index(name='Média'),
+        x='dia', y='Média', title="🎫 Ticket Médio Diário"
     )
 
-    # ⚙️ Layout personalizado
     for fig in [fig_gerados, fig_utilizados, fig_ticket]:
         fig.update_traces(line=dict(color=line_color), marker=dict(color=line_color))
         fig.update_layout(
@@ -164,8 +165,18 @@ def gerar_graficos(df):
             font=dict(color='white'),
             title_font=dict(size=16),
             margin=dict(l=30, r=30, t=40, b=30),
-            xaxis=dict(gridcolor=grid_color, zeroline=False),
-            yaxis=dict(gridcolor=grid_color, zeroline=False),
+            xaxis=dict(
+                showgrid=False,
+                tickmode='linear',
+                dtick=1,
+                showline=False,
+                zeroline=False
+            ),
+            yaxis=dict(
+                showgrid=False,
+                showline=False,
+                zeroline=False
+            )
         )
 
     return dbc.Row([
@@ -173,6 +184,7 @@ def gerar_graficos(df):
         dbc.Col(dcc.Graph(figure=fig_utilizados), md=4),
         dbc.Col(dcc.Graph(figure=fig_ticket), md=4),
     ])
+
 
 
 # 🏆 Ranking
