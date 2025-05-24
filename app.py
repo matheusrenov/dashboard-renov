@@ -18,24 +18,16 @@ server = app.server
 # Layout principal
 app.layout = html.Div([
     html.H2("Dashboard de Resultados", style={'textAlign': 'center'}),
-
     dbc.Row([
-        dbc.Col(
-            dcc.Upload(
-                id="upload-data",
-                children=html.Button("📁 Importar Planilha Base", className="btn btn-primary"),
-                accept=".xlsx",
-                multiple=False
-            ),
-            md="auto"
-        ),
-        dbc.Col(
-            html.Button("🖨️ Exportar Resultados em PDF", id="export-pdf", n_clicks=0, className="btn btn-success"),
-            md="auto"
-        ),
+        dbc.Col(dcc.Upload(
+            id="upload-data",
+            children=html.Button("📁 Importar Planilha Base", className="btn btn-primary"),
+            accept=".xlsx",
+            multiple=False
+        ), md="auto"),
+        dbc.Col(html.Button("🖨️ Exportar Resultados em PDF", id="export-pdf", n_clicks=0, className="btn btn-success"), md="auto"),
         dcc.Download(id="download-pdf")
     ], justify="center", className="my-3"),
-
     html.Div(id='error-upload', style={'color': 'red', 'textAlign': 'center', 'marginTop': 10}),
     html.Div(id='filtros'),
     html.Div(id='kpi-cards', style={'marginTop': '20px'}),
@@ -44,11 +36,6 @@ app.layout = html.Div([
     html.Div(id='graficos-rede', style={'marginTop': '40px'}),
     html.Div(id='ranking-vendedores', style={'marginTop': '20px'})
 ])
-
-# Atalho para exibir campo de upload ao clicar
-@app.callback(Output('upload-data', 'style'), Input('upload-button', 'n_clicks'), prevent_initial_call=True)
-def exibir_upload(n):
-    return {"display": "block"}
 
 @app.callback(
     Output('filtros', 'children'),
@@ -84,10 +71,6 @@ def processar_arquivo(contents, filename):
         df['mes_num'] = df['criado em'].dt.month
         df['dia'] = df['criado em'].dt.day.astype(str)
 
-        # Foco apenas no último mês com dados
-        ultimo_mes = df['criado em'].dt.month.max()
-        df = df[df['criado em'].dt.month == ultimo_mes]
-
         app.df_original = df
 
         filtros_layout = dbc.Row([
@@ -106,7 +89,6 @@ def processar_arquivo(contents, filename):
 
     except Exception as e:
         return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, f"Erro ao processar: {str(e)}"
-
 @app.callback(
     Output('kpi-cards', 'children', allow_duplicate=True),
     Output('graficos-mensais', 'children', allow_duplicate=True),
@@ -128,6 +110,7 @@ def atualizar_dashboard(meses, redes, situacoes):
         df = df[df['situacao do voucher'].isin(situacoes)]
 
     return gerar_kpis(df), gerar_graficos_mensais(df), gerar_graficos(df), gerar_graficos_rede(df), gerar_tabela(df)
+
 def gerar_kpis(df):
     total_gerados = len(df)
     utilizados = df[df['situacao do voucher'].str.lower() == 'utilizado']
@@ -163,10 +146,10 @@ def gerar_kpis(df):
         kpi_card("📍 Ticket Médio", f"R$ {ticket:,.2f}"),
         kpi_card("📈 Conversão", f"{conversao:.2f}%")
     ], justify='between', style={'marginBottom': 30})
+
 def gerar_graficos_mensais(df):
     df = df.copy()
     df['mes_curto'] = df['criado em'].dt.strftime('%b')
-    df['mes_num'] = df['criado em'].dt.month
     usados = df[df['situacao do voucher'].str.lower() == 'utilizado']
     meses_presentes = sorted(df['mes_curto'].unique(), key=lambda x: datetime.strptime(x, "%b").month)
 
@@ -190,12 +173,10 @@ def gerar_graficos_mensais(df):
         dbc.Col(dcc.Graph(figure=fig2), md=4),
         dbc.Col(dcc.Graph(figure=fig3), md=4),
     ])
-
 def gerar_graficos(df):
-    df['criado em'] = pd.to_datetime(df['criado em'])
+    df = df.copy()
     ultimo_mes = df['criado em'].dt.month.max()
     df = df[df['criado em'].dt.month == ultimo_mes]
-
     usados = df[df['situacao do voucher'].str.lower() == 'utilizado']
     df['dia'] = df['criado em'].dt.day
 
@@ -233,6 +214,7 @@ def gerar_graficos(df):
         dbc.Col(dcc.Graph(figure=fig_utilizados), md=4),
         dbc.Col(dcc.Graph(figure=fig_ticket), md=4),
     ])
+
 def gerar_graficos_rede(df):
     usados = df[df['situacao do voucher'].str.lower() == 'utilizado']
     ordem_meses = sorted(df['mes_curto'].unique(), key=lambda x: datetime.strptime(x, "%b").month)
@@ -277,7 +259,6 @@ def gerar_graficos_rede(df):
         dcc.Graph(figure=fig_usados)
     ])
 
-
 def gerar_tabela(df):
     usados = df[df['situacao do voucher'].str.lower() == 'utilizado']
     ranking = usados.groupby(['nome do vendedor', 'nome da filial', 'nome da rede']).size().reset_index(name='Qtd')
@@ -294,42 +275,5 @@ def gerar_tabela(df):
         )
     ])
 
-@app.callback(
-    Output("download-pdf", "data"),
-    Input("export-pdf", "n_clicks"),
-    prevent_initial_call=True
-)
-def exportar_pdf(n_clicks):
-    try:
-        pdf = FPDF()
-        pdf.add_page()
-        pdf.set_font("Arial", size=12)
-        pdf.cell(200, 10, txt="Resumo de Resultados", ln=True, align='C')
-        df = app.df_original.copy()
-        pdf.ln(10)
-
-        total = len(df)
-        usados = df[df['situacao do voucher'].str.lower() == 'utilizado']
-        dispositivos = len(usados)
-        captacao = usados['valor do dispositivo'].sum()
-        ticket = captacao / dispositivos if dispositivos > 0 else 0
-        conversao = (dispositivos / total * 100) if total > 0 else 0
-
-        pdf.cell(200, 10, f"Vouchers Gerados: {total}", ln=True)
-        pdf.cell(200, 10, f"Dispositivos Captados: {dispositivos}", ln=True)
-        pdf.cell(200, 10, f"Captação Total: R$ {captacao:,.2f}", ln=True)
-        pdf.cell(200, 10, f"Ticket Médio: R$ {ticket:,.2f}", ln=True)
-        pdf.cell(200, 10, f"Conversão: {conversao:.2f}%", ln=True)
-
-        pdf_path = "/tmp/relatorio.pdf"
-        pdf.output(pdf_path)
-
-        return dcc.send_file(pdf_path)
-
-    except Exception as e:
-        print("Erro ao exportar PDF:", e)
-        return dash.no_update
-
-# 🚀 Execução segura
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=int(os.environ.get("PORT", 8080)))
