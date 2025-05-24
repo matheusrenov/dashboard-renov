@@ -19,12 +19,21 @@ server = app.server
 app.layout = html.Div([
     html.H2("Dashboard de Resultados", style={'textAlign': 'center'}),
 
-    dbc.Row([
-        dbc.Col(html.Button("📁 Importar Planilha Base", id="upload-button", n_clicks=0, className="btn btn-primary"), md=3),
-        dcc.Upload(id="upload-data", style={"display": "none"}, multiple=False),
-        dbc.Col(html.Button("🖨️ Exportar Resultados em PDF", id="export-pdf", n_clicks=0, className="btn btn-success"), md=3),
+    html.Div([
+    html.Div([
+        dcc.Upload(
+            id='upload-data',
+            children=dbc.Button("📁 Importar Planilha Base", color="primary", className="me-2"),
+            multiple=False
+        ),
+    ], style={'display': 'inline-block'}),
+
+    html.Div([
+        html.Button("🖨️ Exportar Resultados em PDF", id="export-pdf", n_clicks=0, className="btn btn-success"),
         dcc.Download(id="download-pdf")
-    ], justify="center", className="my-3"),
+    ], style={'display': 'inline-block'})
+], style={'textAlign': 'center', 'marginBottom': '20px'}),
+
 
     html.Div(id='error-upload', style={'color': 'red', 'textAlign': 'center', 'marginTop': 10}),
     html.Div(id='filtros'),
