@@ -242,6 +242,7 @@ def gerar_graficos_rede(df):
     ])
 
 
+
 def gerar_tabela(df):
     usados = df[df['situacao do voucher'].str.lower() == 'utilizado']
     ranking = usados.groupby(['nome do vendedor', 'nome da filial', 'nome da rede']).size().reset_index(name='Qtd')
