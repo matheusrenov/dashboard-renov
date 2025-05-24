@@ -20,9 +20,19 @@ app.layout = html.Div([
     html.H2("Dashboard de Resultados", style={'textAlign': 'center'}),
 
     dbc.Row([
-        dbc.Col(html.Button("📁 Importar Planilha Base", id="upload-button", n_clicks=0, className="btn btn-primary"), md=3),
-        dcc.Upload(id="upload-data", style={"display": "none"}, multiple=False),
-        dbc.Col(html.Button("🖨️ Exportar Resultados em PDF", id="export-pdf", n_clicks=0, className="btn btn-success"), md=3),
+        dbc.Col(
+            dcc.Upload(
+                id="upload-data",
+                children=html.Button("📁 Importar Planilha Base", className="btn btn-primary"),
+                accept=".xlsx",
+                multiple=False
+            ),
+            md="auto"
+        ),
+        dbc.Col(
+            html.Button("🖨️ Exportar Resultados em PDF", id="export-pdf", n_clicks=0, className="btn btn-success"),
+            md="auto"
+        ),
         dcc.Download(id="download-pdf")
     ], justify="center", className="my-3"),
 
@@ -34,6 +44,7 @@ app.layout = html.Div([
     html.Div(id='graficos-rede', style={'marginTop': '40px'}),
     html.Div(id='ranking-vendedores', style={'marginTop': '20px'})
 ])
+
 # Atalho para exibir campo de upload ao clicar
 @app.callback(Output('upload-data', 'style'), Input('upload-button', 'n_clicks'), prevent_initial_call=True)
 def exibir_upload(n):
