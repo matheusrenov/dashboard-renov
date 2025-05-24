@@ -120,19 +120,20 @@ def gerar_kpis(df):
     ], justify='between', style={'marginBottom': 30})
 
 def gerar_graficos(df):
-    # 🗓️ Detecta o mês mais recente com base na data
-    df['criado em'] = pd.to_datetime(df['criado em'])
-    df['mes_ano'] = df['criado em'].dt.to_period('M')
-    mes_recente = df['mes_ano'].max()
-    
-    # 🔍 Filtra dados para apenas o mês mais recente
-    df = df[df['mes_ano'] == mes_recente].copy()
     usados = df[df['situacao do voucher'].str.lower() == 'utilizado']
-    df['dia'] = df['criado em'].dt.day
+    df['criado em'] = pd.to_datetime(df['criado em'])
 
+    # Pega mês mais recente
+    ultimo_mes = df['criado em'].max().month
+    df_mes = df[df['criado em'].dt.month == ultimo_mes]
+    usados_mes = df_mes[df_mes['situacao do voucher'].str.lower() == 'utilizado']
 
     def make_fig(data, y_col, title, y_label):
-        series = data.groupby('dia')[y_col].mean() if y_col != 'Qtd' else data.groupby('dia').size()
+        if y_col != 'Qtd':
+            series = data.groupby(data['criado em'].dt.day)[y_col].mean().sort_index()
+        else:
+            series = data.groupby(data['criado em'].dt.day).size().sort_index()
+
         serie_media_movel = series.rolling(window=3, min_periods=1).mean()
         media_simples = series.mean()
 
@@ -154,15 +155,17 @@ def gerar_graficos(df):
         fig.update_yaxes(showgrid=False)
         return fig
 
-    fig_gerados = make_fig(df, 'Qtd', "📅 Vouchers Gerados por Dia", 'Qtd')
-    fig_utilizados = make_fig(usados, 'Qtd', "📅 Vouchers Utilizados por Dia", 'Qtd')
-    fig_ticket = make_fig(usados, 'valor do voucher', "🎫 Ticket Médio Diário", 'Média')
+    fig_gerados = make_fig(df_mes, 'Qtd', "📅 Vouchers Gerados por Dia", 'Qtd')
+    fig_utilizados = make_fig(usados_mes, 'Qtd', "📅 Vouchers Utilizados por Dia", 'Qtd')
+    fig_ticket = make_fig(usados_mes, 'valor do voucher', "🎫 Ticket Médio Diário", 'Média')
 
     return dbc.Row([
         dbc.Col(dcc.Graph(figure=fig_gerados), md=4),
         dbc.Col(dcc.Graph(figure=fig_utilizados), md=4),
         dbc.Col(dcc.Graph(figure=fig_ticket), md=4),
     ])
+
+# ⬅️ O restante (graficos_mensais, graficos_rede, gerar_tabela) já estavam corretos e não modificados nesta etapa.
 
 def gerar_graficos_mensais(df):
     df = df.copy()
@@ -193,62 +196,45 @@ def gerar_graficos_mensais(df):
         dbc.Col(dcc.Graph(figure=fig3), md=4),
     ])
 
-
-
-
-# 🔥 SUBSTITUA SUA FUNÇÃO gerar_graficos_rede PELO CÓDIGO ABAIXO 🔥
 def gerar_graficos_rede(df):
     usados = df[df['situacao do voucher'].str.lower() == 'utilizado']
-
-    # Detecta meses únicos presentes nos dados e ordena corretamente
-    meses_presentes = sorted(
-        df['mes_curto'].dropna().unique(),
-        key=lambda x: datetime.strptime(x, "%b").month
-    )
+    ordem_meses = sorted(df['mes_curto'].unique(), key=lambda x: datetime.strptime(x, "%b").month)
 
     base_kwargs = dict(x='nome da rede', y='Qtd', color='mes_curto', barmode='group', text='Qtd')
 
-    # === Gerados por Rede e Mês ===
+    # Gerados
     df_gerados = df.groupby(['nome da rede', 'mes_curto']).size().reset_index(name='Qtd')
-    df_gerados['mes_curto'] = pd.Categorical(df_gerados['mes_curto'], categories=meses_presentes, ordered=True)
+    df_gerados['mes_curto'] = pd.Categorical(df_gerados['mes_curto'], categories=ordem_meses, ordered=True)
     df_gerados = df_gerados.sort_values(['Qtd'], ascending=False)
 
-    fig_gerados = px.bar(df_gerados, **base_kwargs, title="📊 Vouchers por Rede e Mês",
-                         category_orders={'mes_curto': meses_presentes})
+    fig_gerados = px.bar(df_gerados, **base_kwargs, title="📊 Vouchers por Rede e Mês")
     fig_gerados.update_traces(texttemplate='%{text}', textposition='outside')
     fig_gerados.update_layout(
-        margin=dict(t=80, b=120),
+        margin=dict(t=30, b=100),
         xaxis_tickangle=-45,
-        plot_bgcolor='white',
-        paper_bgcolor='white',
-        xaxis=dict(showgrid=False),
-        yaxis=dict(showgrid=False)
+        plot_bgcolor='white', paper_bgcolor='white',
+        xaxis=dict(showgrid=False), yaxis=dict(showgrid=False)
     )
 
-    # === Utilizados por Rede e Mês ===
+    # Utilizados
     df_usados = usados.groupby(['nome da rede', 'mes_curto']).size().reset_index(name='Qtd')
-    df_usados['mes_curto'] = pd.Categorical(df_usados['mes_curto'], categories=meses_presentes, ordered=True)
+    df_usados['mes_curto'] = pd.Categorical(df_usados['mes_curto'], categories=ordem_meses, ordered=True)
     df_usados = df_usados.sort_values(['Qtd'], ascending=False)
 
-    fig_usados = px.bar(df_usados, **base_kwargs, title="📦 Vouchers Utilizados por Rede e Mês",
-                        category_orders={'mes_curto': meses_presentes})
+    fig_usados = px.bar(df_usados, **base_kwargs, title="📦 Vouchers Utilizados por Rede e Mês")
     fig_usados.update_traces(texttemplate='%{text}', textposition='outside')
     fig_usados.update_layout(
-        margin=dict(t=80, b=140),
+        margin=dict(t=30, b=120),
         xaxis_tickangle=-45,
-        plot_bgcolor='white',
-        paper_bgcolor='white',
-        xaxis=dict(showgrid=False),
-        yaxis=dict(showgrid=False)
+        plot_bgcolor='white', paper_bgcolor='white',
+        xaxis=dict(showgrid=False), yaxis=dict(showgrid=False)
     )
 
     return html.Div([
         dcc.Graph(figure=fig_gerados),
-        html.Div(style={'height': '30px'}),
+        html.Div(style={'height': '20px'}),
         dcc.Graph(figure=fig_usados)
     ])
-
-
 
 def gerar_tabela(df):
     usados = df[df['situacao do voucher'].str.lower() == 'utilizado']
@@ -266,5 +252,6 @@ def gerar_tabela(df):
         )
     ])
 
+# 🔥 Execução
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=int(os.environ.get("PORT", 8080)))
