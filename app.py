@@ -120,9 +120,16 @@ def gerar_kpis(df):
     ], justify='between', style={'marginBottom': 30})
 
 def gerar_graficos(df):
-    usados = df[df['situacao do voucher'].str.lower() == 'utilizado']
+    # 🗓️ Detecta o mês mais recente com base na data
     df['criado em'] = pd.to_datetime(df['criado em'])
+    df['mes_ano'] = df['criado em'].dt.to_period('M')
+    mes_recente = df['mes_ano'].max()
+    
+    # 🔍 Filtra dados para apenas o mês mais recente
+    df = df[df['mes_ano'] == mes_recente].copy()
+    usados = df[df['situacao do voucher'].str.lower() == 'utilizado']
     df['dia'] = df['criado em'].dt.day
+
 
     def make_fig(data, y_col, title, y_label):
         series = data.groupby('dia')[y_col].mean() if y_col != 'Qtd' else data.groupby('dia').size()
