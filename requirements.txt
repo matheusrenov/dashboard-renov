@@ -4,4 +4,5 @@ pandas
 plotly
 openpyxl
 unidecode
+fpdf
 
