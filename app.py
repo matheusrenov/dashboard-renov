@@ -104,6 +104,14 @@ def atualizar_dashboard(meses, redes, situacoes):
     return gerar_kpis(df), gerar_graficos_mensais(df), gerar_graficos(df), gerar_graficos_rede(df), gerar_tabela(df)
 
 def gerar_kpis(df):
+    df['mes_num'] = df['criado em'].dt.month
+    ultimo_mes = df['mes_num'].max()
+    df_mes = df[df['mes_num'] == ultimo_mes]
+    usados_mes = df_mes[df_mes['situacao do voucher'].str.lower() == 'utilizado']
+
+    dias_executados = df_mes['criado em'].dt.day.nunique()
+    dias_executados = dias_executados if dias_executados > 0 else 1  # segurança
+
     total_gerados = len(df)
     utilizados = df[df['situacao do voucher'].str.lower() == 'utilizado']
     dispositivos = len(utilizados)
@@ -111,13 +119,41 @@ def gerar_kpis(df):
     ticket = captacao / dispositivos if dispositivos > 0 else 0
     conversao = dispositivos / total_gerados * 100 if total_gerados > 0 else 0
 
+    # Sub KPIs
+    gerados_mes = len(df_mes)
+    dispositivos_mes = len(usados_mes)
+    captacao_mes = usados_mes['valor do dispositivo'].sum()
+
+    media_dia_gerados = gerados_mes / dias_executados
+    media_dia_dispositivos = dispositivos_mes / dias_executados
+    media_dia_captacao = captacao_mes / dias_executados
+
+    proj_gerados = media_dia_gerados * 30
+    proj_dispositivos = media_dia_dispositivos * 30
+    proj_captacao = media_dia_captacao * 30
+
+    def format_card(title, value, sub1, sub2, prefix=''):
+        return dbc.Card([
+            html.H5(title),
+            html.H3(f"{prefix}{value:,.0f}"),
+            html.Small(f"📅 Média diária: {prefix}{sub1:,.0f}"),
+            html.Small(f"📈 Projeção mês: {prefix}{sub2:,.0f}")
+        ], body=True, color="dark", inverse=True, style={"border": "2px solid lime"})
+
     return dbc.Row([
-        dbc.Col(dbc.Card([html.H5("📊 Vouchers Gerados"), html.H3(f"{total_gerados}")], body=True, color="dark", inverse=True, style={"border": "2px solid lime"}), md=2),
-        dbc.Col(dbc.Card([html.H5("📦 Dispositivos Captados"), html.H3(f"{dispositivos}")], body=True, color="dark", inverse=True, style={"border": "2px solid lime"}), md=2),
-        dbc.Col(dbc.Card([html.H5("💰 Captação Total"), html.H3(f"R$ {captacao:,.2f}")], body=True, color="dark", inverse=True, style={"border": "2px solid lime"}), md=2),
-        dbc.Col(dbc.Card([html.H5("📍 Ticket Médio"), html.H3(f"R$ {ticket:,.2f}")], body=True, color="dark", inverse=True, style={"border": "2px solid lime"}), md=2),
-        dbc.Col(dbc.Card([html.H5("📈 Conversão"), html.H3(f"{conversao:.2f}%")], body=True, color="dark", inverse=True, style={"border": "2px solid lime"}), md=2),
+        dbc.Col(format_card("📊 Vouchers Gerados", total_gerados, media_dia_gerados, proj_gerados), md=2),
+        dbc.Col(format_card("📦 Dispositivos Captados", dispositivos, media_dia_dispositivos, proj_dispositivos), md=2),
+        dbc.Col(format_card("💰 Captação Total", captacao, media_dia_captacao, proj_captacao, prefix='R$ '), md=2),
+        dbc.Col(dbc.Card([
+            html.H5("📍 Ticket Médio"),
+            html.H3(f"R$ {ticket:,.2f}")
+        ], body=True, color="dark", inverse=True, style={"border": "2px solid lime"}), md=2),
+        dbc.Col(dbc.Card([
+            html.H5("📈 Conversão"),
+            html.H3(f"{conversao:.2f}%")
+        ], body=True, color="dark", inverse=True, style={"border": "2px solid lime"}), md=2),
     ], justify='between', style={'marginBottom': 30})
+
 
 def gerar_graficos(df):
     usados = df[df['situacao do voucher'].str.lower() == 'utilizado']
