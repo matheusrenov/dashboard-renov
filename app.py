@@ -19,21 +19,12 @@ server = app.server
 app.layout = html.Div([
     html.H2("Dashboard de Resultados", style={'textAlign': 'center'}),
 
-    html.Div([
-    html.Div([
-        dcc.Upload(
-            id='upload-data',
-            children=dbc.Button("📁 Importar Planilha Base", color="primary", className="me-2"),
-            multiple=False
-        ),
-    ], style={'display': 'inline-block'}),
-
-    html.Div([
-        html.Button("🖨️ Exportar Resultados em PDF", id="export-pdf", n_clicks=0, className="btn btn-success"),
+    dbc.Row([
+        dbc.Col(html.Button("📁 Importar Planilha Base", id="upload-button", n_clicks=0, className="btn btn-primary"), md=3),
+        dcc.Upload(id="upload-data", style={"display": "none"}, multiple=False),
+        dbc.Col(html.Button("🖨️ Exportar Resultados em PDF", id="export-pdf", n_clicks=0, className="btn btn-success"), md=3),
         dcc.Download(id="download-pdf")
-    ], style={'display': 'inline-block'})
-], style={'textAlign': 'center', 'marginBottom': '20px'}),
-
+    ], justify="center", className="my-3"),
 
     html.Div(id='error-upload', style={'color': 'red', 'textAlign': 'center', 'marginTop': 10}),
     html.Div(id='filtros'),
@@ -43,8 +34,7 @@ app.layout = html.Div([
     html.Div(id='graficos-rede', style={'marginTop': '40px'}),
     html.Div(id='ranking-vendedores', style={'marginTop': '20px'})
 ])
-
-# Atalho para disparar upload ao clicar no botão
+# Atalho para exibir campo de upload ao clicar
 @app.callback(Output('upload-data', 'style'), Input('upload-button', 'n_clicks'), prevent_initial_call=True)
 def exibir_upload(n):
     return {"display": "block"}
@@ -82,6 +72,10 @@ def processar_arquivo(contents, filename):
         df['mes'] = df['criado em'].dt.strftime('%b')
         df['mes_num'] = df['criado em'].dt.month
         df['dia'] = df['criado em'].dt.day.astype(str)
+
+        # Foco apenas no último mês com dados
+        ultimo_mes = df['criado em'].dt.month.max()
+        df = df[df['criado em'].dt.month == ultimo_mes]
 
         app.df_original = df
 
@@ -123,7 +117,6 @@ def atualizar_dashboard(meses, redes, situacoes):
         df = df[df['situacao do voucher'].isin(situacoes)]
 
     return gerar_kpis(df), gerar_graficos_mensais(df), gerar_graficos(df), gerar_graficos_rede(df), gerar_tabela(df)
-
 def gerar_kpis(df):
     total_gerados = len(df)
     utilizados = df[df['situacao do voucher'].str.lower() == 'utilizado']
@@ -162,6 +155,7 @@ def gerar_kpis(df):
 def gerar_graficos_mensais(df):
     df = df.copy()
     df['mes_curto'] = df['criado em'].dt.strftime('%b')
+    df['mes_num'] = df['criado em'].dt.month
     usados = df[df['situacao do voucher'].str.lower() == 'utilizado']
     meses_presentes = sorted(df['mes_curto'].unique(), key=lambda x: datetime.strptime(x, "%b").month)
 
@@ -187,8 +181,11 @@ def gerar_graficos_mensais(df):
     ])
 
 def gerar_graficos(df):
-    usados = df[df['situacao do voucher'].str.lower() == 'utilizado']
     df['criado em'] = pd.to_datetime(df['criado em'])
+    ultimo_mes = df['criado em'].dt.month.max()
+    df = df[df['criado em'].dt.month == ultimo_mes]
+
+    usados = df[df['situacao do voucher'].str.lower() == 'utilizado']
     df['dia'] = df['criado em'].dt.day
 
     def make_fig(data, y_col, title, y_label):
@@ -210,7 +207,7 @@ def gerar_graficos(df):
             xaxis=dict(title='Dia', tickmode='linear'),
             yaxis_title=y_label,
             margin=dict(t=30, b=40),
-            showlegend=False
+            showlegend=True
         )
         fig.update_xaxes(showgrid=False)
         fig.update_yaxes(showgrid=False)
@@ -269,6 +266,7 @@ def gerar_graficos_rede(df):
         dcc.Graph(figure=fig_usados)
     ])
 
+
 def gerar_tabela(df):
     usados = df[df['situacao do voucher'].str.lower() == 'utilizado']
     ranking = usados.groupby(['nome do vendedor', 'nome da filial', 'nome da rede']).size().reset_index(name='Qtd')
@@ -285,6 +283,42 @@ def gerar_tabela(df):
         )
     ])
 
-# 🚀 Execução
+@app.callback(
+    Output("download-pdf", "data"),
+    Input("export-pdf", "n_clicks"),
+    prevent_initial_call=True
+)
+def exportar_pdf(n_clicks):
+    try:
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Arial", size=12)
+        pdf.cell(200, 10, txt="Resumo de Resultados", ln=True, align='C')
+        df = app.df_original.copy()
+        pdf.ln(10)
+
+        total = len(df)
+        usados = df[df['situacao do voucher'].str.lower() == 'utilizado']
+        dispositivos = len(usados)
+        captacao = usados['valor do dispositivo'].sum()
+        ticket = captacao / dispositivos if dispositivos > 0 else 0
+        conversao = (dispositivos / total * 100) if total > 0 else 0
+
+        pdf.cell(200, 10, f"Vouchers Gerados: {total}", ln=True)
+        pdf.cell(200, 10, f"Dispositivos Captados: {dispositivos}", ln=True)
+        pdf.cell(200, 10, f"Captação Total: R$ {captacao:,.2f}", ln=True)
+        pdf.cell(200, 10, f"Ticket Médio: R$ {ticket:,.2f}", ln=True)
+        pdf.cell(200, 10, f"Conversão: {conversao:.2f}%", ln=True)
+
+        pdf_path = "/tmp/relatorio.pdf"
+        pdf.output(pdf_path)
+
+        return dcc.send_file(pdf_path)
+
+    except Exception as e:
+        print("Erro ao exportar PDF:", e)
+        return dash.no_update
+
+# 🚀 Execução segura
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=int(os.environ.get("PORT", 8080)))
