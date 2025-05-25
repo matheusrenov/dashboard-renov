@@ -16,29 +16,60 @@ server = app.server
 # ========================
 # 💠 LAYOUT
 # ========================
+# Layout principal
 app.layout = html.Div([
     html.H2("Dashboard de Resultados", style={'textAlign': 'center'}),
 
-    html.Div([
-        dcc.Upload(
+    dbc.Row([
+        dbc.Col(dcc.Upload(
             id="upload-data",
             children=html.Button("📁 Importar Planilha Base", className="btn btn-primary"),
             accept=".xlsx",
             multiple=False
-        ),
-        html.Button("🖨️ Exportar Resultados em PDF", id="export-pdf", n_clicks=0, className="btn btn-success", style={"marginLeft": "10px"})
-    ], style={"textAlign": "center", "marginTop": "20px", "marginBottom": "20px"}),
+        ), md="auto"),
+
+        dbc.Col(html.Button(
+            "🖨️ Exportar Resultados em PDF",
+            id="export-pdf",
+            n_clicks=0,
+            className="btn btn-success"
+        ), md="auto"),
+    ], justify="center", className="my-3"),
 
     dcc.Download(id="download-pdf"),
 
-    html.Div(id='error-upload', style={'color': 'red', 'textAlign': 'center'}),
+    html.Div(id='error-upload', style={'color': 'red', 'textAlign': 'center', 'marginTop': 10}),
     html.Div(id='filtros'),
     html.Div(id='kpi-cards', style={'marginTop': '20px'}),
     html.Div(id='graficos-mensais', style={'marginTop': '20px'}),
     html.Div(id='graficos', style={'marginTop': '20px'}),
     html.Div(id='graficos-rede', style={'marginTop': '40px'}),
     html.Div(id='ranking-vendedores', style={'marginTop': '20px'}),
+
+    # Scripts JS para captura da tela e exportação em PDF
+    html.Script(src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"),
+    html.Script(src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"),
+    html.Script("""
+    document.addEventListener("DOMContentLoaded", function () {
+        const btn = document.getElementById("export-pdf");
+        btn.addEventListener("click", function () {
+            import('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js').then(jsPDFModule => {
+                const { jsPDF } = jsPDFModule;
+                html2canvas(document.body).then(function (canvas) {
+                    const imgData = canvas.toDataURL('image/png');
+                    const pdf = new jsPDF('p', 'mm', 'a4');
+                    const imgProps = pdf.getImageProperties(imgData);
+                    const pdfWidth = pdf.internal.pageSize.getWidth();
+                    const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+                    pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+                    pdf.save('dashboard_resultados.pdf');
+                });
+            });
+        });
+    });
+    """)
 ])
+
 
 # ========================
 # 📥 PROCESSAR UPLOAD
