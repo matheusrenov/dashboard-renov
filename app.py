@@ -3,7 +3,7 @@ import base64
 import io
 import pandas as pd
 import dash
-from dash import dcc, html, Input, Output, State, dash_table, callback_context, ALL
+from dash import dcc, html, Input, Output, State, dash_table, callback_context, MATCH, ALL
 import dash_bootstrap_components as dbc
 import plotly.express as px
 import plotly.graph_objects as go
@@ -54,12 +54,31 @@ app.layout = dbc.Container([
     # Container para alertas
     html.Div(id='alerts'),
 
-    # Store para dados
+    # Stores para dados
     dcc.Store(id='store-data'),
     dcc.Store(id='store-filtered-data'),
 
-    # Container principal de conteúdo
-    html.Div(id='main-content'),
+    # Container principal de conteúdo - SEMPRE presente no layout
+    html.Div(id='main-content', children=[
+        # Estado inicial - aguardando upload
+        dbc.Alert([
+            html.I(className="fas fa-cloud-upload-alt fa-3x mb-3"),
+            html.H4("Bem-vindo ao Dashboard de Resultados!"),
+            html.P("Carregue uma planilha Excel (.xlsx) para começar a análise dos dados.")
+        ], color="info", className="text-center py-5")
+    ]),
+
+    # Filtros - inicialmente vazios
+    html.Div(id='filters-container'),
+    
+    # KPIs - inicialmente vazios  
+    html.Div(id='kpi-section'),
+    
+    # Abas - inicialmente vazias
+    html.Div(id='tabs-container'),
+    
+    # Conteúdo das abas - inicialmente vazio
+    html.Div(id='tab-content-area')
 
 ], fluid=True, style={'backgroundColor': '#f8f9fa', 'minHeight': '100vh', 'padding': '20px'})
 
@@ -69,14 +88,15 @@ app.layout = dbc.Container([
 @app.callback(
     [Output('alerts', 'children'),
      Output('store-data', 'data'),
-     Output('export-pdf', 'disabled')],
+     Output('export-pdf', 'disabled'),
+     Output('main-content', 'children')],
     [Input('upload-data', 'contents')],
     [State('upload-data', 'filename')],
     prevent_initial_call=True
 )
 def handle_upload(contents, filename):
     if not contents:
-        return "", {}, True
+        return "", {}, True, dash.no_update
 
     try:
         # Decodificar arquivo
@@ -85,7 +105,7 @@ def handle_upload(contents, filename):
         df = pd.read_excel(io.BytesIO(decoded))
 
         if df.empty:
-            return dbc.Alert("❌ Arquivo vazio!", color="danger"), {}, True
+            return dbc.Alert("❌ Arquivo vazio!", color="danger"), {}, True, dash.no_update
 
         # Normalizar nomes das colunas
         df.columns = [unidecode(str(col)).strip().lower().replace(' ', '_') for col in df.columns]
@@ -117,7 +137,7 @@ def handle_upload(contents, filename):
         if missing_columns:
             return (
                 dbc.Alert(f"❌ Colunas obrigatórias não encontradas: {', '.join(missing_columns)}", color="danger"),
-                {}, True
+                {}, True, dash.no_update
             )
 
         # Renomear colunas
@@ -128,7 +148,7 @@ def handle_upload(contents, filename):
         df = df.dropna(subset=['criado_em'])
         
         if df.empty:
-            return dbc.Alert("❌ Nenhuma data válida encontrada!", color="danger"), {}, True
+            return dbc.Alert("❌ Nenhuma data válida encontrada!", color="danger"), {}, True, dash.no_update
 
         # Adicionar colunas derivadas
         df['mes'] = df['criado_em'].dt.strftime('%b')
@@ -141,57 +161,39 @@ def handle_upload(contents, filename):
         df['valor_voucher'] = pd.to_numeric(df['valor_voucher'], errors='coerce').fillna(0)
         df['valor_dispositivo'] = pd.to_numeric(df['valor_dispositivo'], errors='coerce').fillna(0)
 
-        # Sucesso
-        alert = dbc.Alert([
-            html.I(className="fas fa-check-circle me-2"),
-            f"✅ Arquivo '{filename}' processado com sucesso! {len(df)} registros carregados."
-        ], color="success", dismissable=True)
+        # Criar o layout principal após upload bem-sucedido
+        success_layout = html.Div([
+            dbc.Alert([
+                html.I(className="fas fa-check-circle me-2"),
+                f"✅ Arquivo '{filename}' processado com sucesso! {len(df)} registros carregados."
+            ], color="success", dismissable=True),
+            
+            html.H5("🎯 Dados carregados e prontos para análise!", className="text-center text-success mb-4")
+        ])
 
-        return alert, df.to_dict('records'), False
+        # Sucesso
+        return "", df.to_dict('records'), False, success_layout
 
     except Exception as e:
         return (
             dbc.Alert(f"❌ Erro ao processar arquivo: {str(e)}", color="danger"),
-            {}, True
+            {}, True, dash.no_update
         )
 
 # ========================
-# 🎨 CALLBACK PARA CONTEÚDO PRINCIPAL
+# 🔍 CALLBACK PARA CRIAR FILTROS
 # ========================
 @app.callback(
-    Output('main-content', 'children'),
+    Output('filters-container', 'children'),
     [Input('store-data', 'data')],
     prevent_initial_call=True
 )
-def create_main_layout(data):
+def create_filters_layout(data):
     if not data:
-        return dbc.Alert("📤 Carregue uma planilha para começar", color="info", className="text-center")
-
+        return html.Div()
+    
     df = pd.DataFrame(data)
     
-    return html.Div([
-        # Filtros
-        create_filters(df),
-        
-        # KPIs
-        html.Div(id='kpi-section', className="mb-4"),
-        
-        # Abas de conteúdo
-        dcc.Tabs(id="main-tabs", value="overview", children=[
-            dcc.Tab(label="📈 Visão Geral", value="overview"),
-            dcc.Tab(label="📅 Temporal", value="temporal"),
-            dcc.Tab(label="🏪 Redes", value="networks"),
-            dcc.Tab(label="🏆 Rankings", value="rankings")
-        ], className="mb-3"),
-        
-        # Conteúdo das abas
-        html.Div(id='tab-content-area')
-    ])
-
-# ========================
-# 🔍 FUNÇÃO PARA CRIAR FILTROS
-# ========================
-def create_filters(df):
     return dbc.Card([
         dbc.CardHeader(html.H5("🔍 Filtros de Análise", className="mb-0")),
         dbc.CardBody([
@@ -243,6 +245,42 @@ def create_filters(df):
     ], className="mb-4")
 
 # ========================
+# 📊 CALLBACK PARA KPIs
+# ========================
+@app.callback(
+    Output('kpi-section', 'children'),
+    [Input('store-data', 'data'),
+     Input('store-filtered-data', 'data')],
+    prevent_initial_call=True
+)
+def update_kpis(original_data, filtered_data):
+    data_to_use = filtered_data if filtered_data else original_data
+    if not data_to_use:
+        return html.Div()
+    
+    df = pd.DataFrame(data_to_use)
+    return generate_kpi_cards(df)
+
+# ========================
+# 🎯 CALLBACK PARA CRIAR ABAS
+# ========================
+@app.callback(
+    Output('tabs-container', 'children'),
+    [Input('store-data', 'data')],
+    prevent_initial_call=True
+)
+def create_tabs_layout(data):
+    if not data:
+        return html.Div()
+    
+    return dcc.Tabs(id="main-tabs", value="overview", children=[
+        dcc.Tab(label="📈 Visão Geral", value="overview"),
+        dcc.Tab(label="📅 Temporal", value="temporal"),
+        dcc.Tab(label="🏪 Redes", value="networks"),
+        dcc.Tab(label="🏆 Rankings", value="rankings")
+    ], className="mb-3")
+
+# ========================
 # 🔄 CALLBACK PARA APLICAR FILTROS
 # ========================
 @app.callback(
@@ -250,8 +288,8 @@ def create_filters(df):
     [Input('filter-month', 'value'),
      Input('filter-network', 'value'),
      Input('filter-status', 'value'),
-     Input('clear-filters', 'n_clicks'),
-     Input('store-data', 'data')],
+     Input('clear-filters', 'n_clicks')],
+    [State('store-data', 'data')],
     prevent_initial_call=True
 )
 def apply_filters(months, networks, statuses, clear_clicks, original_data):
@@ -277,36 +315,19 @@ def apply_filters(months, networks, statuses, clear_clicks, original_data):
     return df.to_dict('records')
 
 # ========================
-# 📊 CALLBACK PARA KPIs
-# ========================
-@app.callback(
-    Output('kpi-section', 'children'),
-    [Input('store-filtered-data', 'data'),
-     Input('store-data', 'data')],
-    prevent_initial_call=True
-)
-def update_kpis(filtered_data, original_data):
-    data_to_use = filtered_data if filtered_data else original_data
-    if not data_to_use:
-        return ""
-    
-    df = pd.DataFrame(data_to_use)
-    return generate_kpi_cards(df)
-
-# ========================
 # 📈 CALLBACK PARA CONTEÚDO DAS ABAS
 # ========================
 @app.callback(
     Output('tab-content-area', 'children'),
-    [Input('main-tabs', 'value'),
-     Input('store-filtered-data', 'data'),
-     Input('store-data', 'data')],
+    [Input('main-tabs', 'value')],
+    [State('store-filtered-data', 'data'),
+     State('store-data', 'data')],
     prevent_initial_call=True
 )
 def update_tab_content(active_tab, filtered_data, original_data):
     data_to_use = filtered_data if filtered_data else original_data
     if not data_to_use:
-        return dbc.Alert("Nenhum dado disponível", color="warning")
+        return html.Div()
     
     df = pd.DataFrame(data_to_use)
     
@@ -349,7 +370,7 @@ def generate_kpi_cards(df):
         create_kpi_card("Valor Total", f"R$ {total_value:,.2f}", "warning"),
         create_kpi_card("Ticket Médio", f"R$ {avg_ticket:,.2f}", "primary"),
         create_kpi_card("Taxa Conversão", f"{conversion_rate:.1f}%", "danger")
-    ], className="g-3")
+    ], className="g-3 mb-4")
 
 def generate_overview_content(df):
     # Gráfico de pizza - distribuição por situação
