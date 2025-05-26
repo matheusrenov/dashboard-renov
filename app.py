@@ -26,6 +26,7 @@ app.layout = dbc.Container([
         ])
     ]),
 
+    # Controles de upload reorganizados
     dbc.Row([
         dbc.Col([
             dcc.Upload(
@@ -38,18 +39,44 @@ app.layout = dbc.Container([
                 multiple=False,
                 style={'width': '100%'}
             )
-        ], md=8),
+        ], md=6),
         dbc.Col([
             dbc.Button([
                 html.I(className="fas fa-file-pdf me-2"),
                 "🖨️ Exportar PDF"
             ], id="export-pdf", color="success", size="lg", className="w-100", disabled=True)
-        ], md=4)
+        ], md=2),
+        dbc.Col([
+            dcc.Upload(
+                id="upload-colaboradores",
+                children=dbc.Button([
+                    html.I(className="fas fa-users me-2"),
+                    "👥 Atualizar Base de Colaboradores"
+                ], color="info", size="lg", className="w-100"),
+                accept=".xlsx,.xls",
+                multiple=False,
+                style={'width': '100%'}
+            )
+        ], md=2),
+        dbc.Col([
+            dcc.Upload(
+                id="upload-redes-filiais",
+                children=dbc.Button([
+                    html.I(className="fas fa-store me-2"),
+                    "🏪 Atualizar Base de Redes e Filiais"
+                ], color="warning", size="lg", className="w-100"),
+                accept=".xlsx,.xls",
+                multiple=False,
+                style={'width': '100%'}
+            )
+        ], md=2)
     ], className="mb-4"),
 
     html.Div(id='alerts'),
     dcc.Store(id='store-data'),
     dcc.Store(id='store-filtered-data'),
+    dcc.Store(id='store-colaboradores'),
+    dcc.Store(id='store-redes-filiais'),
 
     html.Div(id='welcome-message', children=[
         dbc.Alert([
@@ -92,7 +119,8 @@ app.layout = dbc.Container([
             dcc.Tab(label="📈 Visão Geral", value="overview"),
             dcc.Tab(label="🏪 Redes", value="networks"),
             dcc.Tab(label="🏆 Rankings", value="rankings"),
-            dcc.Tab(label="🔮 Projeções", value="projections")
+            dcc.Tab(label="🔮 Projeções", value="projections"),
+            dcc.Tab(label="👥 Base de Lojas e Colaboradores", value="base-dados")
         ], className="mb-3")
     ]),
     
@@ -100,6 +128,7 @@ app.layout = dbc.Container([
 
 ], fluid=True, style={'backgroundColor': '#f8f9fa', 'minHeight': '100vh', 'padding': '20px'})
 
+# Funções auxiliares
 def generate_kpi_cards(df):
     total_vouchers = len(df)
     used_vouchers = df[df['situacao_voucher'].str.lower().str.contains('utilizado|usado|ativo', na=False)]
@@ -189,7 +218,7 @@ def generate_overview_content(df):
         )
         fig_bar_total.update_layout(yaxis={'categoryorder': 'total ascending'}, height=400)
         
-        # NOVO: Gráfico de barras - top redes (apenas utilizados)
+        # Gráfico de barras - top redes (apenas utilizados)
         used_vouchers = df[df['situacao_voucher'].str.lower().str.contains('utilizado|usado|ativo', na=False)]
         network_used_counts = used_vouchers['nome_rede'].value_counts().head(10)
         fig_bar_used = px.bar(
@@ -202,7 +231,7 @@ def generate_overview_content(df):
         )
         fig_bar_used.update_layout(yaxis={'categoryorder': 'total ascending'}, height=400)
         
-        # Gráfico de evolução diária (movido da aba Temporal)
+        # Gráfico de evolução diária
         if 'data_str' in df.columns:
             daily_series = df.groupby('data_str').size().reset_index(name='count')
             daily_series['data_str'] = pd.to_datetime(daily_series['data_str'])
@@ -257,10 +286,10 @@ def generate_overview_content(df):
                 'Projecao_Valor_Total': f"R$ {projecao_valor_total:,.0f}"
             })
         
-        # Ordenar por vouchers utilizados (valor numérico para ordenação)
+        # Ordenar por vouchers utilizados
         network_summary = sorted(network_summary, key=lambda x: int(x['Vouchers_Utilizados']), reverse=True)
         
-        # Tabela com formatação corrigida
+        # Tabela com formatação
         network_table = dash_table.DataTable(
             data=network_summary,
             columns=[
@@ -483,6 +512,156 @@ def generate_projections_content(original_df, filtered_df):
     except Exception as e:
         return dbc.Alert(f"Erro nas projeções: {str(e)}", color="danger")
 
+def generate_base_dados_content(colaboradores_df, redes_filiais_df):
+    try:
+        # Verificar se os dados estão disponíveis
+        if colaboradores_df.empty and redes_filiais_df.empty:
+            return dbc.Alert([
+                html.H5("📤 Nenhuma base de dados carregada", className="mb-3"),
+                html.P("Para visualizar os indicadores desta aba, faça upload das bases:"),
+                html.Ul([
+                    html.Li("👥 Base de Colaboradores"),
+                    html.Li("🏪 Base de Redes e Filiais")
+                ]),
+                html.P("Use os botões de upload específicos na parte superior.")
+            ], color="info", className="text-center py-5")
+        
+        # Inicializar contadores
+        redes_ativas = 0
+        filiais_ativas = 0
+        total_colaboradores = 0
+        colaboradores_ativos = 0
+        
+        # Processar dados de Redes e Filiais
+        if not redes_filiais_df.empty:
+            # Normalizar nomes das colunas
+            redes_filiais_df.columns = [str(col).strip().lower().replace(' ', '_').replace('ç', 'c') for col in redes_filiais_df.columns]
+            
+            # Mapear colunas
+            col_mapping_redes = {}
+            redes_columns = {
+                'nome_filial': ['nome_da_filial', 'filial', 'nome_filial'],
+                'nome_rede': ['nome_da_rede', 'rede', 'nome_rede'],
+                'ativa': ['ativa', 'ativo', 'status']
+            }
+            
+            for standard_name, possible_names in redes_columns.items():
+                for possible_name in possible_names:
+                    if possible_name in redes_filiais_df.columns:
+                        col_mapping_redes[possible_name] = standard_name
+                        break
+            
+            redes_filiais_df = redes_filiais_df.rename(columns=col_mapping_redes)
+            
+            # Calcular quantidade de redes ativas
+            if 'nome_rede' in redes_filiais_df.columns and 'ativa' in redes_filiais_df.columns:
+                redes_unicas_ativas = redes_filiais_df[
+                    (redes_filiais_df['ativa'].str.upper() == 'SIM') & 
+                    (redes_filiais_df['nome_rede'].notna()) &
+                    (redes_filiais_df['nome_rede'] != '')
+                ]['nome_rede'].nunique()
+                redes_ativas = redes_unicas_ativas
+                
+                filiais_ativas_count = len(redes_filiais_df[
+                    (redes_filiais_df['ativa'].str.upper() == 'SIM')
+                ])
+                filiais_ativas = filiais_ativas_count
+        
+        # Processar dados de Colaboradores
+        if not colaboradores_df.empty:
+            # Normalizar nomes das colunas
+            colaboradores_df.columns = [str(col).strip().lower().replace(' ', '_').replace('ç', 'c') for col in colaboradores_df.columns]
+            
+            # Mapear colunas
+            col_mapping_colab = {}
+            colab_columns = {
+                'colaborador': ['colaborador', 'nome', 'vendedor'],
+                'ativo': ['ativo', 'ativa', 'status']
+            }
+            
+            for standard_name, possible_names in colab_columns.items():
+                for possible_name in possible_names:
+                    if possible_name in colaboradores_df.columns:
+                        col_mapping_colab[possible_name] = standard_name
+                        break
+            
+            colaboradores_df = colaboradores_df.rename(columns=col_mapping_colab)
+            
+            # Calcular colaboradores
+            total_colaboradores = len(colaboradores_df)
+            if 'ativo' in colaboradores_df.columns:
+                colaboradores_ativos = len(colaboradores_df[colaboradores_df['ativo'].str.upper() == 'SIM'])
+        
+        # KPIs da Base de Dados
+        kpis_base = dbc.Row([
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H6("🏢 Redes Ativas", className="card-title text-muted mb-2"),
+                        html.H3(f"{redes_ativas}", className="text-success fw-bold mb-1"),
+                        html.Small("Redes com status 'SIM'", className="text-muted")
+                    ])
+                ], className="h-100 shadow-sm border-0")
+            ], md=3),
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H6("🏪 Filiais Ativas", className="card-title text-muted mb-2"),
+                        html.H3(f"{filiais_ativas}", className="text-primary fw-bold mb-1"),
+                        html.Small("Filiais com status 'SIM'", className="text-muted")
+                    ])
+                ], className="h-100 shadow-sm border-0")
+            ], md=3),
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H6("👥 Total Colaboradores", className="card-title text-muted mb-2"),
+                        html.H3(f"{total_colaboradores:,}", className="text-info fw-bold mb-1"),
+                        html.Small("Colaboradores cadastrados", className="text-muted")
+                    ])
+                ], className="h-100 shadow-sm border-0")
+            ], md=3),
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H6("✅ Colaboradores Ativos", className="card-title text-muted mb-2"),
+                        html.H3(f"{colaboradores_ativos:,}", className="text-warning fw-bold mb-1"),
+                        html.Small(f"{(colaboradores_ativos/total_colaboradores*100):.1f}% do total" if total_colaboradores > 0 else "0% do total", className="text-muted")
+                    ])
+                ], className="h-100 shadow-sm border-0")
+            ], md=3)
+        ], className="g-3 mb-4")
+        
+        # Status das bases
+        status_bases = dbc.Row([
+            dbc.Col([
+                dbc.Alert([
+                    html.H6("📊 Status das Bases de Dados", className="mb-3"),
+                    html.Div([
+                        html.P([
+                            html.I(className="fas fa-check-circle text-success me-2") if not redes_filiais_df.empty else html.I(className="fas fa-times-circle text-danger me-2"),
+                            f"Base Redes e Filiais: {'Carregada' if not redes_filiais_df.empty else 'Não carregada'}"
+                        ], className="mb-2"),
+                        html.P([
+                            html.I(className="fas fa-check-circle text-success me-2") if not colaboradores_df.empty else html.I(className="fas fa-times-circle text-danger me-2"),
+                            f"Base Colaboradores: {'Carregada' if not colaboradores_df.empty else 'Não carregada'}"
+                        ], className="mb-0")
+                    ])
+                ], color="light", className="border")
+            ], md=12)
+        ], className="mb-4")
+        
+        return html.Div([
+            html.H4("👥 Base de Lojas e Colaboradores", className="mb-4"),
+            html.P("Indicadores básicos das bases de dados auxiliares", className="text-muted mb-4"),
+            kpis_base,
+            status_bases
+        ])
+        
+    except Exception as e:
+        return dbc.Alert(f"Erro ao processar base de dados: {str(e)}", color="danger")
+
+# Callbacks
 @app.callback(
     [Output('alerts', 'children'),
      Output('store-data', 'data'),
@@ -582,6 +761,70 @@ def handle_upload(contents, filename):
         )
 
 @app.callback(
+    [Output('store-colaboradores', 'data'),
+     Output('alerts', 'children', allow_duplicate=True)],
+    [Input('upload-colaboradores', 'contents')],
+    [State('upload-colaboradores', 'filename'),
+     State('alerts', 'children')],
+    prevent_initial_call=True
+)
+def handle_upload_colaboradores(contents, filename, current_alerts):
+    if not contents:
+        return {}, current_alerts
+
+    try:
+        content_type, content_string = contents.split(',')
+        decoded = base64.b64decode(content_string)
+        df = pd.read_excel(io.BytesIO(decoded))
+
+        if df.empty:
+            error_alert = dbc.Alert("❌ Base de Colaboradores vazia!", color="danger", dismissable=True)
+            return {}, [current_alerts, error_alert] if current_alerts else [error_alert]
+
+        success_alert = dbc.Alert([
+            html.I(className="fas fa-users me-2"),
+            f"✅ Base de Colaboradores '{filename}' carregada com sucesso! {len(df)} registros."
+        ], color="success", dismissable=True)
+        
+        return df.to_dict('records'), [current_alerts, success_alert] if current_alerts else [success_alert]
+
+    except Exception as e:
+        error_alert = dbc.Alert(f"❌ Erro ao processar Base de Colaboradores: {str(e)}", color="danger", dismissable=True)
+        return {}, [current_alerts, error_alert] if current_alerts else [error_alert]
+
+@app.callback(
+    [Output('store-redes-filiais', 'data'),
+     Output('alerts', 'children', allow_duplicate=True)],
+    [Input('upload-redes-filiais', 'contents')],
+    [State('upload-redes-filiais', 'filename'),
+     State('alerts', 'children')],
+    prevent_initial_call=True
+)
+def handle_upload_redes_filiais(contents, filename, current_alerts):
+    if not contents:
+        return {}, current_alerts
+
+    try:
+        content_type, content_string = contents.split(',')
+        decoded = base64.b64decode(content_string)
+        df = pd.read_excel(io.BytesIO(decoded))
+
+        if df.empty:
+            error_alert = dbc.Alert("❌ Base de Redes e Filiais vazia!", color="danger", dismissable=True)
+            return {}, [current_alerts, error_alert] if current_alerts else [error_alert]
+
+        success_alert = dbc.Alert([
+            html.I(className="fas fa-store me-2"),
+            f"✅ Base de Redes e Filiais '{filename}' carregada com sucesso! {len(df)} registros."
+        ], color="success", dismissable=True)
+        
+        return df.to_dict('records'), [current_alerts, success_alert] if current_alerts else [success_alert]
+
+    except Exception as e:
+        error_alert = dbc.Alert(f"❌ Erro ao processar Base de Redes e Filiais: {str(e)}", color="danger", dismissable=True)
+        return {}, [current_alerts, error_alert] if current_alerts else [error_alert]
+
+@app.callback(
     Output('store-filtered-data', 'data'),
     [Input('filter-month', 'value'),
      Input('filter-network', 'value'),
@@ -630,11 +873,18 @@ def update_kpis(original_data, filtered_data):
     Output('tab-content-area', 'children'),
     [Input('main-tabs', 'value'),
      Input('store-filtered-data', 'data'),
-     Input('store-data', 'data')],
+     Input('store-data', 'data'),
+     Input('store-colaboradores', 'data'),
+     Input('store-redes-filiais', 'data')],
     prevent_initial_call=True
 )
-def update_tab_content(active_tab, filtered_data, original_data):
+def update_tab_content(active_tab, filtered_data, original_data, colaboradores_data, redes_filiais_data):
     try:
+        if active_tab == "base-dados":
+            colaboradores_df = pd.DataFrame(colaboradores_data) if colaboradores_data else pd.DataFrame()
+            redes_filiais_df = pd.DataFrame(redes_filiais_data) if redes_filiais_data else pd.DataFrame()
+            return generate_base_dados_content(colaboradores_df, redes_filiais_df)
+        
         data_to_use = filtered_data if filtered_data else original_data
         if not data_to_use:
             return dbc.Alert("Nenhum dado disponível.", color="warning")
@@ -648,8 +898,11 @@ def update_tab_content(active_tab, filtered_data, original_data):
         elif active_tab == "rankings":
             return generate_rankings_content(df)
         elif active_tab == "projections":
-            original_df = pd.DataFrame(original_data) if original_data else df
-            return generate_projections_content(original_df, df)
+            if original_data:
+                original_df = pd.DataFrame(original_data)
+                return generate_projections_content(original_df, df)
+            else:
+                return generate_projections_content(df, df)
         else:
             return html.Div("Aba não encontrada")
     except Exception as e:
