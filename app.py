@@ -13,26 +13,19 @@ from unidecode import unidecode
 import warnings
 warnings.filterwarnings('ignore')
 
-# ========================
-# 🚀 Inicialização do App
-# ========================
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 server = app.server
 
-# ========================
-# 🎨 Layout Principal
-# ========================
 app.layout = dbc.Container([
-    # Header
     dbc.Row([
         dbc.Col([
-            html.H1("📊 Dashboard Renov - Análise Estratégica de Parceiros", className="text-center mb-4", 
+            html.H1("📊 Dashboard Renov - Análise Estratégica de Parceiros", 
+                   className="text-center mb-4", 
                    style={'color': '#2c3e50', 'fontWeight': 'bold'}),
             html.Hr(style={'borderColor': '#3498db', 'borderWidth': '2px'})
         ])
     ]),
 
-    # Controles de upload
     dbc.Row([
         dbc.Col([
             dcc.Upload(
@@ -54,23 +47,18 @@ app.layout = dbc.Container([
         ], md=4)
     ], className="mb-4"),
 
-    # Container para alertas
     html.Div(id='alerts'),
-
-    # Stores para dados
     dcc.Store(id='store-data'),
     dcc.Store(id='store-filtered-data'),
 
-    # Estado inicial - aguardando upload
     html.Div(id='welcome-message', children=[
         dbc.Alert([
             html.I(className="fas fa-cloud-upload-alt fa-3x mb-3"),
             html.H4("Bem-vindo ao Dashboard Renov!"),
-            html.P("Carregue uma planilha Excel (.xlsx) para começar a análise estratégica dos dados de parceiros.")
+            html.P("Carregue uma planilha Excel (.xlsx) para começar a análise estratégica.")
         ], color="info", className="text-center py-5")
     ]),
 
-    # FILTROS
     html.Div(id='filters-section', style={'display': 'none'}, children=[
         dbc.Card([
             dbc.CardHeader(html.H5("🔍 Filtros de Análise", className="mb-0")),
@@ -78,46 +66,27 @@ app.layout = dbc.Container([
                 dbc.Row([
                     dbc.Col([
                         html.Label("Período:", className="fw-bold mb-1"),
-                        dcc.Dropdown(
-                            id='filter-month',
-                            options=[],
-                            multi=True,
-                            placeholder="Selecione os meses..."
-                        )
+                        dcc.Dropdown(id='filter-month', options=[], multi=True, placeholder="Selecione os meses...")
                     ], md=3),
                     dbc.Col([
                         html.Label("Rede:", className="fw-bold mb-1"),
-                        dcc.Dropdown(
-                            id='filter-network',
-                            options=[],
-                            multi=True,
-                            placeholder="Selecione as redes..."
-                        )
+                        dcc.Dropdown(id='filter-network', options=[], multi=True, placeholder="Selecione as redes...")
                     ], md=3),
                     dbc.Col([
                         html.Label("Situação:", className="fw-bold mb-1"),
-                        dcc.Dropdown(
-                            id='filter-status',
-                            options=[],
-                            multi=True,
-                            placeholder="Selecione situações..."
-                        )
+                        dcc.Dropdown(id='filter-status', options=[], multi=True, placeholder="Selecione situações...")
                     ], md=3),
                     dbc.Col([
                         html.Label("Ações:", className="fw-bold mb-1"),
-                        html.Div([
-                            dbc.Button("🔄 Limpar", id="clear-filters", color="outline-secondary", size="sm", className="w-100")
-                        ])
+                        dbc.Button("🔄 Limpar", id="clear-filters", color="outline-secondary", size="sm", className="w-100")
                     ], md=3)
                 ])
             ])
         ], className="mb-4")
     ]),
     
-    # KPIs
     html.Div(id='kpi-section'),
     
-    # ABAS
     html.Div(id='tabs-section', style={'display': 'none'}, children=[
         dcc.Tabs(id="main-tabs", value="overview", children=[
             dcc.Tab(label="📈 Visão Geral", value="overview"),
@@ -128,14 +97,10 @@ app.layout = dbc.Container([
         ], className="mb-3")
     ]),
     
-    # Conteúdo das abas
     html.Div(id='tab-content-area')
 
 ], fluid=True, style={'backgroundColor': '#f8f9fa', 'minHeight': '100vh', 'padding': '20px'})
 
-# ========================
-# 📊 FUNÇÕES AUXILIARES
-# ========================
 def generate_kpi_cards(df):
     total_vouchers = len(df)
     used_vouchers = df[df['situacao_voucher'].str.lower().str.contains('utilizado|usado|ativo', na=False)]
@@ -144,30 +109,65 @@ def generate_kpi_cards(df):
     total_value = used_vouchers['valor_dispositivo'].sum()
     avg_ticket = total_value / total_used if total_used > 0 else 0
     conversion_rate = (total_used / total_vouchers * 100) if total_vouchers > 0 else 0
-    unique_stores = df['nome_filial'].nunique()
     
-    def create_kpi_card(title, value, color="primary", subtitle=""):
-        return dbc.Col([
+    total_stores = df['nome_filial'].nunique()
+    active_stores = used_vouchers['nome_filial'].nunique() if not used_vouchers.empty else 0
+    
+    return dbc.Row([
+        dbc.Col([
             dbc.Card([
                 dbc.CardBody([
-                    html.H6(title, className="card-title text-muted mb-2"),
-                    html.H3(value, className=f"text-{color} fw-bold mb-1"),
-                    html.Small(subtitle, className="text-muted") if subtitle else html.Div()
+                    html.H6("Vouchers Totais", className="card-title text-muted mb-2"),
+                    html.H3(f"{total_vouchers:,}", className="text-info fw-bold mb-1")
+                ])
+            ], className="h-100 shadow-sm border-0")
+        ], md=2),
+        dbc.Col([
+            dbc.Card([
+                dbc.CardBody([
+                    html.H6("Vouchers Utilizados", className="card-title text-muted mb-2"),
+                    html.H3(f"{total_used:,}", className="text-success fw-bold mb-1"),
+                    html.Small(f"{conversion_rate:.1f}% conversão", className="text-muted")
+                ])
+            ], className="h-100 shadow-sm border-0")
+        ], md=2),
+        dbc.Col([
+            dbc.Card([
+                dbc.CardBody([
+                    html.H6("Valor Total", className="card-title text-muted mb-2"),
+                    html.H3(f"R$ {total_value:,.2f}", className="text-warning fw-bold mb-1")
+                ])
+            ], className="h-100 shadow-sm border-0")
+        ], md=2),
+        dbc.Col([
+            dbc.Card([
+                dbc.CardBody([
+                    html.H6("Ticket Médio", className="card-title text-muted mb-2"),
+                    html.H3(f"R$ {avg_ticket:,.2f}", className="text-primary fw-bold mb-1")
+                ])
+            ], className="h-100 shadow-sm border-0")
+        ], md=2),
+        dbc.Col([
+            dbc.Card([
+                dbc.CardBody([
+                    html.H6("Lojas Totais", className="card-title text-muted mb-2"),
+                    html.H3(f"{total_stores}", className="text-danger fw-bold mb-1")
+                ])
+            ], className="h-100 shadow-sm border-0")
+        ], md=2),
+        dbc.Col([
+            dbc.Card([
+                dbc.CardBody([
+                    html.H6("Lojas Ativas", className="card-title text-muted mb-2"),
+                    html.H3(f"{active_stores}", className="text-dark fw-bold mb-1"),
+                    html.Small(f"{(active_stores/total_stores*100):.1f}% do total" if total_stores > 0 else "0% do total", className="text-muted")
                 ])
             ], className="h-100 shadow-sm border-0")
         ], md=2)
-    
-    return dbc.Row([
-        create_kpi_card("Vouchers Totais", f"{total_vouchers:,}", "info"),
-        create_kpi_card("Vouchers Utilizados", f"{total_used:,}", "success", f"{conversion_rate:.1f}% conversão"),
-        create_kpi_card("Valor Total", f"R$ {total_value:,.2f}", "warning"),
-        create_kpi_card("Ticket Médio", f"R$ {avg_ticket:,.2f}", "primary"),
-        create_kpi_card("Lojas Ativas", f"{unique_stores}", "danger")
-    ], className="g-3 mb-4")
+    ], className="g-2 mb-4")
 
 def generate_overview_content(df):
     try:
-        # Gráfico de pizza
         status_counts = df['situacao_voucher'].value_counts()
         fig_pie = px.pie(
             values=status_counts.values, 
@@ -177,7 +177,6 @@ def generate_overview_content(df):
         fig_pie.update_traces(textposition='inside', textinfo='percent+label')
         fig_pie.update_layout(height=400)
         
-        # Gráfico de barras
         network_counts = df['nome_rede'].value_counts().head(10)
         fig_bar = px.bar(
             x=network_counts.values,
@@ -187,10 +186,71 @@ def generate_overview_content(df):
         )
         fig_bar.update_layout(yaxis={'categoryorder': 'total ascending'}, height=400)
         
-        return dbc.Row([
-            dbc.Col([dcc.Graph(figure=fig_pie)], md=6),
-            dbc.Col([dcc.Graph(figure=fig_bar)], md=6)
+        used_vouchers = df[df['situacao_voucher'].str.lower().str.contains('utilizado|usado|ativo', na=False)]
+        unique_days = df['data_str'].nunique() if 'data_str' in df.columns else 1
+        
+        network_summary = []
+        for rede in df['nome_rede'].unique():
+            rede_data = df[df['nome_rede'] == rede]
+            rede_used = used_vouchers[used_vouchers['nome_rede'] == rede]
+            
+            vouchers_totais = len(rede_data)
+            vouchers_utilizados = len(rede_used)
+            valor_total = rede_used['valor_dispositivo'].sum()
+            ticket_medio = valor_total / vouchers_utilizados if vouchers_utilizados > 0 else 0
+            lojas_totais = rede_data['nome_filial'].nunique()
+            lojas_ativas = rede_used['nome_filial'].nunique() if not rede_used.empty else 0
+            
+            media_diaria_utilizados = vouchers_utilizados / unique_days if unique_days > 0 else 0
+            projecao_mensal_utilizados = media_diaria_utilizados * 30
+            projecao_valor_total = (valor_total / unique_days * 30) if unique_days > 0 else 0
+            
+            network_summary.append({
+                'Nome_da_Rede': rede,
+                'Vouchers_Totais': vouchers_totais,
+                'Vouchers_Utilizados': vouchers_utilizados,
+                'Valor_Total': valor_total,
+                'Ticket_Medio': ticket_medio,
+                'Lojas_Totais': lojas_totais,
+                'Lojas_Ativas': lojas_ativas,
+                'Media_Diaria_Utilizados': media_diaria_utilizados,
+                'Projecao_Mensal_Utilizados': projecao_mensal_utilizados,
+                'Projecao_Valor_Total': projecao_valor_total
+            })
+        
+        network_summary = sorted(network_summary, key=lambda x: x['Vouchers_Utilizados'], reverse=True)
+        
+        network_table = dash_table.DataTable(
+            data=network_summary,
+            columns=[
+                {"name": "Rede", "id": "Nome_da_Rede"},
+                {"name": "Vouchers Totais", "id": "Vouchers_Totais", "type": "numeric"},
+                {"name": "Vouchers Utilizados", "id": "Vouchers_Utilizados", "type": "numeric"},
+                {"name": "Valor Total", "id": "Valor_Total", "type": "numeric"},
+                {"name": "Ticket Médio", "id": "Ticket_Medio", "type": "numeric"},
+                {"name": "Lojas Totais", "id": "Lojas_Totais", "type": "numeric"},
+                {"name": "Lojas Ativas", "id": "Lojas_Ativas", "type": "numeric"},
+                {"name": "Média Diária Utilizados", "id": "Media_Diaria_Utilizados", "type": "numeric"},
+                {"name": "Projeção Mensal Utilizados", "id": "Projecao_Mensal_Utilizados", "type": "numeric"},
+                {"name": "Projeção Valor Total", "id": "Projecao_Valor_Total", "type": "numeric"}
+            ],
+            style_cell={"textAlign": "left", "fontSize": "11px", "padding": "8px"},
+            style_header={"backgroundColor": "#3498db", "color": "white", "fontWeight": "bold"},
+            sort_action="native",
+            page_size=15
+        )
+        
+        return html.Div([
+            dbc.Row([
+                dbc.Col([dcc.Graph(figure=fig_pie)], md=6),
+                dbc.Col([dcc.Graph(figure=fig_bar)], md=6)
+            ], className="mb-4"),
+            html.Hr(),
+            html.H5("📋 Resumo Detalhado por Rede", className="mb-3"),
+            html.P(f"Análise baseada em {unique_days} dias de dados", className="text-muted mb-3"),
+            network_table
         ])
+        
     except Exception as e:
         return dbc.Alert(f"Erro na visão geral: {str(e)}", color="danger")
 
@@ -199,7 +259,6 @@ def generate_temporal_content(df):
         if df.empty or 'data_str' not in df.columns:
             return dbc.Alert("Dados temporais não disponíveis.", color="warning")
         
-        # Série temporal por dia
         daily_series = df.groupby('data_str').size().reset_index(name='count')
         daily_series['data_str'] = pd.to_datetime(daily_series['data_str'])
         
@@ -222,7 +281,6 @@ def generate_networks_content(df):
         if df.empty or 'nome_rede' not in df.columns:
             return dbc.Alert("Dados de redes não disponíveis.", color="warning")
         
-        # Análise por rede
         network_analysis = df.groupby('nome_rede').agg({
             'imei': 'count',
             'valor_dispositivo': 'sum',
@@ -231,7 +289,6 @@ def generate_networks_content(df):
         network_analysis.columns = ['Total_Vouchers', 'Valor_Total', 'Num_Lojas']
         network_analysis = network_analysis.reset_index()
         
-        # Gráfico
         fig_scatter = px.scatter(
             network_analysis,
             x='Total_Vouchers',
@@ -252,7 +309,6 @@ def generate_rankings_content(df):
         if df.empty:
             return dbc.Alert("Dados não disponíveis para rankings.", color="warning")
         
-        # Ranking das Lojas
         store_stats = df.groupby(['nome_filial', 'nome_rede']).agg({
             'imei': 'count',
             'valor_dispositivo': 'sum'
@@ -270,8 +326,8 @@ def generate_rankings_content(df):
                     {"name": "Total Vouchers", "id": "Total_Vouchers", "type": "numeric"},
                     {"name": "Valor Total", "id": "Valor_Total", "type": "numeric"}
                 ],
-                style_cell={'textAlign': 'left'},
-                style_header={'backgroundColor': '#e74c3c', 'color': 'white'},
+                style_cell={"textAlign": "left"},
+                style_header={"backgroundColor": "#e74c3c", "color": "white"},
                 page_size=25,
                 sort_action="native"
             )
@@ -291,33 +347,107 @@ def generate_projections_content(original_df, filtered_df):
         if df.empty:
             return dbc.Alert("Nenhuma data válida encontrada.", color="warning")
         
-        # Métricas básicas
         last_date = df['criado_em'].max()
-        current_month_data = df[df['criado_em'].dt.month == last_date.month]
-        current_vouchers = len(current_month_data)
+        current_month = last_date.month
+        current_year = last_date.year
         
-        # Cards de projeções
-        projection_cards = dbc.Row([
+        current_month_data = df[
+            (df['criado_em'].dt.month == current_month) & 
+            (df['criado_em'].dt.year == current_year)
+        ]
+        
+        used_vouchers_month = current_month_data[current_month_data['situacao_voucher'].str.lower().str.contains('utilizado|usado|ativo', na=False)]
+        
+        unique_days_month = current_month_data['data_str'].nunique() if 'data_str' in current_month_data.columns else 1
+        days_in_month = pd.Timestamp(current_year, current_month, 1).days_in_month
+        
+        vouchers_totais_mes = len(current_month_data)
+        vouchers_utilizados_mes = len(used_vouchers_month)
+        valor_total_utilizados = used_vouchers_month['valor_dispositivo'].sum() if 'valor_dispositivo' in used_vouchers_month.columns else 0
+        ticket_medio_atual = valor_total_utilizados / vouchers_utilizados_mes if vouchers_utilizados_mes > 0 else 0
+        
+        media_diaria_totais = vouchers_totais_mes / unique_days_month if unique_days_month > 0 else 0
+        media_diaria_utilizados = vouchers_utilizados_mes / unique_days_month if unique_days_month > 0 else 0
+        media_diaria_valor = valor_total_utilizados / unique_days_month if unique_days_month > 0 else 0
+        
+        projecao_vouchers_totais = media_diaria_totais * days_in_month
+        projecao_vouchers_utilizados = media_diaria_utilizados * days_in_month
+        projecao_valor_total = media_diaria_valor * days_in_month
+        projecao_ticket_medio = projecao_valor_total / projecao_vouchers_utilizados if projecao_vouchers_utilizados > 0 else 0
+        
+        metrics_cards = dbc.Row([
             dbc.Col([
                 dbc.Card([
+                    dbc.CardHeader(html.H6("📊 Vouchers Totais", className="mb-0 text-center")),
                     dbc.CardBody([
-                        html.H6("📊 Vouchers do Mês", className="text-muted mb-2"),
-                        html.H4(f"{current_vouchers:,}", className="text-info mb-1")
+                        html.Div([
+                            html.H5("Atual:", className="text-muted mb-1"),
+                            html.H4(f"{vouchers_totais_mes:,}", className="text-info mb-2"),
+                            html.H6("Média Diária:", className="text-muted mb-1"),
+                            html.H5(f"{media_diaria_totais:.1f}", className="text-primary mb-2"),
+                            html.H6("Projeção Mensal:", className="text-muted mb-1"),
+                            html.H4(f"{projecao_vouchers_totais:.0f}", className="text-success")
+                        ], className="text-center")
                     ])
-                ], className="shadow-sm")
+                ], className="h-100 shadow-sm")
+            ], md=3),
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardHeader(html.H6("✅ Vouchers Utilizados", className="mb-0 text-center")),
+                    dbc.CardBody([
+                        html.Div([
+                            html.H5("Atual:", className="text-muted mb-1"),
+                            html.H4(f"{vouchers_utilizados_mes:,}", className="text-info mb-2"),
+                            html.H6("Média Diária:", className="text-muted mb-1"),
+                            html.H5(f"{media_diaria_utilizados:.1f}", className="text-primary mb-2"),
+                            html.H6("Projeção Mensal:", className="text-muted mb-1"),
+                            html.H4(f"{projecao_vouchers_utilizados:.0f}", className="text-success")
+                        ], className="text-center")
+                    ])
+                ], className="h-100 shadow-sm")
+            ], md=3),
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardHeader(html.H6("💰 Valor Total", className="mb-0 text-center")),
+                    dbc.CardBody([
+                        html.Div([
+                            html.H5("Atual:", className="text-muted mb-1"),
+                            html.H4(f"R$ {valor_total_utilizados:,.0f}", className="text-info mb-2"),
+                            html.H6("Média Diária:", className="text-muted mb-1"),
+                            html.H5(f"R$ {media_diaria_valor:,.0f}", className="text-primary mb-2"),
+                            html.H6("Projeção Mensal:", className="text-muted mb-1"),
+                            html.H4(f"R$ {projecao_valor_total:,.0f}", className="text-success")
+                        ], className="text-center")
+                    ])
+                ], className="h-100 shadow-sm")
+            ], md=3),
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardHeader(html.H6("🎯 Ticket Médio", className="mb-0 text-center")),
+                    dbc.CardBody([
+                        html.Div([
+                            html.H5("Atual:", className="text-muted mb-1"),
+                            html.H4(f"R$ {ticket_medio_atual:,.2f}", className="text-info mb-2"),
+                            html.H6("Meta Diária:", className="text-muted mb-1"),
+                            html.H5(f"R$ {ticket_medio_atual:,.2f}", className="text-primary mb-2"),
+                            html.H6("Projeção Mensal:", className="text-muted mb-1"),
+                            html.H4(f"R$ {projecao_ticket_medio:,.2f}", className="text-success")
+                        ], className="text-center")
+                    ])
+                ], className="h-100 shadow-sm")
             ], md=3)
         ], className="mb-4")
         
         return html.Div([
-            html.H4("🔮 Projeções e Análise", className="mb-4"),
-            projection_cards
+            html.H4("🔮 Projeções e Análise Detalhada", className="mb-4"),
+            html.P(f"Período analisado: {unique_days_month} dias de {pd.Timestamp(current_year, current_month, 1).strftime('%B %Y')}", 
+                   className="text-muted mb-4"),
+            metrics_cards
         ])
+        
     except Exception as e:
         return dbc.Alert(f"Erro nas projeções: {str(e)}", color="danger")
 
-# ========================
-# 📥 CALLBACKS
-# ========================
 @app.callback(
     [Output('alerts', 'children'),
      Output('store-data', 'data'),
@@ -337,7 +467,6 @@ def handle_upload(contents, filename):
         return "", {}, True, {'display': 'block'}, {'display': 'none'}, {'display': 'none'}, [], [], []
 
     try:
-        # Decodificar arquivo
         content_type, content_string = contents.split(',')
         decoded = base64.b64decode(content_string)
         df = pd.read_excel(io.BytesIO(decoded))
@@ -346,10 +475,8 @@ def handle_upload(contents, filename):
             return (dbc.Alert("❌ Arquivo vazio!", color="danger"), {}, True, 
                    {'display': 'block'}, {'display': 'none'}, {'display': 'none'}, [], [], [])
 
-        # Normalizar colunas
         df.columns = [unidecode(str(col)).strip().lower().replace(' ', '_').replace('ç', 'c') for col in df.columns]
         
-        # Mapear colunas
         column_mapping = {}
         required_columns = {
             'imei': ['imei', 'device_id'],
@@ -368,10 +495,8 @@ def handle_upload(contents, filename):
                     column_mapping[possible_name] = standard_name
                     break
 
-        # Renomear colunas
         df = df.rename(columns=column_mapping)
 
-        # Processar dados
         if 'criado_em' in df.columns:
             df['criado_em'] = pd.to_datetime(df['criado_em'], errors='coerce')
             df = df.dropna(subset=['criado_em'])
@@ -379,13 +504,11 @@ def handle_upload(contents, filename):
             df['ano'] = df['criado_em'].dt.year
             df['data_str'] = df['criado_em'].dt.strftime('%Y-%m-%d')
 
-        # Limpar dados numéricos
         if 'valor_voucher' in df.columns:
             df['valor_voucher'] = pd.to_numeric(df['valor_voucher'], errors='coerce').fillna(0)
         if 'valor_dispositivo' in df.columns:
             df['valor_dispositivo'] = pd.to_numeric(df['valor_dispositivo'], errors='coerce').fillna(0)
 
-        # Opções para filtros
         month_options = []
         network_options = []
         status_options = []
@@ -408,7 +531,6 @@ def handle_upload(contents, filename):
                 for status in sorted(df['situacao_voucher'].dropna().unique())
             ]
 
-        # Sucesso
         success_alert = dbc.Alert([
             html.I(className="fas fa-check-circle me-2"),
             f"✅ Arquivo '{filename}' processado com sucesso! {len(df)} registros carregados."
@@ -500,8 +622,5 @@ def update_tab_content(active_tab, filtered_data, original_data):
     except Exception as e:
         return dbc.Alert(f"Erro: {str(e)}", color="danger")
 
-# ========================
-# 🔚 Execução
-# ========================
 if __name__ == '__main__':
     app.run(debug=True, port=int(os.environ.get("PORT", 8080)), host='0.0.0.0')
