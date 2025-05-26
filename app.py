@@ -19,7 +19,7 @@ server = app.server
 app.layout = dbc.Container([
     dbc.Row([
         dbc.Col([
-            html.H1("📊 Dashboard Renov - Análise Estratégica de Parceiros", 
+            html.H1("📊 Dashboard de Performance Renov", 
                    className="text-center mb-4", 
                    style={'color': '#2c3e50', 'fontWeight': 'bold'}),
             html.Hr(style={'borderColor': '#3498db', 'borderWidth': '2px'})
@@ -54,7 +54,7 @@ app.layout = dbc.Container([
     html.Div(id='welcome-message', children=[
         dbc.Alert([
             html.I(className="fas fa-cloud-upload-alt fa-3x mb-3"),
-            html.H4("Bem-vindo ao Dashboard Renov!"),
+            html.H4("Bem-vindo ao Dashboard de Performance Renov!"),
             html.P("Carregue uma planilha Excel (.xlsx) para começar a análise estratégica.")
         ], color="info", className="text-center py-5")
     ]),
@@ -289,15 +289,15 @@ def generate_overview_content(df):
         )
         
         return html.Div([
-            # Primeira linha: Pizza + Gráfico total
+            # Primeira linha: Vouchers utilizados + Gráfico total
             dbc.Row([
-                dbc.Col([dcc.Graph(figure=fig_pie)], md=6),
+                dbc.Col([dcc.Graph(figure=fig_bar_used)], md=6),
                 dbc.Col([dcc.Graph(figure=fig_bar_total)], md=6)
             ], className="mb-4"),
             
-            # Segunda linha: Gráfico utilizados + Evolução temporal
+            # Segunda linha: Pizza de situações + Evolução temporal
             dbc.Row([
-                dbc.Col([dcc.Graph(figure=fig_bar_used)], md=6),
+                dbc.Col([dcc.Graph(figure=fig_pie)], md=6),
                 dbc.Col([dcc.Graph(figure=fig_line)], md=6)
             ], className="mb-4"),
             
