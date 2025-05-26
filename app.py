@@ -3,7 +3,7 @@ import base64
 import io
 import pandas as pd
 import dash
-from dash import dcc, html, Input, Output, State, dash_table, callback_context
+from dash import dcc, html, Input, Output, State, dash_table, callback_context, ALL
 import dash_bootstrap_components as dbc
 import plotly.express as px
 import plotly.graph_objects as go
@@ -13,14 +13,11 @@ from unidecode import unidecode
 # ========================
 # 🚀 Inicialização do App
 # ========================
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP], suppress_callback_exceptions=True)
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 server = app.server
 
-# Armazenamento global seguro
-app.df_original = None
-
 # ========================
-# 🎨 Layout Melhorado
+# 🎨 Layout Principal
 # ========================
 app.layout = dbc.Container([
     # Header
@@ -32,14 +29,14 @@ app.layout = dbc.Container([
         ])
     ]),
 
-    # Controles principais
+    # Controles de upload
     dbc.Row([
         dbc.Col([
             dcc.Upload(
                 id="upload-data",
                 children=dbc.Button([
                     html.I(className="fas fa-upload me-2"),
-                    "Importar Planilha Base"
+                    "📁 Importar Planilha Base"
                 ], color="primary", size="lg", className="w-100"),
                 accept=".xlsx,.xls",
                 multiple=False,
@@ -49,51 +46,37 @@ app.layout = dbc.Container([
         dbc.Col([
             dbc.Button([
                 html.I(className="fas fa-file-pdf me-2"),
-                "Exportar PDF"
-            ], id="export-pdf", color="success", size="lg", className="w-100")
+                "🖨️ Exportar PDF"
+            ], id="export-pdf", color="success", size="lg", className="w-100", disabled=True)
         ], md=4)
     ], className="mb-4"),
 
-    # Alertas e mensagens
-    html.Div(id='alert-container'),
+    # Container para alertas
+    html.Div(id='alerts'),
 
-    # Filtros
-    html.Div(id='filtros-container'),
+    # Store para dados
+    dcc.Store(id='store-data'),
+    dcc.Store(id='store-filtered-data'),
 
-    # Store para dados filtrados
-    dcc.Store(id='dados-filtrados'),
-
-    # KPIs
-    html.Div(id='kpi-container', className="mb-4"),
-
-    # Abas para organizar conteúdo
-    dcc.Tabs(id="tabs", value="tab-geral", children=[
-        dcc.Tab(label="📈 Visão Geral", value="tab-geral"),
-        dcc.Tab(label="📅 Análise Temporal", value="tab-temporal"),
-        dcc.Tab(label="🏪 Análise por Rede", value="tab-rede"),
-        dcc.Tab(label="🔄 Fluxo de Processo", value="tab-fluxo"),
-        dcc.Tab(label="🏆 Rankings", value="tab-ranking")
-    ], className="mb-4"),
-
-    # Conteúdo das abas
-    html.Div(id='tab-content'),
+    # Container principal de conteúdo
+    html.Div(id='main-content'),
 
 ], fluid=True, style={'backgroundColor': '#f8f9fa', 'minHeight': '100vh', 'padding': '20px'})
 
 # ========================
-# 📥 CALLBACK PRINCIPAL - Upload e Processamento
+# 📥 CALLBACK DE UPLOAD
 # ========================
 @app.callback(
-    [Output('alert-container', 'children'),
-     Output('filtros-container', 'children'),
-     Output('dados-filtrados', 'data')],
+    [Output('alerts', 'children'),
+     Output('store-data', 'data'),
+     Output('export-pdf', 'disabled')],
     [Input('upload-data', 'contents')],
     [State('upload-data', 'filename')],
     prevent_initial_call=True
 )
-def processar_upload(contents, filename):
+def handle_upload(contents, filename):
     if not contents:
-        return "", "", {}
+        return "", {}, True
 
     try:
         # Decodificar arquivo
@@ -101,162 +84,195 @@ def processar_upload(contents, filename):
         decoded = base64.b64decode(content_string)
         df = pd.read_excel(io.BytesIO(decoded))
 
-        # Normalizar colunas
+        if df.empty:
+            return dbc.Alert("❌ Arquivo vazio!", color="danger"), {}, True
+
+        # Normalizar nomes das colunas
         df.columns = [unidecode(str(col)).strip().lower().replace(' ', '_') for col in df.columns]
         
-        # Verificar colunas obrigatórias
-        colunas_necessarias = {
-            'imei': ['imei'],
-            'criado_em': ['criado_em', 'data_criacao', 'data'],
-            'valor_voucher': ['valor_do_voucher', 'valor_voucher'],
-            'valor_dispositivo': ['valor_do_dispositivo', 'valor_dispositivo'],
-            'situacao_voucher': ['situacao_do_voucher', 'situacao_voucher', 'status'],
-            'nome_vendedor': ['nome_do_vendedor', 'vendedor'],
-            'nome_filial': ['nome_da_filial', 'filial'],
-            'nome_rede': ['nome_da_rede', 'rede']
+        # Mapear colunas essenciais
+        column_mapping = {}
+        required_columns = {
+            'imei': ['imei', 'device_id', 'dispositivo'],
+            'criado_em': ['criado_em', 'data_criacao', 'data', 'created_at'],
+            'valor_voucher': ['valor_do_voucher', 'valor_voucher', 'voucher_value'],
+            'valor_dispositivo': ['valor_do_dispositivo', 'valor_dispositivo', 'device_value'],
+            'situacao_voucher': ['situacao_do_voucher', 'situacao_voucher', 'status_voucher', 'status'],
+            'nome_vendedor': ['nome_do_vendedor', 'vendedor', 'seller_name'],
+            'nome_filial': ['nome_da_filial', 'filial', 'branch_name'],
+            'nome_rede': ['nome_da_rede', 'rede', 'network_name']
         }
 
-        # Mapear colunas
-        mapeamento = {}
-        for col_standard, col_variants in colunas_necessarias.items():
-            encontrada = False
-            for variant in col_variants:
-                if variant in df.columns:
-                    mapeamento[variant] = col_standard
-                    encontrada = True
+        missing_columns = []
+        for standard_name, possible_names in required_columns.items():
+            found = False
+            for possible_name in possible_names:
+                if possible_name in df.columns:
+                    column_mapping[possible_name] = standard_name
+                    found = True
                     break
-            if not encontrada:
-                return (
-                    dbc.Alert(f"❌ Coluna não encontrada: {col_standard}. Variações aceitas: {col_variants}", 
-                             color="danger"),
-                    "", {}
-                )
+            if not found:
+                missing_columns.append(standard_name)
+
+        if missing_columns:
+            return (
+                dbc.Alert(f"❌ Colunas obrigatórias não encontradas: {', '.join(missing_columns)}", color="danger"),
+                {}, True
+            )
 
         # Renomear colunas
-        df = df.rename(columns=mapeamento)
+        df = df.rename(columns=column_mapping)
 
         # Processar dados
         df['criado_em'] = pd.to_datetime(df['criado_em'], errors='coerce')
-        df = df.dropna(subset=['criado_em'])  # Remove linhas com data inválida
+        df = df.dropna(subset=['criado_em'])
         
+        if df.empty:
+            return dbc.Alert("❌ Nenhuma data válida encontrada!", color="danger"), {}, True
+
+        # Adicionar colunas derivadas
         df['mes'] = df['criado_em'].dt.strftime('%b')
         df['mes_num'] = df['criado_em'].dt.month
         df['dia'] = df['criado_em'].dt.day
         df['ano'] = df['criado_em'].dt.year
+        df['data_str'] = df['criado_em'].dt.strftime('%Y-%m-%d')
 
-        # Limpar dados
+        # Limpar dados numéricos
         df['valor_voucher'] = pd.to_numeric(df['valor_voucher'], errors='coerce').fillna(0)
         df['valor_dispositivo'] = pd.to_numeric(df['valor_dispositivo'], errors='coerce').fillna(0)
-
-        # Salvar dados originais
-        app.df_original = df
-
-        # Criar filtros
-        filtros = criar_filtros(df)
 
         # Sucesso
         alert = dbc.Alert([
             html.I(className="fas fa-check-circle me-2"),
-            f"✅ Arquivo '{filename}' carregado com sucesso! {len(df)} registros processados."
+            f"✅ Arquivo '{filename}' processado com sucesso! {len(df)} registros carregados."
         ], color="success", dismissable=True)
 
-        return alert, filtros, df.to_dict('records')
+        return alert, df.to_dict('records'), False
 
     except Exception as e:
         return (
             dbc.Alert(f"❌ Erro ao processar arquivo: {str(e)}", color="danger"),
-            "", {}
+            {}, True
         )
 
 # ========================
-# 🔧 FUNÇÃO PARA CRIAR FILTROS
+# 🎨 CALLBACK PARA CONTEÚDO PRINCIPAL
 # ========================
-def criar_filtros(df):
+@app.callback(
+    Output('main-content', 'children'),
+    [Input('store-data', 'data')],
+    prevent_initial_call=True
+)
+def create_main_layout(data):
+    if not data:
+        return dbc.Alert("📤 Carregue uma planilha para começar", color="info", className="text-center")
+
+    df = pd.DataFrame(data)
+    
+    return html.Div([
+        # Filtros
+        create_filters(df),
+        
+        # KPIs
+        html.Div(id='kpi-section', className="mb-4"),
+        
+        # Abas de conteúdo
+        dcc.Tabs(id="main-tabs", value="overview", children=[
+            dcc.Tab(label="📈 Visão Geral", value="overview"),
+            dcc.Tab(label="📅 Temporal", value="temporal"),
+            dcc.Tab(label="🏪 Redes", value="networks"),
+            dcc.Tab(label="🏆 Rankings", value="rankings")
+        ], className="mb-3"),
+        
+        # Conteúdo das abas
+        html.Div(id='tab-content-area')
+    ])
+
+# ========================
+# 🔍 FUNÇÃO PARA CRIAR FILTROS
+# ========================
+def create_filters(df):
     return dbc.Card([
-        dbc.CardHeader(html.H5("🔍 Filtros", className="mb-0")),
+        dbc.CardHeader(html.H5("🔍 Filtros de Análise", className="mb-0")),
         dbc.CardBody([
             dbc.Row([
                 dbc.Col([
-                    html.Label("Mês:", className="fw-bold"),
+                    html.Label("Período:", className="fw-bold mb-1"),
                     dcc.Dropdown(
-                        id='filtro-mes',
-                        options=[{'label': f"{m} ({df[df['mes']==m]['ano'].iloc[0]})", 'value': m} 
-                                for m in sorted(df['mes'].unique(), 
-                                              key=lambda x: datetime.strptime(x, "%b").month)],
+                        id='filter-month',
+                        options=[
+                            {'label': f"{month} ({year})", 'value': f"{month}_{year}"} 
+                            for month, year in df.groupby(['mes', 'ano']).size().index
+                        ],
                         multi=True,
-                        placeholder="Selecionar meses..."
+                        placeholder="Selecione os meses..."
                     )
                 ], md=3),
                 dbc.Col([
-                    html.Label("Rede:", className="fw-bold"),
+                    html.Label("Rede:", className="fw-bold mb-1"),
                     dcc.Dropdown(
-                        id='filtro-rede',
-                        options=[{'label': r, 'value': r} 
-                                for r in sorted(df['nome_rede'].dropna().unique())],
+                        id='filter-network',
+                        options=[
+                            {'label': network, 'value': network} 
+                            for network in sorted(df['nome_rede'].dropna().unique())
+                        ],
                         multi=True,
-                        placeholder="Selecionar redes..."
+                        placeholder="Selecione as redes..."
                     )
                 ], md=3),
                 dbc.Col([
-                    html.Label("Situação:", className="fw-bold"),
+                    html.Label("Situação:", className="fw-bold mb-1"),
                     dcc.Dropdown(
-                        id='filtro-situacao',
-                        options=[{'label': s, 'value': s} 
-                                for s in sorted(df['situacao_voucher'].dropna().unique())],
+                        id='filter-status',
+                        options=[
+                            {'label': status, 'value': status} 
+                            for status in sorted(df['situacao_voucher'].dropna().unique())
+                        ],
                         multi=True,
-                        placeholder="Selecionar situações..."
+                        placeholder="Selecione situações..."
                     )
                 ], md=3),
                 dbc.Col([
-                    html.Label("Vendedor:", className="fw-bold"),
-                    dcc.Dropdown(
-                        id='filtro-vendedor',
-                        options=[{'label': v, 'value': v} 
-                                for v in sorted(df['nome_vendedor'].dropna().unique())],
-                        multi=True,
-                        placeholder="Selecionar vendedores..."
-                    )
+                    html.Label("Ações:", className="fw-bold mb-1"),
+                    html.Div([
+                        dbc.Button("🔄 Limpar", id="clear-filters", color="outline-secondary", size="sm", className="w-100")
+                    ])
                 ], md=3)
-            ]),
-            dbc.Row([
-                dbc.Col([
-                    dbc.Button("🔄 Limpar Filtros", id="limpar-filtros", 
-                              color="outline-secondary", size="sm", className="mt-2")
-                ])
             ])
         ])
     ], className="mb-4")
 
 # ========================
-# 🔄 CALLBACK PARA FILTROS
+# 🔄 CALLBACK PARA APLICAR FILTROS
 # ========================
 @app.callback(
-    Output('dados-filtrados', 'data'),
-    [Input('filtro-mes', 'value'),
-     Input('filtro-rede', 'value'),
-     Input('filtro-situacao', 'value'),
-     Input('filtro-vendedor', 'value'),
-     Input('limpar-filtros', 'n_clicks')],
+    Output('store-filtered-data', 'data'),
+    [Input('filter-month', 'value'),
+     Input('filter-network', 'value'),
+     Input('filter-status', 'value'),
+     Input('clear-filters', 'n_clicks'),
+     Input('store-data', 'data')],
     prevent_initial_call=True
 )
-def aplicar_filtros(meses, redes, situacoes, vendedores, limpar_clicks):
-    if app.df_original is None:
+def apply_filters(months, networks, statuses, clear_clicks, original_data):
+    if not original_data:
         return {}
     
     ctx = callback_context
-    if ctx.triggered and ctx.triggered[0]['prop_id'] == 'limpar-filtros.n_clicks':
-        return app.df_original.to_dict('records')
+    if ctx.triggered and 'clear-filters' in ctx.triggered[0]['prop_id']:
+        return original_data
     
-    df = app.df_original.copy()
+    df = pd.DataFrame(original_data)
     
-    if meses:
-        df = df[df['mes'].isin(meses)]
-    if redes:
-        df = df[df['nome_rede'].isin(redes)]
-    if situacoes:
-        df = df[df['situacao_voucher'].isin(situacoes)]
-    if vendedores:
-        df = df[df['nome_vendedor'].isin(vendedores)]
+    if months:
+        month_year_filters = [f"{row['mes']}_{row['ano']}" for _, row in df.iterrows()]
+        df = df[[mf in months for mf in month_year_filters]]
+    
+    if networks:
+        df = df[df['nome_rede'].isin(networks)]
+    
+    if statuses:
+        df = df[df['situacao_voucher'].isin(statuses)]
     
     return df.to_dict('records')
 
@@ -264,274 +280,199 @@ def aplicar_filtros(meses, redes, situacoes, vendedores, limpar_clicks):
 # 📊 CALLBACK PARA KPIs
 # ========================
 @app.callback(
-    Output('kpi-container', 'children'),
-    [Input('dados-filtrados', 'data')],
+    Output('kpi-section', 'children'),
+    [Input('store-filtered-data', 'data'),
+     Input('store-data', 'data')],
     prevent_initial_call=True
 )
-def atualizar_kpis(dados):
-    if not dados:
+def update_kpis(filtered_data, original_data):
+    data_to_use = filtered_data if filtered_data else original_data
+    if not data_to_use:
         return ""
     
-    df = pd.DataFrame(dados)
-    return gerar_kpis(df)
+    df = pd.DataFrame(data_to_use)
+    return generate_kpi_cards(df)
 
 # ========================
 # 📈 CALLBACK PARA CONTEÚDO DAS ABAS
 # ========================
 @app.callback(
-    Output('tab-content', 'children'),
-    [Input('tabs', 'value'),
-     Input('dados-filtrados', 'data')],
+    Output('tab-content-area', 'children'),
+    [Input('main-tabs', 'value'),
+     Input('store-filtered-data', 'data'),
+     Input('store-data', 'data')],
     prevent_initial_call=True
 )
-def atualizar_conteudo_aba(tab_ativa, dados):
-    if not dados:
-        return dbc.Alert("📤 Carregue uma planilha para visualizar os dados", color="info")
+def update_tab_content(active_tab, filtered_data, original_data):
+    data_to_use = filtered_data if filtered_data else original_data
+    if not data_to_use:
+        return dbc.Alert("Nenhum dado disponível", color="warning")
     
-    df = pd.DataFrame(dados)
+    df = pd.DataFrame(data_to_use)
     
-    if tab_ativa == "tab-geral":
-        return gerar_visao_geral(df)
-    elif tab_ativa == "tab-temporal":
-        return gerar_analise_temporal(df)
-    elif tab_ativa == "tab-rede":
-        return gerar_analise_rede(df)
-    elif tab_ativa == "tab-fluxo":
-        return gerar_fluxo_processo(df)
-    elif tab_ativa == "tab-ranking":
-        return gerar_rankings(df)
+    if active_tab == "overview":
+        return generate_overview_content(df)
+    elif active_tab == "temporal":
+        return generate_temporal_content(df)
+    elif active_tab == "networks":
+        return generate_networks_content(df)
+    elif active_tab == "rankings":
+        return generate_rankings_content(df)
     
-    return ""
+    return html.Div()
 
 # ========================
-# 📊 FUNÇÕES DE GERAÇÃO DE GRÁFICOS
+# 📊 FUNÇÕES DE GERAÇÃO DE CONTEÚDO
 # ========================
-def gerar_kpis(df):
-    total = len(df)
-    usados = df[df['situacao_voucher'].str.lower().str.contains('utilizado|usado|ativo', na=False)]
-    captados = len(usados)
+def generate_kpi_cards(df):
+    total_vouchers = len(df)
+    used_vouchers = df[df['situacao_voucher'].str.lower().str.contains('utilizado|usado|ativo', na=False)]
+    total_used = len(used_vouchers)
     
-    valor_total = usados['valor_dispositivo'].sum()
-    ticket_medio = valor_total / captados if captados > 0 else 0
-    conversao = (captados / total * 100) if total > 0 else 0
+    total_value = used_vouchers['valor_dispositivo'].sum()
+    avg_ticket = total_value / total_used if total_used > 0 else 0
+    conversion_rate = (total_used / total_vouchers * 100) if total_vouchers > 0 else 0
     
-    # Cálculos de projeção
-    if not df.empty:
-        mes_atual = df['criado_em'].dt.to_period('M').mode().iloc[0] if len(df) > 0 else None
-        if mes_atual:
-            dados_mes = df[df['criado_em'].dt.to_period('M') == mes_atual]
-            dias_transcorridos = dados_mes['dia'].nunique()
-            media_diaria = len(dados_mes) / dias_transcorridos if dias_transcorridos > 0 else 0
-            projecao_mensal = media_diaria * 30
-        else:
-            media_diaria = projecao_mensal = 0
-    else:
-        media_diaria = projecao_mensal = 0
-
-    def criar_card_kpi(titulo, valor, cor="primary", media=None, projecao=None):
-        children = [
-            html.H6(titulo, className="card-title text-muted"),
-            html.H3(valor, className=f"text-{cor} fw-bold")
-        ]
-        if media is not None:
-            children.extend([
-                html.Hr(),
-                html.Small(f"📈 Média diária: {media:,.0f}", className="text-muted"),
-                html.Br(),
-                html.Small(f"📊 Projeção mensal: {projecao:,.0f}", className="text-muted")
-            ])
-        
+    def create_kpi_card(title, value, color="primary"):
         return dbc.Col([
             dbc.Card([
-                dbc.CardBody(children)
-            ], className="h-100 shadow-sm")
+                dbc.CardBody([
+                    html.H6(title, className="card-title text-muted mb-2"),
+                    html.H3(value, className=f"text-{color} fw-bold mb-0")
+                ])
+            ], className="h-100 shadow-sm border-0")
         ], md=2)
-
+    
     return dbc.Row([
-        criar_card_kpi("Vouchers Gerados", f"{total:,}", "info", media_diaria, projecao_mensal),
-        criar_card_kpi("Dispositivos Captados", f"{captados:,}", "success"),
-        criar_card_kpi("Valor Total Captado", f"R$ {valor_total:,.2f}", "warning"),
-        criar_card_kpi("Ticket Médio", f"R$ {ticket_medio:,.2f}", "primary"),
-        criar_card_kpi("Taxa de Conversão", f"{conversao:.1f}%", "danger")
+        create_kpi_card("Vouchers Totais", f"{total_vouchers:,}", "info"),
+        create_kpi_card("Vouchers Utilizados", f"{total_used:,}", "success"),
+        create_kpi_card("Valor Total", f"R$ {total_value:,.2f}", "warning"),
+        create_kpi_card("Ticket Médio", f"R$ {avg_ticket:,.2f}", "primary"),
+        create_kpi_card("Taxa Conversão", f"{conversion_rate:.1f}%", "danger")
     ], className="g-3")
 
-def gerar_visao_geral(df):
-    if df.empty:
-        return dbc.Alert("Nenhum dado disponível", color="warning")
+def generate_overview_content(df):
+    # Gráfico de pizza - distribuição por situação
+    status_counts = df['situacao_voucher'].value_counts()
+    fig_pie = px.pie(
+        values=status_counts.values, 
+        names=status_counts.index,
+        title="📊 Distribuição por Situação"
+    )
+    fig_pie.update_traces(textposition='inside', textinfo='percent+label')
     
-    # Distribuição por situação
-    situacao_counts = df['situacao_voucher'].value_counts()
-    fig_pizza = px.pie(values=situacao_counts.values, names=situacao_counts.index,
-                      title="📊 Distribuição por Situação do Voucher")
-    fig_pizza.update_traces(textposition='inside', textinfo='percent+label')
-    
-    # Top 5 redes
-    top_redes = df['nome_rede'].value_counts().head(5)
-    fig_redes = px.bar(x=top_redes.values, y=top_redes.index, orientation='h',
-                      title="🏪 Top 5 Redes por Volume", labels={'x': 'Quantidade', 'y': 'Rede'})
-    fig_redes.update_layout(yaxis={'categoryorder': 'total ascending'})
-    
-    return dbc.Row([
-        dbc.Col([dcc.Graph(figure=fig_pizza)], md=6),
-        dbc.Col([dcc.Graph(figure=fig_redes)], md=6)
-    ])
-
-def gerar_analise_temporal(df):
-    if df.empty:
-        return dbc.Alert("Nenhum dado disponível", color="warning")
-    
-    # Série temporal diária
-    df['data'] = df['criado_em'].dt.date
-    serie_diaria = df.groupby('data').size().reset_index(name='quantidade')
-    
-    fig_linha = px.line(serie_diaria, x='data', y='quantidade',
-                       title="📅 Vouchers Gerados por Dia")
-    fig_linha.update_traces(line_color='#3498db', line_width=3)
-    
-    # Heatmap por dia da semana e hora (se houver hora)
-    df['dia_semana'] = df['criado_em'].dt.day_name()
-    df['hora'] = df['criado_em'].dt.hour
-    
-    heatmap_data = df.groupby(['dia_semana', 'hora']).size().unstack(fill_value=0)
-    
-    if not heatmap_data.empty:
-        fig_heatmap = px.imshow(heatmap_data.values, 
-                              x=heatmap_data.columns, 
-                              y=heatmap_data.index,
-                              title="🔥 Heatmap: Dia da Semana vs Hora",
-                              labels={'x': 'Hora', 'y': 'Dia da Semana', 'color': 'Quantidade'})
-    else:
-        fig_heatmap = go.Figure().add_annotation(text="Dados insuficientes para heatmap")
+    # Gráfico de barras - top redes
+    network_counts = df['nome_rede'].value_counts().head(8)
+    fig_bar = px.bar(
+        x=network_counts.values,
+        y=network_counts.index,
+        orientation='h',
+        title="🏪 Volume por Rede",
+        labels={'x': 'Quantidade', 'y': 'Rede'}
+    )
+    fig_bar.update_layout(yaxis={'categoryorder': 'total ascending'})
     
     return dbc.Row([
-        dbc.Col([dcc.Graph(figure=fig_linha)], md=12),
-        dbc.Col([dcc.Graph(figure=fig_heatmap)], md=12)
+        dbc.Col([dcc.Graph(figure=fig_pie)], md=6),
+        dbc.Col([dcc.Graph(figure=fig_bar)], md=6)
     ])
 
-def gerar_analise_rede(df):
-    if df.empty:
-        return dbc.Alert("Nenhum dado disponível", color="warning")
+def generate_temporal_content(df):
+    # Série temporal por dia
+    daily_series = df.groupby('data_str').size().reset_index(name='count')
+    daily_series['data_str'] = pd.to_datetime(daily_series['data_str'])
     
-    # Performance por rede
-    rede_stats = df.groupby('nome_rede').agg({
+    fig_line = px.line(
+        daily_series, 
+        x='data_str', 
+        y='count',
+        title="📅 Vouchers por Dia"
+    )
+    fig_line.update_traces(line_color='#3498db', line_width=2)
+    
+    # Distribuição por mês
+    monthly_counts = df.groupby(['mes', 'ano']).size().reset_index(name='count')
+    monthly_counts['periodo'] = monthly_counts['mes'] + '/' + monthly_counts['ano'].astype(str)
+    
+    fig_monthly = px.bar(
+        monthly_counts,
+        x='periodo',
+        y='count',
+        title="📊 Vouchers por Mês"
+    )
+    
+    return dbc.Row([
+        dbc.Col([dcc.Graph(figure=fig_line)], md=12),
+        dbc.Col([dcc.Graph(figure=fig_monthly)], md=12)
+    ])
+
+def generate_networks_content(df):
+    # Análise por rede
+    network_analysis = df.groupby('nome_rede').agg({
         'imei': 'count',
         'valor_dispositivo': 'sum',
         'valor_voucher': 'mean'
     }).round(2)
-    rede_stats.columns = ['Total_Vouchers', 'Valor_Total', 'Ticket_Medio']
-    rede_stats = rede_stats.reset_index()
+    network_analysis.columns = ['Total_Vouchers', 'Valor_Total', 'Ticket_Medio']
+    network_analysis = network_analysis.reset_index().sort_values('Total_Vouchers', ascending=False)
     
-    fig_scatter = px.scatter(rede_stats, x='Total_Vouchers', y='Valor_Total', 
-                           size='Ticket_Medio', hover_name='nome_rede',
-                           title="💰 Performance das Redes: Volume vs Valor")
+    # Gráfico scatter
+    fig_scatter = px.scatter(
+        network_analysis,
+        x='Total_Vouchers',
+        y='Valor_Total',
+        size='Ticket_Medio',
+        hover_name='nome_rede',
+        title="💰 Performance das Redes: Volume vs Valor"
+    )
     
     return dbc.Row([
         dbc.Col([dcc.Graph(figure=fig_scatter)], md=12),
         dbc.Col([
             html.H5("📋 Detalhamento por Rede"),
             dash_table.DataTable(
-                data=rede_stats.to_dict('records'),
-                columns=[{"name": i, "id": i, "type": "numeric", "format": {"specifier": ",.0f"}} 
-                        for i in rede_stats.columns],
+                data=network_analysis.to_dict('records'),
+                columns=[
+                    {"name": "Rede", "id": "nome_rede"},
+                    {"name": "Total Vouchers", "id": "Total_Vouchers", "type": "numeric"},
+                    {"name": "Valor Total", "id": "Valor_Total", "type": "numeric", "format": {"specifier": ",.2f"}},
+                    {"name": "Ticket Médio", "id": "Ticket_Medio", "type": "numeric", "format": {"specifier": ",.2f"}}
+                ],
                 style_cell={'textAlign': 'left'},
                 style_header={'backgroundColor': '#3498db', 'color': 'white', 'fontWeight': 'bold'},
-                style_data_conditional=[
-                    {
-                        'if': {'row_index': 'odd'},
-                        'backgroundColor': '#f8f9fa'
-                    }
-                ],
                 sort_action="native",
                 page_size=10
             )
         ], md=12)
     ])
 
-def gerar_fluxo_processo(df):
-    if df.empty:
-        return dbc.Alert("Nenhum dado disponível", color="warning")
-    
-    # Sankey diagram
-    usados = df[df['situacao_voucher'].str.lower().str.contains('utilizado|usado|ativo', na=False)]
-    
-    total_vouchers = len(df)
-    total_usados = len(usados)
-    
-    labels = ['Vouchers Criados', 'Vouchers Utilizados']
-    sources = [0]
-    targets = [1]
-    values = [total_usados]
-    
-    # Adicionar breakdown por rede
-    rede_counts = usados['nome_rede'].value_counts()
-    for i, (rede, count) in enumerate(rede_counts.items()):
-        labels.append(f"{rede}")
-        sources.append(1)
-        targets.append(len(labels) - 1)
-        values.append(count)
-    
-    fig_sankey = go.Figure(data=[go.Sankey(
-        node=dict(
-            pad=15,
-            thickness=20,
-            line=dict(color="black", width=0.5),
-            label=labels,
-            color="lightblue"
-        ),
-        link=dict(
-            source=sources,
-            target=targets,
-            value=values
-        )
-    )])
-    
-    fig_sankey.update_layout(title_text="🔄 Fluxo do Processo", font_size=12)
-    
-    return dcc.Graph(figure=fig_sankey)
-
-def gerar_rankings(df):
-    if df.empty:
-        return dbc.Alert("Nenhum dado disponível", color="warning")
-    
+def generate_rankings_content(df):
     # Top vendedores
-    vendedor_stats = df.groupby(['nome_vendedor', 'nome_filial', 'nome_rede']).agg({
+    seller_stats = df.groupby(['nome_vendedor', 'nome_filial', 'nome_rede']).agg({
         'imei': 'count',
         'valor_dispositivo': 'sum'
     }).round(2)
-    vendedor_stats.columns = ['Total_Vouchers', 'Valor_Total']
-    vendedor_stats = vendedor_stats.reset_index().sort_values('Total_Vouchers', ascending=False).head(15)
-    
-    # Top filiais
-    filial_stats = df.groupby(['nome_filial', 'nome_rede']).agg({
-        'imei': 'count',
-        'valor_dispositivo': 'sum'
-    }).round(2)
-    filial_stats.columns = ['Total_Vouchers', 'Valor_Total']
-    filial_stats = filial_stats.reset_index().sort_values('Total_Vouchers', ascending=False).head(10)
+    seller_stats.columns = ['Total_Vouchers', 'Valor_Total']
+    seller_stats = seller_stats.reset_index().sort_values('Total_Vouchers', ascending=False).head(15)
     
     return dbc.Row([
         dbc.Col([
             html.H5("🏆 Top 15 Vendedores"),
             dash_table.DataTable(
-                data=vendedor_stats.to_dict('records'),
-                columns=[{"name": i.replace('_', ' ').title(), "id": i} for i in vendedor_stats.columns],
+                data=seller_stats.to_dict('records'),
+                columns=[
+                    {"name": "Vendedor", "id": "nome_vendedor"},
+                    {"name": "Filial", "id": "nome_filial"},
+                    {"name": "Rede", "id": "nome_rede"},
+                    {"name": "Total Vouchers", "id": "Total_Vouchers", "type": "numeric"},
+                    {"name": "Valor Total", "id": "Valor_Total", "type": "numeric", "format": {"specifier": ",.2f"}}
+                ],
                 style_cell={'textAlign': 'left', 'fontSize': '12px'},
                 style_header={'backgroundColor': '#28a745', 'color': 'white', 'fontWeight': 'bold'},
                 page_size=15,
                 sort_action="native"
             )
-        ], md=6),
-        dbc.Col([
-            html.H5("🏪 Top 10 Filiais"),
-            dash_table.DataTable(
-                data=filial_stats.to_dict('records'),
-                columns=[{"name": i.replace('_', ' ').title(), "id": i} for i in filial_stats.columns],
-                style_cell={'textAlign': 'left', 'fontSize': '12px'},
-                style_header={'backgroundColor': '#007bff', 'color': 'white', 'fontWeight': 'bold'},
-                page_size=10,
-                sort_action="native"
-            )
-        ], md=6)
+        ], md=12)
     ])
 
 # ========================
