@@ -90,7 +90,6 @@ app.layout = dbc.Container([
     html.Div(id='tabs-section', style={'display': 'none'}, children=[
         dcc.Tabs(id="main-tabs", value="overview", children=[
             dcc.Tab(label="📈 Visão Geral", value="overview"),
-            dcc.Tab(label="📅 Temporal", value="temporal"),
             dcc.Tab(label="🏪 Redes", value="networks"),
             dcc.Tab(label="🏆 Rankings", value="rankings"),
             dcc.Tab(label="🔮 Projeções", value="projections")
@@ -168,6 +167,7 @@ def generate_kpi_cards(df):
 
 def generate_overview_content(df):
     try:
+        # Gráfico de pizza - distribuição por situação
         status_counts = df['situacao_voucher'].value_counts()
         fig_pie = px.pie(
             values=status_counts.values, 
@@ -177,16 +177,55 @@ def generate_overview_content(df):
         fig_pie.update_traces(textposition='inside', textinfo='percent+label')
         fig_pie.update_layout(height=400)
         
+        # Gráfico de barras - top redes (total)
         network_counts = df['nome_rede'].value_counts().head(10)
-        fig_bar = px.bar(
+        fig_bar_total = px.bar(
             x=network_counts.values,
             y=network_counts.index,
             orientation='h',
-            title="🏪 Volume por Rede (Top 10)"
+            title="🏪 Volume por Rede (Top 10)",
+            color=network_counts.values,
+            color_continuous_scale='blues'
         )
-        fig_bar.update_layout(yaxis={'categoryorder': 'total ascending'}, height=400)
+        fig_bar_total.update_layout(yaxis={'categoryorder': 'total ascending'}, height=400)
         
+        # NOVO: Gráfico de barras - top redes (apenas utilizados)
         used_vouchers = df[df['situacao_voucher'].str.lower().str.contains('utilizado|usado|ativo', na=False)]
+        network_used_counts = used_vouchers['nome_rede'].value_counts().head(10)
+        fig_bar_used = px.bar(
+            x=network_used_counts.values,
+            y=network_used_counts.index,
+            orientation='h',
+            title="✅ Volume por Rede Utilizados (Top 10)",
+            color=network_used_counts.values,
+            color_continuous_scale='greens'
+        )
+        fig_bar_used.update_layout(yaxis={'categoryorder': 'total ascending'}, height=400)
+        
+        # Gráfico de evolução diária (movido da aba Temporal)
+        if 'data_str' in df.columns:
+            daily_series = df.groupby('data_str').size().reset_index(name='count')
+            daily_series['data_str'] = pd.to_datetime(daily_series['data_str'])
+            
+            fig_line = px.line(
+                daily_series, 
+                x='data_str', 
+                y='count',
+                title="📅 Evolução Diária de Vouchers",
+                labels={'data_str': 'Data', 'count': 'Quantidade de Vouchers'}
+            )
+            fig_line.update_traces(line_color='#3498db', line_width=3)
+            fig_line.update_layout(height=350)
+        else:
+            fig_line = go.Figure()
+            fig_line.add_annotation(
+                text="Dados temporais não disponíveis",
+                x=0.5, y=0.5, xref="paper", yref="paper",
+                showarrow=False, font_size=16
+            )
+            fig_line.update_layout(height=350, title="Evolução Diária")
+        
+        # Análise por rede para tabela
         unique_days = df['data_str'].nunique() if 'data_str' in df.columns else 1
         
         network_summary = []
@@ -207,44 +246,62 @@ def generate_overview_content(df):
             
             network_summary.append({
                 'Nome_da_Rede': rede,
-                'Vouchers_Totais': vouchers_totais,
-                'Vouchers_Utilizados': vouchers_utilizados,
-                'Valor_Total': valor_total,
-                'Ticket_Medio': ticket_medio,
-                'Lojas_Totais': lojas_totais,
-                'Lojas_Ativas': lojas_ativas,
-                'Media_Diaria_Utilizados': media_diaria_utilizados,
-                'Projecao_Mensal_Utilizados': projecao_mensal_utilizados,
-                'Projecao_Valor_Total': projecao_valor_total
+                'Vouchers_Totais': int(vouchers_totais),
+                'Vouchers_Utilizados': int(vouchers_utilizados),
+                'Valor_Total': f"R$ {valor_total:,.0f}",
+                'Ticket_Medio': f"R$ {ticket_medio:,.0f}",
+                'Lojas_Totais': int(lojas_totais),
+                'Lojas_Ativas': int(lojas_ativas),
+                'Media_Diaria_Utilizados': round(media_diaria_utilizados, 0),
+                'Projecao_Mensal_Utilizados': int(projecao_mensal_utilizados),
+                'Projecao_Valor_Total': f"R$ {projecao_valor_total:,.0f}"
             })
         
-        network_summary = sorted(network_summary, key=lambda x: x['Vouchers_Utilizados'], reverse=True)
+        # Ordenar por vouchers utilizados (valor numérico para ordenação)
+        network_summary = sorted(network_summary, key=lambda x: int(x['Vouchers_Utilizados']), reverse=True)
         
+        # Tabela com formatação corrigida
         network_table = dash_table.DataTable(
             data=network_summary,
             columns=[
                 {"name": "Rede", "id": "Nome_da_Rede"},
                 {"name": "Vouchers Totais", "id": "Vouchers_Totais", "type": "numeric"},
                 {"name": "Vouchers Utilizados", "id": "Vouchers_Utilizados", "type": "numeric"},
-                {"name": "Valor Total", "id": "Valor_Total", "type": "numeric"},
-                {"name": "Ticket Médio", "id": "Ticket_Medio", "type": "numeric"},
+                {"name": "Valor Total", "id": "Valor_Total"},
+                {"name": "Ticket Médio", "id": "Ticket_Medio"},
                 {"name": "Lojas Totais", "id": "Lojas_Totais", "type": "numeric"},
                 {"name": "Lojas Ativas", "id": "Lojas_Ativas", "type": "numeric"},
                 {"name": "Média Diária Utilizados", "id": "Media_Diaria_Utilizados", "type": "numeric"},
                 {"name": "Projeção Mensal Utilizados", "id": "Projecao_Mensal_Utilizados", "type": "numeric"},
-                {"name": "Projeção Valor Total", "id": "Projecao_Valor_Total", "type": "numeric"}
+                {"name": "Projeção Valor Total", "id": "Projecao_Valor_Total"}
             ],
             style_cell={"textAlign": "left", "fontSize": "11px", "padding": "8px"},
             style_header={"backgroundColor": "#3498db", "color": "white", "fontWeight": "bold"},
+            style_data_conditional=[
+                {
+                    "if": {"row_index": 0},
+                    "backgroundColor": "#e8f5e8",
+                    "color": "black"
+                }
+            ],
             sort_action="native",
             page_size=15
         )
         
         return html.Div([
+            # Primeira linha: Pizza + Gráfico total
             dbc.Row([
                 dbc.Col([dcc.Graph(figure=fig_pie)], md=6),
-                dbc.Col([dcc.Graph(figure=fig_bar)], md=6)
+                dbc.Col([dcc.Graph(figure=fig_bar_total)], md=6)
             ], className="mb-4"),
+            
+            # Segunda linha: Gráfico utilizados + Evolução temporal
+            dbc.Row([
+                dbc.Col([dcc.Graph(figure=fig_bar_used)], md=6),
+                dbc.Col([dcc.Graph(figure=fig_line)], md=6)
+            ], className="mb-4"),
+            
+            # Tabela resumo das redes
             html.Hr(),
             html.H5("📋 Resumo Detalhado por Rede", className="mb-3"),
             html.P(f"Análise baseada em {unique_days} dias de dados", className="text-muted mb-3"),
@@ -253,28 +310,6 @@ def generate_overview_content(df):
         
     except Exception as e:
         return dbc.Alert(f"Erro na visão geral: {str(e)}", color="danger")
-
-def generate_temporal_content(df):
-    try:
-        if df.empty or 'data_str' not in df.columns:
-            return dbc.Alert("Dados temporais não disponíveis.", color="warning")
-        
-        daily_series = df.groupby('data_str').size().reset_index(name='count')
-        daily_series['data_str'] = pd.to_datetime(daily_series['data_str'])
-        
-        fig_line = px.line(
-            daily_series, 
-            x='data_str', 
-            y='count',
-            title="📅 Evolução Diária de Vouchers"
-        )
-        fig_line.update_layout(height=400)
-        
-        return dbc.Row([
-            dbc.Col([dcc.Graph(figure=fig_line)], md=12)
-        ])
-    except Exception as e:
-        return dbc.Alert(f"Erro na análise temporal: {str(e)}", color="danger")
 
 def generate_networks_content(df):
     try:
@@ -608,8 +643,6 @@ def update_tab_content(active_tab, filtered_data, original_data):
         
         if active_tab == "overview":
             return generate_overview_content(df)
-        elif active_tab == "temporal":
-            return generate_temporal_content(df)
         elif active_tab == "networks":
             return generate_networks_content(df)
         elif active_tab == "rankings":
