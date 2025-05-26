@@ -3,7 +3,7 @@ import base64
 import io
 import pandas as pd
 import dash
-from dash import dcc, html, Input, Output, State, dash_table, callback_context, MATCH, ALL
+from dash import dcc, html, Input, Output, State, dash_table, callback_context
 import dash_bootstrap_components as dbc
 import plotly.express as px
 import plotly.graph_objects as go
@@ -17,7 +17,7 @@ app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 server = app.server
 
 # ========================
-# 🎨 Layout Principal
+# 🎨 Layout Principal - TODOS OS IDs PRESENTES DESDE O INÍCIO
 # ========================
 app.layout = dbc.Container([
     # Header
@@ -58,9 +58,8 @@ app.layout = dbc.Container([
     dcc.Store(id='store-data'),
     dcc.Store(id='store-filtered-data'),
 
-    # Container principal de conteúdo - SEMPRE presente no layout
-    html.Div(id='main-content', children=[
-        # Estado inicial - aguardando upload
+    # Estado inicial - aguardando upload
+    html.Div(id='welcome-message', children=[
         dbc.Alert([
             html.I(className="fas fa-cloud-upload-alt fa-3x mb-3"),
             html.H4("Bem-vindo ao Dashboard de Resultados!"),
@@ -68,35 +67,88 @@ app.layout = dbc.Container([
         ], color="info", className="text-center py-5")
     ]),
 
-    # Filtros - inicialmente vazios
-    html.Div(id='filters-container'),
+    # FILTROS - SEMPRE PRESENTES NO LAYOUT (inicialmente ocultos)
+    html.Div(id='filters-section', style={'display': 'none'}, children=[
+        dbc.Card([
+            dbc.CardHeader(html.H5("🔍 Filtros de Análise", className="mb-0")),
+            dbc.CardBody([
+                dbc.Row([
+                    dbc.Col([
+                        html.Label("Período:", className="fw-bold mb-1"),
+                        dcc.Dropdown(
+                            id='filter-month',
+                            options=[],
+                            multi=True,
+                            placeholder="Selecione os meses..."
+                        )
+                    ], md=3),
+                    dbc.Col([
+                        html.Label("Rede:", className="fw-bold mb-1"),
+                        dcc.Dropdown(
+                            id='filter-network',
+                            options=[],
+                            multi=True,
+                            placeholder="Selecione as redes..."
+                        )
+                    ], md=3),
+                    dbc.Col([
+                        html.Label("Situação:", className="fw-bold mb-1"),
+                        dcc.Dropdown(
+                            id='filter-status',
+                            options=[],
+                            multi=True,
+                            placeholder="Selecione situações..."
+                        )
+                    ], md=3),
+                    dbc.Col([
+                        html.Label("Ações:", className="fw-bold mb-1"),
+                        html.Div([
+                            dbc.Button("🔄 Limpar", id="clear-filters", color="outline-secondary", size="sm", className="w-100")
+                        ])
+                    ], md=3)
+                ])
+            ])
+        ], className="mb-4")
+    ]),
     
-    # KPIs - inicialmente vazios  
+    # KPIs - sempre presente (inicialmente vazio)
     html.Div(id='kpi-section'),
     
-    # Abas - inicialmente vazias
-    html.Div(id='tabs-container'),
+    # ABAS - SEMPRE PRESENTES NO LAYOUT (inicialmente ocultas)
+    html.Div(id='tabs-section', style={'display': 'none'}, children=[
+        dcc.Tabs(id="main-tabs", value="overview", children=[
+            dcc.Tab(label="📈 Visão Geral", value="overview"),
+            dcc.Tab(label="📅 Temporal", value="temporal"),
+            dcc.Tab(label="🏪 Redes", value="networks"),
+            dcc.Tab(label="🏆 Rankings", value="rankings")
+        ], className="mb-3")
+    ]),
     
-    # Conteúdo das abas - inicialmente vazio
+    # Conteúdo das abas - sempre presente (inicialmente vazio)
     html.Div(id='tab-content-area')
 
 ], fluid=True, style={'backgroundColor': '#f8f9fa', 'minHeight': '100vh', 'padding': '20px'})
 
 # ========================
-# 📥 CALLBACK DE UPLOAD
+# 📥 CALLBACK DE UPLOAD - Processa dados e popula filtros
 # ========================
 @app.callback(
     [Output('alerts', 'children'),
      Output('store-data', 'data'),
      Output('export-pdf', 'disabled'),
-     Output('main-content', 'children')],
+     Output('welcome-message', 'style'),
+     Output('filters-section', 'style'),
+     Output('tabs-section', 'style'),
+     Output('filter-month', 'options'),
+     Output('filter-network', 'options'),
+     Output('filter-status', 'options')],
     [Input('upload-data', 'contents')],
     [State('upload-data', 'filename')],
     prevent_initial_call=True
 )
 def handle_upload(contents, filename):
     if not contents:
-        return "", {}, True, dash.no_update
+        return "", {}, True, {'display': 'block'}, {'display': 'none'}, {'display': 'none'}, [], [], []
 
     try:
         # Decodificar arquivo
@@ -105,7 +157,8 @@ def handle_upload(contents, filename):
         df = pd.read_excel(io.BytesIO(decoded))
 
         if df.empty:
-            return dbc.Alert("❌ Arquivo vazio!", color="danger"), {}, True, dash.no_update
+            return (dbc.Alert("❌ Arquivo vazio!", color="danger"), {}, True, 
+                   {'display': 'block'}, {'display': 'none'}, {'display': 'none'}, [], [], [])
 
         # Normalizar nomes das colunas
         df.columns = [unidecode(str(col)).strip().lower().replace(' ', '_') for col in df.columns]
@@ -137,7 +190,7 @@ def handle_upload(contents, filename):
         if missing_columns:
             return (
                 dbc.Alert(f"❌ Colunas obrigatórias não encontradas: {', '.join(missing_columns)}", color="danger"),
-                {}, True, dash.no_update
+                {}, True, {'display': 'block'}, {'display': 'none'}, {'display': 'none'}, [], [], []
             )
 
         # Renomear colunas
@@ -148,7 +201,8 @@ def handle_upload(contents, filename):
         df = df.dropna(subset=['criado_em'])
         
         if df.empty:
-            return dbc.Alert("❌ Nenhuma data válida encontrada!", color="danger"), {}, True, dash.no_update
+            return (dbc.Alert("❌ Nenhuma data válida encontrada!", color="danger"), {}, True,
+                   {'display': 'block'}, {'display': 'none'}, {'display': 'none'}, [], [], [])
 
         # Adicionar colunas derivadas
         df['mes'] = df['criado_em'].dt.strftime('%b')
@@ -161,124 +215,39 @@ def handle_upload(contents, filename):
         df['valor_voucher'] = pd.to_numeric(df['valor_voucher'], errors='coerce').fillna(0)
         df['valor_dispositivo'] = pd.to_numeric(df['valor_dispositivo'], errors='coerce').fillna(0)
 
-        # Criar o layout principal após upload bem-sucedido
-        success_layout = html.Div([
-            dbc.Alert([
-                html.I(className="fas fa-check-circle me-2"),
-                f"✅ Arquivo '{filename}' processado com sucesso! {len(df)} registros carregados."
-            ], color="success", dismissable=True),
-            
-            html.H5("🎯 Dados carregados e prontos para análise!", className="text-center text-success mb-4")
-        ])
+        # Preparar opções para filtros
+        month_options = [
+            {'label': f"{month} ({year})", 'value': f"{month}_{year}"} 
+            for month, year in df.groupby(['mes', 'ano']).size().index
+        ]
+        
+        network_options = [
+            {'label': network, 'value': network} 
+            for network in sorted(df['nome_rede'].dropna().unique())
+        ]
+        
+        status_options = [
+            {'label': status, 'value': status} 
+            for status in sorted(df['situacao_voucher'].dropna().unique())
+        ]
 
         # Sucesso
-        return "", df.to_dict('records'), False, success_layout
+        success_alert = dbc.Alert([
+            html.I(className="fas fa-check-circle me-2"),
+            f"✅ Arquivo '{filename}' processado com sucesso! {len(df)} registros carregados."
+        ], color="success", dismissable=True)
+
+        return (success_alert, df.to_dict('records'), False,
+               {'display': 'none'},  # ocultar welcome
+               {'display': 'block'}, # mostrar filtros
+               {'display': 'block'}, # mostrar abas
+               month_options, network_options, status_options)
 
     except Exception as e:
         return (
             dbc.Alert(f"❌ Erro ao processar arquivo: {str(e)}", color="danger"),
-            {}, True, dash.no_update
+            {}, True, {'display': 'block'}, {'display': 'none'}, {'display': 'none'}, [], [], []
         )
-
-# ========================
-# 🔍 CALLBACK PARA CRIAR FILTROS
-# ========================
-@app.callback(
-    Output('filters-container', 'children'),
-    [Input('store-data', 'data')],
-    prevent_initial_call=True
-)
-def create_filters_layout(data):
-    if not data:
-        return html.Div()
-    
-    df = pd.DataFrame(data)
-    
-    return dbc.Card([
-        dbc.CardHeader(html.H5("🔍 Filtros de Análise", className="mb-0")),
-        dbc.CardBody([
-            dbc.Row([
-                dbc.Col([
-                    html.Label("Período:", className="fw-bold mb-1"),
-                    dcc.Dropdown(
-                        id='filter-month',
-                        options=[
-                            {'label': f"{month} ({year})", 'value': f"{month}_{year}"} 
-                            for month, year in df.groupby(['mes', 'ano']).size().index
-                        ],
-                        multi=True,
-                        placeholder="Selecione os meses..."
-                    )
-                ], md=3),
-                dbc.Col([
-                    html.Label("Rede:", className="fw-bold mb-1"),
-                    dcc.Dropdown(
-                        id='filter-network',
-                        options=[
-                            {'label': network, 'value': network} 
-                            for network in sorted(df['nome_rede'].dropna().unique())
-                        ],
-                        multi=True,
-                        placeholder="Selecione as redes..."
-                    )
-                ], md=3),
-                dbc.Col([
-                    html.Label("Situação:", className="fw-bold mb-1"),
-                    dcc.Dropdown(
-                        id='filter-status',
-                        options=[
-                            {'label': status, 'value': status} 
-                            for status in sorted(df['situacao_voucher'].dropna().unique())
-                        ],
-                        multi=True,
-                        placeholder="Selecione situações..."
-                    )
-                ], md=3),
-                dbc.Col([
-                    html.Label("Ações:", className="fw-bold mb-1"),
-                    html.Div([
-                        dbc.Button("🔄 Limpar", id="clear-filters", color="outline-secondary", size="sm", className="w-100")
-                    ])
-                ], md=3)
-            ])
-        ])
-    ], className="mb-4")
-
-# ========================
-# 📊 CALLBACK PARA KPIs
-# ========================
-@app.callback(
-    Output('kpi-section', 'children'),
-    [Input('store-data', 'data'),
-     Input('store-filtered-data', 'data')],
-    prevent_initial_call=True
-)
-def update_kpis(original_data, filtered_data):
-    data_to_use = filtered_data if filtered_data else original_data
-    if not data_to_use:
-        return html.Div()
-    
-    df = pd.DataFrame(data_to_use)
-    return generate_kpi_cards(df)
-
-# ========================
-# 🎯 CALLBACK PARA CRIAR ABAS
-# ========================
-@app.callback(
-    Output('tabs-container', 'children'),
-    [Input('store-data', 'data')],
-    prevent_initial_call=True
-)
-def create_tabs_layout(data):
-    if not data:
-        return html.Div()
-    
-    return dcc.Tabs(id="main-tabs", value="overview", children=[
-        dcc.Tab(label="📈 Visão Geral", value="overview"),
-        dcc.Tab(label="📅 Temporal", value="temporal"),
-        dcc.Tab(label="🏪 Redes", value="networks"),
-        dcc.Tab(label="🏆 Rankings", value="rankings")
-    ], className="mb-3")
 
 # ========================
 # 🔄 CALLBACK PARA APLICAR FILTROS
@@ -315,13 +284,30 @@ def apply_filters(months, networks, statuses, clear_clicks, original_data):
     return df.to_dict('records')
 
 # ========================
+# 📊 CALLBACK PARA KPIs
+# ========================
+@app.callback(
+    Output('kpi-section', 'children'),
+    [Input('store-data', 'data'),
+     Input('store-filtered-data', 'data')],
+    prevent_initial_call=True
+)
+def update_kpis(original_data, filtered_data):
+    data_to_use = filtered_data if filtered_data else original_data
+    if not data_to_use:
+        return html.Div()
+    
+    df = pd.DataFrame(data_to_use)
+    return generate_kpi_cards(df)
+
+# ========================
 # 📈 CALLBACK PARA CONTEÚDO DAS ABAS
 # ========================
 @app.callback(
     Output('tab-content-area', 'children'),
-    [Input('main-tabs', 'value')],
-    [State('store-filtered-data', 'data'),
-     State('store-data', 'data')],
+    [Input('main-tabs', 'value'),
+     Input('store-filtered-data', 'data'),
+     Input('store-data', 'data')],
     prevent_initial_call=True
 )
 def update_tab_content(active_tab, filtered_data, original_data):
