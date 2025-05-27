@@ -13,7 +13,7 @@ def create_login_layout():
                                 html.H3("Login", className="text-center mb-4"),
                                 dbc.Form([
                                     dbc.Input(
-                                        type="text",
+                                        type="email",
                                         id="login-username",
                                         placeholder="Email",
                                         className="mb-3"
@@ -28,8 +28,7 @@ def create_login_layout():
                                         "Entrar",
                                         id="login-button",
                                         color="primary",
-                                        className="w-100 mb-3",
-                                        n_clicks=0
+                                        className="w-100 mb-3"
                                     ),
                                     html.Div([
                                         dbc.Button(
@@ -91,8 +90,7 @@ def create_register_layout():
                                         "Registrar",
                                         id="register-button",
                                         color="success",
-                                        className="w-100 mb-3",
-                                        n_clicks=0
+                                        className="w-100 mb-3"
                                     ),
                                     html.Div([
                                         dbc.Button(
