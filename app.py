@@ -33,10 +33,9 @@ db = UserDatabase()
 # ========================
 app.layout = html.Div([
     dcc.Location(id='url', refresh=False),
-    dcc.Store(id='session-store', storage_type='session'),
+    dcc.Store(id='session-store', storage_type='session', data={'authenticated': False}),
     html.Div(id='page-content'),
-    html.Div(id='approval-status'),
-    dcc.Store(id='user-id-to-approve', storage_type='memory')
+    html.Div(id='approval-status')
 ])
 
 # ========================
@@ -65,7 +64,8 @@ def create_dashboard_layout(is_super_admin=False):
         dbc.Collapse([
             create_admin_approval_layout()
         ], id="approval-section", is_open=False),
-        # ... rest of the dashboard layout ...
+        # Resto do layout do dashboard
+        html.Div(id='dashboard-content')
     ], fluid=True, style={'backgroundColor': '#f8f9fa', 'minHeight': '100vh', 'padding': '20px'})
 
 # ========================
@@ -787,15 +787,23 @@ app.clientside_callback(
 # 🔄 Callbacks de Autenticação
 # ========================
 @app.callback(
-    [Output('page-content', 'children'),
-     Output('session-store', 'data')],
-    [Input('url', 'pathname'),
-     Input('login-button', 'n_clicks'),
+    Output('page-content', 'children'),
+    [Input('url', 'pathname')],
+    [State('session-store', 'data')]
+)
+def display_page(pathname, session_data):
+    if not session_data or not session_data.get('authenticated'):
+        return create_login_layout()
+    return create_dashboard_layout(session_data.get('is_super_admin', False))
+
+@app.callback(
+    [Output('session-store', 'data'),
+     Output('approval-status', 'children')],
+    [Input('login-button', 'n_clicks'),
      Input('register-button', 'n_clicks'),
      Input('logout-button', 'n_clicks'),
      Input('show-register', 'n_clicks'),
-     Input('show-login', 'n_clicks'),
-     Input('show-approvals', 'n_clicks')],
+     Input('show-login', 'n_clicks')],
     [State('login-username', 'value'),
      State('login-password', 'value'),
      State('register-username', 'value'),
@@ -804,85 +812,102 @@ app.clientside_callback(
      State('register-confirm-password', 'value'),
      State('session-store', 'data')]
 )
-def handle_authentication(pathname, login_clicks, register_clicks, logout_clicks, 
-                        show_register_clicks, show_login_clicks, show_approvals_clicks,
-                        username, password, reg_username, reg_email, 
+def handle_authentication(login_clicks, register_clicks, logout_clicks,
+                        show_register_clicks, show_login_clicks,
+                        username, password, reg_username, reg_email,
                         reg_password, reg_confirm_password, session_data):
     ctx = callback_context
-    triggered_id = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else None
+    if not ctx.triggered:
+        return session_data, ""
     
-    if not session_data:
-        session_data = {'authenticated': False}
+    triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
     
-    # Logout
     if triggered_id == 'logout-button':
-        return create_login_layout(), {'authenticated': False}
+        return {'authenticated': False}, ""
     
-    # Mostrar tela de registro
     if triggered_id == 'show-register':
-        return create_register_layout(), session_data
+        return session_data, create_register_layout()
     
-    # Mostrar tela de login
     if triggered_id == 'show-login':
-        return create_login_layout(), session_data
+        return session_data, create_login_layout()
     
-    # Mostrar aprovações (apenas para super admin)
-    if triggered_id == 'show-approvals' and session_data.get('is_super_admin'):
-        return create_admin_approval_layout(), session_data
-    
-    # Tentativa de login
     if triggered_id == 'login-button' and username and password:
         user = db.verify_user(username, password)
         if user:
             if not user['is_approved']:
-                return html.Div([
-                    create_login_layout(),
-                    dbc.Alert("Sua conta ainda está pendente de aprovação.", color="warning", className="mt-3")
-                ]), session_data
-            session_data = {
+                return session_data, dbc.Alert(
+                    "Sua conta ainda está pendente de aprovação.",
+                    color="warning",
+                    className="mt-3"
+                )
+            return {
                 'authenticated': True,
                 'username': user['username'],
                 'email': user['email'],
                 'is_admin': user['is_admin'],
                 'is_super_admin': user['is_super_admin']
-            }
-            return create_dashboard_layout(user['is_super_admin']), session_data
-        else:
-            return html.Div([
-                create_login_layout(),
-                dbc.Alert("Usuário ou senha inválidos.", color="danger", className="mt-3")
-            ]), session_data
+            }, ""
+        return session_data, dbc.Alert(
+            "Usuário ou senha inválidos.",
+            color="danger",
+            className="mt-3"
+        )
     
-    # Tentativa de registro
     if triggered_id == 'register-button':
         if not all([reg_username, reg_email, reg_password, reg_confirm_password]):
-            return html.Div([
-                create_register_layout(),
-                dbc.Alert("Todos os campos são obrigatórios.", color="danger", className="mt-3")
-            ]), session_data
-            
+            return session_data, dbc.Alert(
+                "Todos os campos são obrigatórios.",
+                color="danger",
+                className="mt-3"
+            )
+        
         if reg_password != reg_confirm_password:
-            return html.Div([
-                create_register_layout(),
-                dbc.Alert("As senhas não coincidem.", color="danger", className="mt-3")
-            ]), session_data
-            
+            return session_data, dbc.Alert(
+                "As senhas não coincidem.",
+                color="danger",
+                className="mt-3"
+            )
+        
         if db.create_user(reg_username, reg_password, reg_email):
-            return html.Div([
-                create_login_layout(),
-                dbc.Alert("Conta criada com sucesso! Aguarde a aprovação do administrador.", color="success", className="mt-3")
-            ]), session_data
-        else:
-            return html.Div([
-                create_register_layout(),
-                dbc.Alert("Usuário ou email já existem.", color="danger", className="mt-3")
-            ]), session_data
+            return session_data, dbc.Alert(
+                "Conta criada com sucesso! Aguarde a aprovação do administrador.",
+                color="success",
+                className="mt-3"
+            )
+        return session_data, dbc.Alert(
+            "Usuário ou email já existem.",
+            color="danger",
+            className="mt-3"
+        )
     
-    # Verificação de autenticação para outras páginas
-    if session_data.get('authenticated'):
-        return create_dashboard_layout(session_data.get('is_super_admin', False)), session_data
+    return session_data, ""
+
+@app.callback(
+    Output('approval-section', 'is_open'),
+    [Input('show-approvals', 'n_clicks')],
+    [State('approval-section', 'is_open')]
+)
+def toggle_approval_section(n_clicks, is_open):
+    if n_clicks:
+        return not is_open
+    return is_open
+
+@app.callback(
+    Output('dashboard-content', 'children'),
+    [Input('session-store', 'data')]
+)
+def update_dashboard_content(session_data):
+    if not session_data or not session_data.get('authenticated'):
+        return ""
     
-    return create_login_layout(), session_data
+    return html.Div([
+        dbc.Alert(
+            f"Bem-vindo, {session_data.get('username')}!",
+            color="success",
+            className="mb-4"
+        ),
+        # Aqui você pode adicionar o resto do conteúdo do dashboard
+    ])
 
 # ========================
 # 👥 Callbacks de Aprovação de Usuários
