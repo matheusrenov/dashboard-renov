@@ -35,36 +35,41 @@ app.layout = html.Div([
     dcc.Location(id='url', refresh=False),
     dcc.Store(id='session-store', storage_type='session', data={'authenticated': False}),
     html.Div(id='page-content'),
-    html.Div(id='auth-status')  # Renomeado para evitar conflito
+    html.Div(id='auth-status')
 ])
 
 # ========================
 # 📊 Layout do Dashboard
 # ========================
 def create_dashboard_layout(is_super_admin=False):
-    header = dbc.Row([
-        dbc.Col([
-            html.H1("📊 Dashboard de Performance Renov", 
-                   className="text-center mb-4", 
-                   style={'color': '#2c3e50', 'fontWeight': 'bold'}),
-        ], width=8),
-        dbc.Col([
-            html.Div([
-                dbc.Button("Aprovar Usuários", id="show-approvals", 
-                          color="success", className="me-2",
-                          style={'display': 'inline' if is_super_admin else 'none'}),
-                dbc.Button("Sair", id="logout-button", color="danger")
-            ], className="d-flex justify-content-end")
-        ], width=4),
-        html.Hr(style={'borderColor': '#3498db', 'borderWidth': '2px'})
-    ])
-
     return dbc.Container([
-        header,
-        dbc.Collapse([
-            create_admin_approval_layout()
-        ], id="approval-section", is_open=False),
-        html.Div(id='dashboard-content')
+        # Header
+        dbc.Row([
+            dbc.Col([
+                html.H1("📊 Dashboard de Performance Renov", 
+                       className="text-center mb-4", 
+                       style={'color': '#2c3e50', 'fontWeight': 'bold'}),
+            ], width=8),
+            dbc.Col([
+                html.Div([
+                    dbc.Button("Aprovar Usuários", id="show-approvals", 
+                              color="success", className="me-2",
+                              style={'display': 'inline' if is_super_admin else 'none'}),
+                    dbc.Button("Sair", id="logout-button", color="danger")
+                ], className="d-flex justify-content-end")
+            ], width=4),
+            html.Hr(style={'borderColor': '#3498db', 'borderWidth': '2px'})
+        ]),
+        
+        # Conteúdo do Dashboard
+        html.Div(id='dashboard-content', className="mt-4"),
+        
+        # Seção de Aprovação (visível apenas para super admin)
+        dbc.Collapse(
+            create_admin_approval_layout(),
+            id="approval-section",
+            is_open=False
+        )
     ], fluid=True, style={'backgroundColor': '#f8f9fa', 'minHeight': '100vh', 'padding': '20px'})
 
 # ========================
@@ -798,51 +803,49 @@ def display_page(pathname, session_data):
 @app.callback(
     [Output('session-store', 'data'),
      Output('auth-status', 'children')],
+    [Input('show-register', 'n_clicks'),
+     Input('show-login', 'n_clicks')],
+    [State('session-store', 'data')]
+)
+def toggle_login_register(show_reg_clicks, show_login_clicks, session_data):
+    if not callback_context.triggered:
+        return session_data, ""
+    
+    triggered_id = callback_context.triggered[0]['prop_id'].split('.')[0]
+    
+    if triggered_id == 'show-register':
+        return session_data, create_register_layout()
+    elif triggered_id == 'show-login':
+        return session_data, create_login_layout()
+    
+    return session_data, ""
+
+@app.callback(
+    [Output('session-store', 'data'),
+     Output('auth-status', 'children')],
     [Input('login-button', 'n_clicks'),
      Input('register-button', 'n_clicks'),
-     Input('logout-button', 'n_clicks'),
-     Input('show-register', 'n_clicks'),
-     Input('show-login', 'n_clicks'),
-     Input('approve-user', 'n_clicks')],
+     Input('logout-button', 'n_clicks')],
     [State('login-username', 'value'),
      State('login-password', 'value'),
      State('register-username', 'value'),
      State('register-email', 'value'),
      State('register-password', 'value'),
      State('register-confirm-password', 'value'),
-     State('user-id-to-approve', 'value'),
      State('session-store', 'data')]
 )
-def handle_auth_actions(login_clicks, register_clicks, logout_clicks,
-                       show_register_clicks, show_login_clicks, approve_clicks,
-                       username, password, reg_username, reg_email,
-                       reg_password, reg_confirm_password, user_id_to_approve,
-                       session_data):
+def handle_authentication(login_clicks, register_clicks, logout_clicks,
+                        username, password, reg_username, reg_email,
+                        reg_password, reg_confirm_password, session_data):
     ctx = callback_context
     if not ctx.triggered:
         return session_data, ""
     
     triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
     
-    # Aprovação de usuário
-    if triggered_id == 'approve-user' and user_id_to_approve and session_data.get('is_super_admin'):
-        if db.approve_user(user_id_to_approve, session_data.get('email')):
-            return session_data, dbc.Alert("Usuário aprovado com sucesso!", color="success", duration=3000)
-        return session_data, dbc.Alert("Erro ao aprovar usuário.", color="danger", duration=3000)
-    
-    # Logout
     if triggered_id == 'logout-button':
         return {'authenticated': False}, ""
     
-    # Mostrar tela de registro
-    if triggered_id == 'show-register':
-        return session_data, create_register_layout()
-    
-    # Mostrar tela de login
-    if triggered_id == 'show-login':
-        return session_data, create_login_layout()
-    
-    # Login
     if triggered_id == 'login-button' and username and password:
         user = db.verify_user(username, password)
         if user:
@@ -865,7 +868,6 @@ def handle_auth_actions(login_clicks, register_clicks, logout_clicks,
             className="mt-3"
         )
     
-    # Registro
     if triggered_id == 'register-button':
         if not all([reg_username, reg_email, reg_password, reg_confirm_password]):
             return session_data, dbc.Alert(
@@ -907,11 +909,9 @@ def toggle_approval_section(n_clicks, is_open):
 
 @app.callback(
     Output('pending-users-table', 'children'),
-    [Input('url', 'pathname'),
-     Input('auth-status', 'children')],  # Atualiza quando um usuário é aprovado
-    [State('session-store', 'data')]
+    [Input('session-store', 'data')]
 )
-def update_pending_users(pathname, auth_status, session_data):
+def update_pending_users(session_data):
     if not session_data or not session_data.get('is_super_admin'):
         return html.Div("Acesso não autorizado")
     
@@ -929,8 +929,8 @@ def update_pending_users(pathname, auth_status, session_data):
             {
                 'name': 'Ações',
                 'id': 'id',
-                'presentation': 'markdown',
-                'type': 'text'
+                'type': 'text',
+                'presentation': 'button'
             }
         ],
         style_cell={'textAlign': 'left', 'padding': '10px'},
@@ -938,21 +938,16 @@ def update_pending_users(pathname, auth_status, session_data):
             'backgroundColor': '#3498db',
             'color': 'white',
             'fontWeight': 'bold'
-        },
-        markdown_options={'html': True},
-        row_selectable=False,
-        row_deletable=False,
-        cell_selectable=False,
-        page_size=10
+        }
     )
 
 @app.callback(
     Output('dashboard-content', 'children'),
     [Input('session-store', 'data')]
 )
-def update_dashboard_content(session_data):
+def update_content(session_data):
     if not session_data or not session_data.get('authenticated'):
-        return ""
+        return create_login_layout()
     
     return html.Div([
         dbc.Alert(

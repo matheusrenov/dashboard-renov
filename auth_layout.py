@@ -15,7 +15,7 @@ def create_login_layout():
                                     dbc.Input(
                                         type="text",
                                         id="login-username",
-                                        placeholder="Usuário",
+                                        placeholder="Email",
                                         className="mb-3"
                                     ),
                                     dbc.Input(
@@ -32,11 +32,16 @@ def create_login_layout():
                                         n_clicks=0
                                     ),
                                     html.Div([
-                                        html.A("Criar nova conta", href="#", id="show-register", className="text-primary")
+                                        dbc.Button(
+                                            "Criar nova conta",
+                                            id="show-register",
+                                            color="link",
+                                            className="p-0"
+                                        )
                                     ], className="text-center")
                                 ])
                             ])
-                        ], className="shadow-sm auth-card")
+                        ], className="shadow-sm")
                     ], style={
                         'maxWidth': '400px',
                         'margin': '100px auto',
@@ -44,7 +49,7 @@ def create_login_layout():
                     })
                 ])
             ])
-        ], fluid=True, className="auth-container")
+        ], fluid=True)
     ])
 
 def create_register_layout():
@@ -61,7 +66,7 @@ def create_register_layout():
                                     dbc.Input(
                                         type="text",
                                         id="register-username",
-                                        placeholder="Usuário",
+                                        placeholder="Nome de usuário",
                                         className="mb-3"
                                     ),
                                     dbc.Input(
@@ -90,11 +95,16 @@ def create_register_layout():
                                         n_clicks=0
                                     ),
                                     html.Div([
-                                        html.A("Voltar para login", href="#", id="show-login", className="text-primary")
+                                        dbc.Button(
+                                            "Voltar para login",
+                                            id="show-login",
+                                            color="link",
+                                            className="p-0"
+                                        )
                                     ], className="text-center")
                                 ])
                             ])
-                        ], className="shadow-sm auth-card")
+                        ], className="shadow-sm")
                     ], style={
                         'maxWidth': '400px',
                         'margin': '100px auto',
@@ -102,7 +112,7 @@ def create_register_layout():
                     })
                 ])
             ])
-        ], fluid=True, className="auth-container")
+        ], fluid=True)
     ])
 
 def create_admin_approval_layout():
@@ -114,14 +124,7 @@ def create_admin_approval_layout():
                         html.H3("Aprovação de Usuários", className="mb-0")
                     ]),
                     dbc.CardBody([
-                        html.Div(id="pending-users-table", className="pending-users-table"),
-                        dbc.Button(
-                            "Voltar ao Dashboard",
-                            id="back-to-dashboard",
-                            color="primary",
-                            className="mt-3",
-                            n_clicks=0
-                        )
+                        html.Div(id="pending-users-table")
                     ])
                 ], className="shadow-sm")
             ])
