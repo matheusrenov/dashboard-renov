@@ -1,5 +1,5 @@
 import dash_bootstrap_components as dbc
-from dash import html, dcc
+from dash import html, dcc, dash_table
 
 def create_login_layout():
     return dbc.Container([
@@ -34,7 +34,7 @@ def create_login_layout():
                                 ], className="text-center")
                             ])
                         ])
-                    ], className="shadow-sm")
+                    ], className="shadow-sm auth-card")
                 ], style={
                     'maxWidth': '400px',
                     'margin': '100px auto',
@@ -42,7 +42,7 @@ def create_login_layout():
                 })
             ])
         ])
-    ], fluid=True, style={'backgroundColor': '#f8f9fa', 'minHeight': '100vh'})
+    ], fluid=True, className="auth-container")
 
 def create_register_layout():
     return dbc.Container([
@@ -89,7 +89,7 @@ def create_register_layout():
                                 ], className="text-center")
                             ])
                         ])
-                    ], className="shadow-sm")
+                    ], className="shadow-sm auth-card")
                 ], style={
                     'maxWidth': '400px',
                     'margin': '100px auto',
@@ -97,22 +97,27 @@ def create_register_layout():
                 })
             ])
         ])
-    ], fluid=True, style={'backgroundColor': '#f8f9fa', 'minHeight': '100vh'})
+    ], fluid=True, className="auth-container")
 
 def create_admin_approval_layout():
     return dbc.Container([
         dbc.Row([
             dbc.Col([
-                html.Div([
-                    html.H3("Aprovação de Usuários", className="mb-4"),
-                    html.Div(id="pending-users-table"),
-                    dbc.Button(
-                        "Voltar ao Dashboard",
-                        id="back-to-dashboard",
-                        color="primary",
-                        className="mt-3"
-                    )
-                ])
+                dbc.Card([
+                    dbc.CardHeader([
+                        html.H3("Aprovação de Usuários", className="mb-0")
+                    ]),
+                    dbc.CardBody([
+                        html.Div(id="pending-users-table", className="pending-users-table"),
+                        html.Div(id="approval-status", className="mt-3"),
+                        dbc.Button(
+                            "Voltar ao Dashboard",
+                            id="back-to-dashboard",
+                            color="primary",
+                            className="mt-3"
+                        )
+                    ])
+                ], className="shadow-sm")
             ])
         ])
     ], className="mt-4") 

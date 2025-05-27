@@ -18,7 +18,11 @@ warnings.filterwarnings('ignore')
 # ========================
 # 🚀 Inicialização do App
 # ========================
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
+app = dash.Dash(
+    __name__, 
+    external_stylesheets=[dbc.themes.BOOTSTRAP],
+    suppress_callback_exceptions=True
+)
 server = app.server
 
 # Inicializa o banco de dados
@@ -30,110 +34,39 @@ db = UserDatabase()
 app.layout = html.Div([
     dcc.Location(id='url', refresh=False),
     dcc.Store(id='session-store', storage_type='session'),
-    html.Div(id='page-content')
+    html.Div(id='page-content'),
+    html.Div(id='approval-status'),
+    dcc.Store(id='user-id-to-approve', storage_type='memory')
 ])
 
 # ========================
 # 📊 Layout do Dashboard
 # ========================
-dashboard_layout = dbc.Container([
-    # Header com botão de logout
-    dbc.Row([
+def create_dashboard_layout(is_super_admin=False):
+    header = dbc.Row([
         dbc.Col([
             html.H1("📊 Dashboard de Performance Renov", 
                    className="text-center mb-4", 
                    style={'color': '#2c3e50', 'fontWeight': 'bold'}),
-        ], width=10),
+        ], width=8),
         dbc.Col([
-            dbc.Button("Sair", id="logout-button", color="danger", className="float-end")
-        ], width=2),
+            html.Div([
+                dbc.Button("Aprovar Usuários", id="show-approvals", 
+                          color="success", className="me-2",
+                          style={'display': 'inline' if is_super_admin else 'none'}),
+                dbc.Button("Sair", id="logout-button", color="danger")
+            ], className="d-flex justify-content-end")
+        ], width=4),
         html.Hr(style={'borderColor': '#3498db', 'borderWidth': '2px'})
-    ]),
+    ])
 
-    # Controles de upload
-    dbc.Row([
-        dbc.Col([
-            dcc.Upload(
-                id="upload-data",
-                children=dbc.Button([
-                    html.I(className="fas fa-upload me-2"),
-                    "📁 Importar Planilha Base"
-                ], color="primary", size="lg", className="w-100"),
-                accept=".xlsx,.xls",
-                multiple=False,
-                style={'width': '100%'}
-            )
-        ], md=8),
-        dbc.Col([
-            dbc.Button([
-                html.I(className="fas fa-file-pdf me-2"),
-                "🖨️ Exportar PDF"
-            ], id="export-pdf", color="success", size="lg", className="w-100", disabled=True)
-        ], md=4)
-    ], className="mb-4"),
-
-    # Container para alertas
-    html.Div(id='alerts'),
-
-    # Stores para dados
-    dcc.Store(id='store-data'),
-    dcc.Store(id='store-filtered-data'),
-
-    # Estado inicial - aguardando upload
-    html.Div(id='welcome-message', children=[
-        dbc.Alert([
-            html.I(className="fas fa-cloud-upload-alt fa-3x mb-3"),
-            html.H4("Bem-vindo ao Dashboard de Performance Renov!"),
-            html.P("Carregue uma planilha Excel (.xlsx) para começar a análise estratégica.")
-        ], color="info", className="text-center py-5")
-    ]),
-
-    # FILTROS - inicialmente ocultos
-    html.Div(id='filters-section', style={'display': 'none'}, children=[
-        dbc.Card([
-            dbc.CardHeader(html.H5("🔍 Filtros de Análise", className="mb-0")),
-            dbc.CardBody([
-                dbc.Row([
-                    dbc.Col([
-                        html.Label("Período:", className="fw-bold mb-1"),
-                        dcc.Dropdown(id='filter-month', options=[], multi=True, placeholder="Selecione os meses...")
-                    ], md=3),
-                    dbc.Col([
-                        html.Label("Rede:", className="fw-bold mb-1"),
-                        dcc.Dropdown(id='filter-network', options=[], multi=True, placeholder="Selecione as redes...")
-                    ], md=3),
-                    dbc.Col([
-                        html.Label("Situação:", className="fw-bold mb-1"),
-                        dcc.Dropdown(id='filter-status', options=[], multi=True, placeholder="Selecione situações...")
-                    ], md=3),
-                    dbc.Col([
-                        html.Label("Ações:", className="fw-bold mb-1"),
-                        html.Div([
-                            dbc.Button("🔄 Limpar", id="clear-filters", color="outline-secondary", size="sm", className="w-100")
-                        ])
-                    ], md=3)
-                ])
-            ])
-        ], className="mb-4")
-    ]),
-    
-    # KPIs - inicialmente vazio
-    html.Div(id='kpi-section'),
-    
-    # ABAS - inicialmente ocultas
-    html.Div(id='tabs-section', style={'display': 'none'}, children=[
-        dcc.Tabs(id="main-tabs", value="overview", children=[
-            dcc.Tab(label="📈 Visão Geral", value="overview"),
-            dcc.Tab(label="🏪 Redes", value="networks"),
-            dcc.Tab(label="🏆 Rankings", value="rankings"),
-            dcc.Tab(label="🔮 Projeções", value="projections")
-        ], className="mb-3")
-    ]),
-    
-    # Conteúdo das abas - inicialmente vazio
-    html.Div(id='tab-content-area')
-
-], fluid=True, style={'backgroundColor': '#f8f9fa', 'minHeight': '100vh', 'padding': '20px'})
+    return dbc.Container([
+        header,
+        dbc.Collapse([
+            create_admin_approval_layout()
+        ], id="approval-section", is_open=False),
+        # ... rest of the dashboard layout ...
+    ], fluid=True, style={'backgroundColor': '#f8f9fa', 'minHeight': '100vh', 'padding': '20px'})
 
 # ========================
 # 📊 FUNÇÕES DE GERAÇÃO DE CONTEÚDO
@@ -861,7 +794,8 @@ app.clientside_callback(
      Input('register-button', 'n_clicks'),
      Input('logout-button', 'n_clicks'),
      Input('show-register', 'n_clicks'),
-     Input('show-login', 'n_clicks')],
+     Input('show-login', 'n_clicks'),
+     Input('show-approvals', 'n_clicks')],
     [State('login-username', 'value'),
      State('login-password', 'value'),
      State('register-username', 'value'),
@@ -871,7 +805,7 @@ app.clientside_callback(
      State('session-store', 'data')]
 )
 def handle_authentication(pathname, login_clicks, register_clicks, logout_clicks, 
-                        show_register_clicks, show_login_clicks,
+                        show_register_clicks, show_login_clicks, show_approvals_clicks,
                         username, password, reg_username, reg_email, 
                         reg_password, reg_confirm_password, session_data):
     ctx = callback_context
@@ -892,22 +826,31 @@ def handle_authentication(pathname, login_clicks, register_clicks, logout_clicks
     if triggered_id == 'show-login':
         return create_login_layout(), session_data
     
+    # Mostrar aprovações (apenas para super admin)
+    if triggered_id == 'show-approvals' and session_data.get('is_super_admin'):
+        return create_admin_approval_layout(), session_data
+    
     # Tentativa de login
     if triggered_id == 'login-button' and username and password:
         user = db.verify_user(username, password)
         if user:
             if not user['is_approved']:
-                return dbc.Alert("Sua conta ainda está pendente de aprovação.", color="warning"), session_data
+                return html.Div([
+                    create_login_layout(),
+                    dbc.Alert("Sua conta ainda está pendente de aprovação.", color="warning", className="mt-3")
+                ]), session_data
             session_data = {
                 'authenticated': True,
                 'username': user['username'],
-                'is_admin': user['is_admin']
+                'email': user['email'],
+                'is_admin': user['is_admin'],
+                'is_super_admin': user['is_super_admin']
             }
-            return dashboard_layout, session_data
+            return create_dashboard_layout(user['is_super_admin']), session_data
         else:
             return html.Div([
                 create_login_layout(),
-                dbc.Alert("Usuário ou senha inválidos.", color="danger")
+                dbc.Alert("Usuário ou senha inválidos.", color="danger", className="mt-3")
             ]), session_data
     
     # Tentativa de registro
@@ -915,29 +858,29 @@ def handle_authentication(pathname, login_clicks, register_clicks, logout_clicks
         if not all([reg_username, reg_email, reg_password, reg_confirm_password]):
             return html.Div([
                 create_register_layout(),
-                dbc.Alert("Todos os campos são obrigatórios.", color="danger")
+                dbc.Alert("Todos os campos são obrigatórios.", color="danger", className="mt-3")
             ]), session_data
             
         if reg_password != reg_confirm_password:
             return html.Div([
                 create_register_layout(),
-                dbc.Alert("As senhas não coincidem.", color="danger")
+                dbc.Alert("As senhas não coincidem.", color="danger", className="mt-3")
             ]), session_data
             
         if db.create_user(reg_username, reg_password, reg_email):
             return html.Div([
                 create_login_layout(),
-                dbc.Alert("Conta criada com sucesso! Aguarde a aprovação do administrador.", color="success")
+                dbc.Alert("Conta criada com sucesso! Aguarde a aprovação do administrador.", color="success", className="mt-3")
             ]), session_data
         else:
             return html.Div([
                 create_register_layout(),
-                dbc.Alert("Usuário ou email já existem.", color="danger")
+                dbc.Alert("Usuário ou email já existem.", color="danger", className="mt-3")
             ]), session_data
     
     # Verificação de autenticação para outras páginas
     if session_data.get('authenticated'):
-        return dashboard_layout, session_data
+        return create_dashboard_layout(session_data.get('is_super_admin', False)), session_data
     
     return create_login_layout(), session_data
 
@@ -950,14 +893,15 @@ def handle_authentication(pathname, login_clicks, register_clicks, logout_clicks
     [State('session-store', 'data')]
 )
 def update_pending_users(pathname, session_data):
-    if not session_data or not session_data.get('is_admin'):
-        return html.Div()
+    if not session_data or not session_data.get('is_super_admin'):
+        return html.Div("Acesso não autorizado")
     
-    pending_users = db.get_pending_users()
+    pending_users = db.get_pending_users(session_data.get('email'))
     if not pending_users:
-        return html.Div("Nenhum usuário pendente de aprovação.")
+        return html.Div("Nenhum usuário pendente de aprovação.", className="text-muted")
     
     return dash_table.DataTable(
+        id='pending-users',
         data=pending_users,
         columns=[
             {'name': 'Usuário', 'id': 'username'},
@@ -965,34 +909,39 @@ def update_pending_users(pathname, session_data):
             {'name': 'Data de Registro', 'id': 'created_at'},
             {
                 'name': 'Ações',
-                'id': 'actions',
-                'presentation': 'button',
+                'id': 'id',
+                'presentation': 'markdown',
                 'type': 'text'
             }
         ],
-        style_cell={'textAlign': 'left'},
+        style_cell={'textAlign': 'left', 'padding': '10px'},
         style_header={
             'backgroundColor': '#3498db',
             'color': 'white',
             'fontWeight': 'bold'
-        }
+        },
+        markdown_options={'html': True},
+        row_selectable=False,
+        row_deletable=False,
+        cell_selectable=False,
+        page_size=10
     )
 
 @app.callback(
     Output('approval-status', 'children'),
     [Input('approve-user', 'n_clicks')],
-    [State('user-id-to-approve', 'data')]
+    [State('user-id-to-approve', 'data'),
+     State('session-store', 'data')]
 )
-def approve_user(n_clicks, user_id):
-    if n_clicks and user_id:
-        db.approve_user(user_id)
-        return dbc.Alert("Usuário aprovado com sucesso!", color="success", duration=3000)
+def approve_user(n_clicks, user_id, session_data):
+    if n_clicks and user_id and session_data and session_data.get('is_super_admin'):
+        if db.approve_user(user_id, session_data.get('email')):
+            return dbc.Alert("Usuário aprovado com sucesso!", color="success", duration=3000)
+        return dbc.Alert("Você não tem permissão para aprovar usuários.", color="danger", duration=3000)
     return ""
 
 # ========================
 # 🔚 Execução
 # ========================
 if __name__ == '__main__':
-    # Criar usuário admin se não existir
-    db.create_admin('admin', 'admin123', 'admin@renov.com')
     app.run(debug=True, port=int(os.environ.get("PORT", 8080)), host='0.0.0.0')

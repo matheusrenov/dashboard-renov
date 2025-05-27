@@ -6,7 +6,9 @@ import os
 class UserDatabase:
     def __init__(self):
         self.db_file = 'users.db'
+        self.super_admin_email = 'matheus@renovsmart.com.br'
         self._create_tables()
+        self._create_initial_admin()
     
     def _create_tables(self):
         conn = sqlite3.connect(self.db_file)
@@ -20,12 +22,24 @@ class UserDatabase:
             email TEXT UNIQUE NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             is_approved BOOLEAN DEFAULT FALSE,
-            is_admin BOOLEAN DEFAULT FALSE
+            is_admin BOOLEAN DEFAULT FALSE,
+            is_super_admin BOOLEAN DEFAULT FALSE
         )
         ''')
         
         conn.commit()
         conn.close()
+    
+    def _create_initial_admin(self):
+        """Cria o usuário admin inicial e o super admin se não existirem"""
+        try:
+            # Criar admin padrão
+            self.create_admin('admin', 'admin123', 'admin@renov.com.br', is_super_admin=False)
+            
+            # Criar super admin (você)
+            self.create_admin('matheus', 'admin123', self.super_admin_email, is_super_admin=True)
+        except sqlite3.IntegrityError:
+            pass  # Usuários já existem
     
     def _hash_password(self, password):
         return hashlib.sha256(password.encode()).hexdigest()
@@ -67,11 +81,16 @@ class UserDatabase:
                 'username': user[1],
                 'email': user[3],
                 'is_approved': bool(user[5]),
-                'is_admin': bool(user[6])
+                'is_admin': bool(user[6]),
+                'is_super_admin': bool(user[7])
             }
         return None
     
-    def approve_user(self, user_id):
+    def approve_user(self, user_id, approver_email):
+        """Apenas o super admin pode aprovar usuários"""
+        if approver_email != self.super_admin_email:
+            return False
+            
         conn = sqlite3.connect(self.db_file)
         cursor = conn.cursor()
         
@@ -82,8 +101,13 @@ class UserDatabase:
         
         conn.commit()
         conn.close()
+        return True
     
-    def get_pending_users(self):
+    def get_pending_users(self, admin_email):
+        """Apenas o super admin pode ver usuários pendentes"""
+        if admin_email != self.super_admin_email:
+            return []
+            
         conn = sqlite3.connect(self.db_file)
         cursor = conn.cursor()
         
@@ -101,15 +125,17 @@ class UserDatabase:
             for user in users
         ]
     
-    def create_admin(self, username, password, email):
+    def create_admin(self, username, password, email, is_super_admin=False):
         try:
             conn = sqlite3.connect(self.db_file)
             cursor = conn.cursor()
             
             hashed_password = self._hash_password(password)
             cursor.execute(
-                'INSERT INTO users (username, password, email, is_approved, is_admin) VALUES (?, ?, ?, TRUE, TRUE)',
-                (username, hashed_password, email)
+                '''INSERT INTO users 
+                   (username, password, email, is_approved, is_admin, is_super_admin) 
+                   VALUES (?, ?, ?, TRUE, TRUE, ?)''',
+                (username, hashed_password, email, is_super_admin)
             )
             
             conn.commit()
