@@ -347,15 +347,20 @@ def apply_filters(months, networks, statuses, clear_clicks, vouchers_data):
     
     df = pd.DataFrame(vouchers_data)
     
-    if months and 'mes' in df.columns and 'ano' in df.columns:
+    # Aplicar filtros respeitando as variações de nomes de colunas
+    if months and ('mes' in df.columns and 'ano' in df.columns):
         month_year_filters = [f"{row['mes']}_{row['ano']}" for _, row in df.iterrows()]
         df = df[[mf in months for mf in month_year_filters]]
     
-    if networks and 'nome_da_rede' in df.columns:
-        df = df[df['nome_da_rede'].isin(networks)]
+    if networks:
+        rede_col = 'nome_da_rede' if 'nome_da_rede' in df.columns else 'nome_rede'
+        if rede_col in df.columns:
+            df = df[df[rede_col].isin(networks)]
     
-    if statuses and 'situacao_do_voucher' in df.columns:
-        df = df[df['situacao_do_voucher'].isin(statuses)]
+    if statuses:
+        status_col = 'situacao_do_voucher' if 'situacao_do_voucher' in df.columns else 'situacao_voucher'
+        if status_col in df.columns:
+            df = df[df[status_col].isin(statuses)]
     
     return df.to_dict('records')
 
@@ -481,9 +486,8 @@ def update_tab_content(active_tab, filtered_data, vouchers_data, lojas_data, col
         elif active_tab == "lojas":
             if not lojas_data:
                 return dbc.Alert("Carregue a base de lojas para visualizar os dados.", color="warning")
-            # Passar também os dados de vouchers para calcular lojas sem voucher
-            vouchers_df = pd.DataFrame(data_to_use) if data_to_use else None
-            return generate_lojas_content(pd.DataFrame(lojas_data), vouchers_df)
+            # Passar também os dados de vouchers para calcular lojas sem geração
+            return generate_lojas_content(pd.DataFrame(lojas_data), pd.DataFrame(data_to_use) if data_to_use else None)
             
         elif active_tab == "colaboradores":
             if not colaboradores_data:
@@ -735,52 +739,46 @@ def generate_lojas_content(df, vouchers_df=None):
         if df.empty:
             return dbc.Alert("Nenhum dado de lojas disponível.", color="warning")
         
-        # Preparar dados
+        # Processar dados
         df = df.copy()
         
-        # Processar data de início (remover horas)
-        date_columns = ['data_de_inicio', 'data_inicio', 'inicio', 'created_at', 'data_criacao']
+        # Remover horas das datas
+        date_columns = ['data_de_inicio', 'data_inicio', 'criado_em', 'data_criacao']
         for col in date_columns:
             if col in df.columns:
-                df[col] = pd.to_datetime(df[col], errors='coerce').dt.strftime('%Y-%m-%d')
-                df['data_criacao_dt'] = pd.to_datetime(df[col], errors='coerce')
-                break
+                df[col] = pd.to_datetime(df[col], errors='coerce').dt.date
         
         # Identificar colunas de status e rede
         status_col = None
-        for col in ['status', 'situacao', 'ativo']:
-            if col in df.columns:
-                status_col = col
-                break
-        
         rede_col = None
-        for col in ['rede', 'nome_rede', 'nome_da_rede', 'network']:
-            if col in df.columns:
+        for col in df.columns:
+            if 'status' in col.lower() or 'situacao' in col.lower():
+                status_col = col
+            if 'rede' in col.lower() and 'nome' in col.lower():
                 rede_col = col
-                break
         
-        # Calcular métricas
+        # Calcular KPIs
         total_lojas = len(df)
         
         # Total de redes ativas
         if status_col and rede_col:
-            df_ativas = df[df[status_col].str.lower().str.contains('ativ', na=False)]
-            total_redes_ativas = df_ativas[rede_col].nunique() if not df_ativas.empty else 0
+            df_ativas = df[df[status_col].str.lower() == 'ativa'] if status_col in df.columns else df
+            total_redes_ativas = df_ativas[rede_col].nunique() if rede_col in df_ativas.columns else 0
         else:
             total_redes_ativas = df[rede_col].nunique() if rede_col else 0
         
         # Lojas sem geração de voucher
         lojas_sem_voucher = 0
         if vouchers_df is not None and not vouchers_df.empty:
-            filial_col_vouchers = 'nome_da_filial' if 'nome_da_filial' in vouchers_df.columns else 'nome_filial'
-            filial_col_lojas = 'filial' if 'filial' in df.columns else 'nome_filial'
+            filial_col_voucher = 'nome_da_filial' if 'nome_da_filial' in vouchers_df.columns else 'nome_filial'
+            filial_col_loja = 'nome_da_filial' if 'nome_da_filial' in df.columns else 'nome_filial'
             
-            if filial_col_vouchers in vouchers_df.columns and filial_col_lojas in df.columns:
-                lojas_com_voucher = set(vouchers_df[filial_col_vouchers].unique())
-                todas_lojas = set(df[filial_col_lojas].unique())
+            if filial_col_voucher in vouchers_df.columns and filial_col_loja in df.columns:
+                lojas_com_voucher = set(vouchers_df[filial_col_voucher].unique())
+                todas_lojas = set(df[filial_col_loja].unique())
                 lojas_sem_voucher = len(todas_lojas - lojas_com_voucher)
         
-        # KPIs
+        # Cards de KPIs
         stats_cards = dbc.Row([
             dbc.Col([
                 dbc.Card([
@@ -808,49 +806,67 @@ def generate_lojas_content(df, vouchers_df=None):
             ], md=3)
         ], className="mb-4")
         
-        # Gráficos de evolução mensal
+        # Gráficos evolutivos
         graphs = []
         
-        if 'data_criacao_dt' in df.columns and not df['data_criacao_dt'].isna().all():
-            df['mes_ano'] = df['data_criacao_dt'].dt.to_period('M').astype(str)
+        # Identificar coluna de data
+        data_col = None
+        for col in ['data_de_inicio', 'data_inicio', 'criado_em', 'data_criacao']:
+            if col in df.columns:
+                data_col = col
+                break
+        
+        if data_col and status_col:
+            # Filtrar apenas ativas
+            df_ativas = df[df[status_col].str.lower() == 'ativa'] if status_col in df.columns else df
             
-            # Gráfico de evolução de redes ativas
-            if rede_col and status_col:
-                redes_mensais = df[df[status_col].str.lower().str.contains('ativ', na=False)].groupby('mes_ano')[rede_col].nunique().reset_index()
-                redes_mensais.columns = ['Mês', 'Total_Redes']
+            # Converter para datetime para análise
+            df_ativas['data_temp'] = pd.to_datetime(df_ativas[data_col], errors='coerce')
+            df_ativas = df_ativas.dropna(subset=['data_temp'])
+            
+            if not df_ativas.empty:
+                # Evolução mensal de redes ativas
+                if rede_col:
+                    evolucao_redes = df_ativas.groupby([
+                        df_ativas['data_temp'].dt.to_period('M'),
+                        rede_col
+                    ]).size().reset_index(name='count')
+                    evolucao_redes['mes'] = evolucao_redes['data_temp'].dt.to_timestamp()
+                    evolucao_redes_final = evolucao_redes.groupby('mes')[rede_col].nunique().reset_index()
+                    evolucao_redes_final.columns = ['mes', 'total_redes']
+                    
+                    fig_redes = px.bar(
+                        evolucao_redes_final,
+                        x='mes',
+                        y='total_redes',
+                        title='📊 Evolução Mensal - Total de Redes Ativas',
+                        labels={'mes': 'Mês', 'total_redes': 'Total de Redes'}
+                    )
+                    fig_redes.update_layout(height=400)
+                    graphs.append(dbc.Col([dcc.Graph(figure=fig_redes)], md=6))
                 
-                fig_redes = px.bar(
-                    redes_mensais,
-                    x='Mês',
-                    y='Total_Redes',
-                    title='📊 Evolução Mensal - Redes Ativas',
-                    labels={'Total_Redes': 'Quantidade de Redes'}
-                )
-                fig_redes.update_layout(height=400)
-                graphs.append(dbc.Col([dcc.Graph(figure=fig_redes)], md=6))
-            
-            # Gráfico de evolução de filiais ativas
-            if status_col:
-                filiais_mensais = df[df[status_col].str.lower().str.contains('ativ', na=False)].groupby('mes_ano').size().reset_index(name='Total_Filiais')
+                # Evolução mensal de filiais ativas
+                evolucao_filiais = df_ativas.groupby(
+                    df_ativas['data_temp'].dt.to_period('M')
+                ).size().reset_index(name='total_filiais')
+                evolucao_filiais['mes'] = evolucao_filiais['data_temp'].dt.to_timestamp()
                 
                 fig_filiais = px.bar(
-                    filiais_mensais,
-                    x='Mês',
-                    y='Total_Filiais',
-                    title='🏪 Evolução Mensal - Filiais Ativas',
-                    labels={'Total_Filiais': 'Quantidade de Filiais'}
+                    evolucao_filiais,
+                    x='mes',
+                    y='total_filiais',
+                    title='📊 Evolução Mensal - Total de Filiais Ativas',
+                    labels={'mes': 'Mês', 'total_filiais': 'Total de Filiais'}
                 )
                 fig_filiais.update_layout(height=400)
                 graphs.append(dbc.Col([dcc.Graph(figure=fig_filiais)], md=6))
         
-        # Preparar dados da tabela (remover coluna temporária)
-        df_table = df.drop('data_criacao_dt', axis=1, errors='ignore')
-        
-        # Tabela com todos os dados
-        table_columns = [{"name": col.replace('_', ' ').title(), "id": col} for col in df_table.columns]
+        # Preparar dados da tabela
+        df_display = df.copy()
+        table_columns = [{"name": col.replace('_', ' ').title(), "id": col} for col in df_display.columns]
         
         lojas_table = dash_table.DataTable(
-            data=df_table.to_dict('records'),
+            data=df_display.to_dict('records'),
             columns=table_columns,
             style_cell={'textAlign': 'left', 'fontSize': '12px'},
             style_header={'backgroundColor': '#3498db', 'color': 'white', 'fontWeight': 'bold'},
@@ -870,7 +886,7 @@ def generate_lojas_content(df, vouchers_df=None):
             stats_cards,
             dbc.Row(graphs) if graphs else html.Div(),
             html.Hr(),
-            html.P(f"Colunas disponíveis: {', '.join(df_table.columns)}", className="text-muted mb-3"),
+            html.P(f"Colunas disponíveis: {', '.join(df.columns.tolist())}", className="text-muted mb-3"),
             lojas_table
         ])
         
@@ -882,40 +898,43 @@ def generate_colaboradores_content(df):
         if df.empty:
             return dbc.Alert("Nenhum dado de colaboradores disponível.", color="warning")
         
-        # Preparar dados
+        # Processar dados
         df = df.copy()
         
-        # Processar data de cadastro (remover horas)
-        date_columns = ['data_de_cadastro', 'data_cadastro', 'cadastro', 'created_at', 'data_criacao']
+        # Remover horas das datas
+        date_columns = ['data_de_cadastro', 'data_cadastro', 'criado_em', 'data_criacao']
         for col in date_columns:
             if col in df.columns:
-                df[col] = pd.to_datetime(df[col], errors='coerce').dt.strftime('%Y-%m-%d')
-                df['data_cadastro_dt'] = pd.to_datetime(df[col], errors='coerce')
-                break
+                df[col] = pd.to_datetime(df[col], errors='coerce').dt.date
         
         # Identificar colunas
         status_col = None
-        for col in ['status', 'situacao', 'ativo']:
-            if col in df.columns:
-                status_col = col
-                break
-        
         rede_col = None
-        for col in ['rede', 'nome_rede', 'nome_da_rede', 'network']:
-            if col in df.columns:
+        for col in df.columns:
+            if 'status' in col.lower() or 'situacao' in col.lower():
+                status_col = col
+            if 'rede' in col.lower() and 'nome' in col.lower():
                 rede_col = col
-                break
         
         # Estatísticas gerais
         total_colaboradores = len(df)
+        df_ativos = df[df[status_col].str.lower() == 'ativa'] if status_col else df
+        total_ativos = len(df_ativos)
         
-        # KPI principal
         stats_cards = dbc.Row([
             dbc.Col([
                 dbc.Card([
                     dbc.CardBody([
                         html.H6("Total de Colaboradores", className="card-title text-muted mb-2"),
                         html.H3(f"{total_colaboradores:,}", className="text-success fw-bold")
+                    ])
+                ], className="shadow-sm")
+            ], md=3),
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H6("Colaboradores Ativos", className="card-title text-muted mb-2"),
+                        html.H3(f"{total_ativos:,}", className="text-info fw-bold")
                     ])
                 ], className="shadow-sm")
             ], md=3)
@@ -925,68 +944,53 @@ def generate_colaboradores_content(df):
         
         # Gráfico de colaboradores ativos por rede
         if rede_col and status_col:
-            df_ativos = df[df[status_col].str.lower().str.contains('ativ', na=False)]
-            if not df_ativos.empty:
-                colab_por_rede = df_ativos[rede_col].value_counts().head(15)
-                
-                fig_redes = px.bar(
-                    y=colab_por_rede.index,
-                    x=colab_por_rede.values,
-                    orientation='h',
-                    title='👥 Colaboradores Ativos por Rede',
-                    labels={'x': 'Quantidade de Colaboradores', 'y': 'Rede'}
-                )
-                fig_redes.update_layout(
-                    height=500,
-                    yaxis={'categoryorder': 'total ascending'}
-                )
-                graphs.append(dbc.Col([dcc.Graph(figure=fig_redes)], md=6))
-        elif rede_col:
-            # Se não há coluna de status, mostrar todos
-            colab_por_rede = df[rede_col].value_counts().head(15)
+            colab_por_rede = df_ativos.groupby(rede_col).size().sort_values(ascending=True).tail(15)
             
             fig_redes = px.bar(
-                y=colab_por_rede.index,
                 x=colab_por_rede.values,
+                y=colab_por_rede.index,
                 orientation='h',
-                title='👥 Colaboradores por Rede',
-                labels={'x': 'Quantidade de Colaboradores', 'y': 'Rede'}
+                title='👥 Colaboradores Ativos por Rede (Top 15)',
+                labels={'x': 'Quantidade de Colaboradores', 'y': 'Rede'},
+                color=colab_por_rede.values,
+                color_continuous_scale='greens'
             )
-            fig_redes.update_layout(
-                height=500,
-                yaxis={'categoryorder': 'total ascending'}
-            )
+            fig_redes.update_layout(height=500)
             graphs.append(dbc.Col([dcc.Graph(figure=fig_redes)], md=6))
         
-        # Gráfico de evolução mensal
-        if 'data_cadastro_dt' in df.columns and not df['data_cadastro_dt'].isna().all():
-            df['mes_ano'] = df['data_cadastro_dt'].dt.to_period('M').astype(str)
-            
-            if status_col:
-                # Evolução de colaboradores ativos
-                colab_mensais = df[df[status_col].str.lower().str.contains('ativ', na=False)].groupby('mes_ano').size().reset_index(name='Total_Colaboradores')
-            else:
-                # Evolução de todos os colaboradores
-                colab_mensais = df.groupby('mes_ano').size().reset_index(name='Total_Colaboradores')
-            
-            fig_evolucao = px.bar(
-                colab_mensais,
-                x='mes_ano',
-                y='Total_Colaboradores',
-                title='📊 Evolução Mensal - Colaboradores Ativos',
-                labels={'mes_ano': 'Mês', 'Total_Colaboradores': 'Quantidade de Colaboradores'}
-            )
-            fig_evolucao.update_layout(height=400)
-            graphs.append(dbc.Col([dcc.Graph(figure=fig_evolucao)], md=6))
+        # Evolução mensal de colaboradores ativos
+        data_col = None
+        for col in ['data_de_cadastro', 'data_cadastro', 'criado_em', 'data_criacao']:
+            if col in df.columns:
+                data_col = col
+                break
         
-        # Preparar dados da tabela (remover coluna temporária)
-        df_table = df.drop(['data_cadastro_dt', 'mes_ano'], axis=1, errors='ignore')
+        if data_col and status_col:
+            df_ativos['data_temp'] = pd.to_datetime(df[data_col], errors='coerce')
+            df_ativos = df_ativos.dropna(subset=['data_temp'])
+            
+            if not df_ativos.empty:
+                evolucao_colab = df_ativos.groupby(
+                    df_ativos['data_temp'].dt.to_period('M')
+                ).size().reset_index(name='total_colaboradores')
+                evolucao_colab['mes'] = evolucao_colab['data_temp'].dt.to_timestamp()
+                
+                fig_evolucao = px.bar(
+                    evolucao_colab,
+                    x='mes',
+                    y='total_colaboradores',
+                    title='📊 Evolução Mensal - Total de Colaboradores Ativos',
+                    labels={'mes': 'Mês', 'total_colaboradores': 'Total de Colaboradores'}
+                )
+                fig_evolucao.update_layout(height=400)
+                graphs.append(dbc.Col([dcc.Graph(figure=fig_evolucao)], md=6))
         
-        # Tabela com todos os dados
-        table_columns = [{"name": col.replace('_', ' ').title(), "id": col} for col in df_table.columns]
+        # Preparar dados da tabela
+        df_display = df.copy()
+        table_columns = [{"name": col.replace('_', ' ').title(), "id": col} for col in df_display.columns]
         
         colaboradores_table = dash_table.DataTable(
-            data=df_table.to_dict('records'),
+            data=df_display.to_dict('records'),
             columns=table_columns,
             style_cell={'textAlign': 'left', 'fontSize': '12px'},
             style_header={'backgroundColor': '#27ae60', 'color': 'white', 'fontWeight': 'bold'},
@@ -1006,7 +1010,7 @@ def generate_colaboradores_content(df):
             stats_cards,
             dbc.Row(graphs) if graphs else html.Div(),
             html.Hr(),
-            html.P(f"Colunas disponíveis: {', '.join(df_table.columns)}", className="text-muted mb-3"),
+            html.P(f"Colunas disponíveis: {', '.join(df.columns.tolist())}", className="text-muted mb-3"),
             colaboradores_table
         ])
         
