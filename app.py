@@ -19,9 +19,6 @@ warnings.filterwarnings('ignore')
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 server = app.server
 
-# Configuração para evitar que os componentes sejam destruídos ao trocar de aba
-app.config.suppress_callback_exceptions = True
-
 # ========================
 # 🎨 Layout Principal
 # ========================
@@ -373,17 +370,15 @@ def apply_filters(months, networks, statuses, clear_clicks, vouchers_data):
 @app.callback(
     Output('kpi-section', 'children'),
     [Input('store-vouchers', 'data'),
-     Input('store-filtered-data', 'data'),
-     Input('store-lojas', 'data')],
+     Input('store-filtered-data', 'data')],
     prevent_initial_call=True
 )
-def update_kpis(vouchers_data, filtered_data, lojas_data):
+def update_kpis(vouchers_data, filtered_data):
     data_to_use = filtered_data if filtered_data else vouchers_data
     if not data_to_use:
         return html.Div()
     
     df = pd.DataFrame(data_to_use)
-    df_lojas = pd.DataFrame(lojas_data) if lojas_data else pd.DataFrame()
     
     # Calcular KPIs
     total_vouchers = len(df)
@@ -404,36 +399,7 @@ def update_kpis(vouchers_data, filtered_data, lojas_data):
     total_stores = df[filial_col].nunique() if filial_col in df.columns else 0
     active_stores = used_vouchers[filial_col].nunique() if filial_col in used_vouchers.columns else 0
     
-    # KPIs da base de lojas
-    total_lojas_base = 0
-    total_redes_ativas = 0
-    lojas_com_geracao_pct = 0
-    
-    if not df_lojas.empty:
-        # Total de lojas na base
-        total_lojas_base = len(df_lojas)
-        
-        # Redes ativas
-        status_col = None
-        rede_col = None
-        for col in df_lojas.columns:
-            if 'status' in col.lower() or 'situacao' in col.lower():
-                status_col = col
-            if 'rede' in col.lower() and 'nome' in col.lower():
-                rede_col = col
-        
-        if status_col and rede_col:
-            df_ativas = df_lojas[df_lojas[status_col].str.lower() == 'ativa']
-            # Filtrar Renov dos resultados
-            df_ativas = df_ativas[df_ativas[rede_col].str.upper() != 'RENOV']
-            total_redes_ativas = df_ativas[rede_col].nunique()
-        
-        # Percentual de lojas com geração
-        if total_lojas_base > 0:
-            lojas_com_geracao_pct = (total_stores / total_lojas_base * 100)
-    
-    # Primeira linha de KPIs
-    primeira_linha = dbc.Row([
+    return dbc.Row([
         dbc.Col([
             dbc.Card([
                 dbc.CardBody([
@@ -441,7 +407,7 @@ def update_kpis(vouchers_data, filtered_data, lojas_data):
                     html.H3(f"{total_vouchers:,}", className="text-info fw-bold mb-1")
                 ])
             ], className="h-100 shadow-sm border-0")
-        ], md=3),
+        ], md=2),
         dbc.Col([
             dbc.Card([
                 dbc.CardBody([
@@ -450,7 +416,7 @@ def update_kpis(vouchers_data, filtered_data, lojas_data):
                     html.Small(f"{conversion_rate:.1f}% conversão", className="text-muted")
                 ])
             ], className="h-100 shadow-sm border-0")
-        ], md=3),
+        ], md=2),
         dbc.Col([
             dbc.Card([
                 dbc.CardBody([
@@ -458,7 +424,7 @@ def update_kpis(vouchers_data, filtered_data, lojas_data):
                     html.H3(f"R$ {total_value:,.0f}", className="text-warning fw-bold mb-1")
                 ])
             ], className="h-100 shadow-sm border-0")
-        ], md=3),
+        ], md=2),
         dbc.Col([
             dbc.Card([
                 dbc.CardBody([
@@ -466,36 +432,15 @@ def update_kpis(vouchers_data, filtered_data, lojas_data):
                     html.H3(f"R$ {avg_ticket:,.0f}", className="text-primary fw-bold mb-1")
                 ])
             ], className="h-100 shadow-sm border-0")
-        ], md=3)
-    ], className="g-2 mb-3")
-    
-    # Segunda linha de KPIs
-    segunda_linha = dbc.Row([
-        dbc.Col([
-            dbc.Card([
-                dbc.CardBody([
-                    html.H6("Total Redes Ativas", className="card-title text-muted mb-2"),
-                    html.H3(f"{total_redes_ativas}", className="text-success fw-bold mb-1")
-                ])
-            ], className="h-100 shadow-sm border-0")
-        ], md=3),
-        dbc.Col([
-            dbc.Card([
-                dbc.CardBody([
-                    html.H6("Total de Lojas", className="card-title text-muted mb-2"),
-                    html.H3(f"{total_lojas_base:,}", className="text-info fw-bold mb-1")
-                ])
-            ], className="h-100 shadow-sm border-0")
-        ], md=3),
+        ], md=2),
         dbc.Col([
             dbc.Card([
                 dbc.CardBody([
                     html.H6("Lojas Totais", className="card-title text-muted mb-2"),
-                    html.H3(f"{total_stores}", className="text-danger fw-bold mb-1"),
-                    html.Small(f"{lojas_com_geracao_pct:.1f}% com voucher", className="text-muted")
+                    html.H3(f"{total_stores}", className="text-danger fw-bold mb-1")
                 ])
             ], className="h-100 shadow-sm border-0")
-        ], md=3),
+        ], md=2),
         dbc.Col([
             dbc.Card([
                 dbc.CardBody([
@@ -504,10 +449,8 @@ def update_kpis(vouchers_data, filtered_data, lojas_data):
                     html.Small(f"{(active_stores/total_stores*100):.1f}% do total" if total_stores > 0 else "0%", className="text-muted")
                 ])
             ], className="h-100 shadow-sm border-0")
-        ], md=3)
+        ], md=2)
     ], className="g-2 mb-4")
-    
-    return html.Div([primeira_linha, segunda_linha])
 
 # ========================
 # 📈 CALLBACK PARA CONTEÚDO DAS ABAS
@@ -589,50 +532,33 @@ def generate_overview_content(df):
         
         # Gráfico de barras - top redes
         if rede_col in df.columns:
-            # Filtrar Renov
-            df_sem_renov = df[df[rede_col].str.upper() != 'RENOV']
-            
-            # Total de vouchers (AGORA PRIMEIRO)
-            network_counts = df_sem_renov[rede_col].value_counts().head(10)
-            fig_bar_total = go.Figure()
-            fig_bar_total.add_trace(go.Bar(
+            # Total de vouchers
+            network_counts = df[rede_col].value_counts().head(10)
+            fig_bar_total = px.bar(
                 x=network_counts.values,
                 y=network_counts.index,
                 orientation='h',
-                text=network_counts.values,
-                textposition='outside',
-                marker_color='lightblue'
-            ))
-            fig_bar_total.update_layout(
                 title="🏪 Volume Total por Rede (Top 10)",
-                yaxis={'categoryorder': 'total ascending'},
-                height=400,
-                xaxis_title="Quantidade",
-                yaxis_title="Rede"
+                color=network_counts.values,
+                color_continuous_scale='blues'
             )
+            fig_bar_total.update_layout(yaxis={'categoryorder': 'total ascending'}, height=400)
             
-            # Vouchers utilizados (AGORA SEGUNDO)
-            if situacao_col in df_sem_renov.columns:
-                used_mask = df_sem_renov[situacao_col].str.upper().str.contains('UTILIZADO', na=False)
-                used_vouchers = df_sem_renov[used_mask]
+            # Vouchers utilizados
+            if situacao_col in df.columns:
+                used_mask = df[situacao_col].str.upper().str.contains('UTILIZADO', na=False)
+                used_vouchers = df[used_mask]
                 if not used_vouchers.empty:
                     network_used_counts = used_vouchers[rede_col].value_counts().head(10)
-                    fig_bar_used = go.Figure()
-                    fig_bar_used.add_trace(go.Bar(
+                    fig_bar_used = px.bar(
                         x=network_used_counts.values,
                         y=network_used_counts.index,
                         orientation='h',
-                        text=network_used_counts.values,
-                        textposition='outside',
-                        marker_color='lightgreen'
-                    ))
-                    fig_bar_used.update_layout(
                         title="✅ Vouchers Utilizados por Rede (Top 10)",
-                        yaxis={'categoryorder': 'total ascending'},
-                        height=400,
-                        xaxis_title="Quantidade",
-                        yaxis_title="Rede"
+                        color=network_used_counts.values,
+                        color_continuous_scale='greens'
                     )
+                    fig_bar_used.update_layout(yaxis={'categoryorder': 'total ascending'}, height=400)
                 else:
                     fig_bar_used = go.Figure()
                     fig_bar_used.add_annotation(text="Nenhum voucher utilizado", x=0.5, y=0.5, showarrow=False)
@@ -640,155 +566,6 @@ def generate_overview_content(df):
             else:
                 fig_bar_used = fig_bar_total
         else:
-            fig_bar_total = go.Figure()
-            fig_bar_total.add_annotation(text="Dados de rede não disponíveis", x=0.5, y=0.5, showarrow=False)
-            fig_bar_total.update_layout(height=400)
-            fig_bar_used = fig_bar_total
-        
-        # Evolução temporal
-        if 'data_str' in df.columns:
-            daily_series = df.groupby('data_str').size().reset_index(name='count')
-            daily_series['data_str'] = pd.to_datetime(daily_series['data_str'])
-            
-            # Obter mês atual
-            if not daily_series.empty:
-                mes_atual = daily_series['data_str'].max().month
-                ano_atual = daily_series['data_str'].max().year
-                
-                # Criar série completa do mês
-                primeiro_dia = pd.Timestamp(ano_atual, mes_atual, 1)
-                ultimo_dia = pd.Timestamp(ano_atual, mes_atual, pd.Timestamp(ano_atual, mes_atual, 1).days_in_month)
-                datas_completas = pd.date_range(start=primeiro_dia, end=ultimo_dia, freq='D')
-                
-                # Merge com dados existentes
-                df_completo = pd.DataFrame({'data_str': datas_completas})
-                df_completo = df_completo.merge(daily_series, on='data_str', how='left')
-                df_completo['count'] = df_completo['count'].fillna(0)
-                df_completo['dia'] = df_completo['data_str'].dt.day
-                
-                fig_line = px.line(
-                    df_completo, 
-                    x='dia', 
-                    y='count',
-                    title="📅 Evolução Diária de Vouchers",
-                    labels={'dia': 'Dia', 'count': 'Quantidade'}
-                )
-                fig_line.update_traces(line_color='#3498db', line_width=3)
-                fig_line.update_layout(
-                    height=350,
-                    xaxis=dict(
-                        tickmode='linear',
-                        tick0=1,
-                        dtick=1,
-                        showgrid=False
-                    ),
-                    yaxis=dict(showgrid=False),
-                    plot_bgcolor='white'
-                )
-            else:
-                fig_line = go.Figure()
-                fig_line.add_annotation(text="Dados temporais não disponíveis", x=0.5, y=0.5, showarrow=False)
-                fig_line.update_layout(height=350)
-        else:
-            fig_line = go.Figure()
-            fig_line.add_annotation(text="Dados temporais não disponíveis", x=0.5, y=0.5, showarrow=False)
-            fig_line.update_layout(height=350)
-        
-        # Análise por rede para tabela
-        unique_days = df['data_str'].nunique() if 'data_str' in df.columns else 1
-        
-        network_summary = []
-        if rede_col in df.columns:
-            # Filtrar Renov
-            df_analysis = df[df[rede_col].str.upper() != 'RENOV']
-            
-            for rede in df_analysis[rede_col].unique():
-                rede_data = df_analysis[df_analysis[rede_col] == rede]
-                
-                if situacao_col in rede_data.columns:
-                    rede_used = rede_data[rede_data[situacao_col].str.upper().str.contains('UTILIZADO', na=False)]
-                else:
-                    rede_used = pd.DataFrame()
-                
-                vouchers_totais = len(rede_data)
-                vouchers_utilizados = len(rede_used)
-                valor_total = rede_used[valor_col].sum() if valor_col in rede_used.columns and len(rede_used) > 0 else 0
-                ticket_medio = valor_total / vouchers_utilizados if vouchers_utilizados > 0 else 0
-                
-                filial_col = 'nome_da_filial' if 'nome_da_filial' in df.columns else 'nome_filial'
-                lojas_totais = rede_data[filial_col].nunique() if filial_col in rede_data.columns else 0
-                lojas_ativas = rede_used[filial_col].nunique() if filial_col in rede_used.columns and len(rede_used) > 0 else 0
-                
-                media_diaria_utilizados = vouchers_utilizados / unique_days if unique_days > 0 else 0
-                projecao_mensal_utilizados = media_diaria_utilizados * 30
-                projecao_valor_total = (valor_total / unique_days * 30) if unique_days > 0 else 0
-                
-                network_summary.append({
-                    'Nome_da_Rede': rede,
-                    'Vouchers_Totais': int(vouchers_totais),
-                    'Vouchers_Utilizados': int(vouchers_utilizados),
-                    'Valor_Total': f"R$ {valor_total:,.0f}",
-                    'Ticket_Medio': f"R$ {ticket_medio:,.0f}",
-                    'Lojas_Totais': int(lojas_totais),
-                    'Lojas_Ativas': int(lojas_ativas),
-                    'Media_Diaria_Utilizados': round(media_diaria_utilizados, 0),
-                    'Projecao_Mensal_Utilizados': int(projecao_mensal_utilizados),
-                    'Projecao_Valor_Total': f"R$ {projecao_valor_total:,.0f}"
-                })
-        
-        # Ordenar por vouchers utilizados
-        network_summary = sorted(network_summary, key=lambda x: x['Vouchers_Utilizados'], reverse=True)
-        
-        # Tabela com formatação
-        network_table = dash_table.DataTable(
-            data=network_summary,
-            columns=[
-                {"name": "Rede", "id": "Nome_da_Rede"},
-                {"name": "Vouchers Totais", "id": "Vouchers_Totais", "type": "numeric"},
-                {"name": "Vouchers Utilizados", "id": "Vouchers_Utilizados", "type": "numeric"},
-                {"name": "Valor Total", "id": "Valor_Total"},
-                {"name": "Ticket Médio", "id": "Ticket_Medio"},
-                {"name": "Lojas Totais", "id": "Lojas_Totais", "type": "numeric"},
-                {"name": "Lojas Ativas", "id": "Lojas_Ativas", "type": "numeric"},
-                {"name": "Média Diária Utilizados", "id": "Media_Diaria_Utilizados", "type": "numeric"},
-                {"name": "Projeção Mensal Utilizados", "id": "Projecao_Mensal_Utilizados", "type": "numeric"},
-                {"name": "Projeção Valor Total", "id": "Projecao_Valor_Total"}
-            ],
-            style_cell={"textAlign": "left", "fontSize": "11px", "padding": "8px"},
-            style_header={"backgroundColor": "#3498db", "color": "white", "fontWeight": "bold"},
-            style_data_conditional=[
-                {
-                    "if": {"row_index": 0},
-                    "backgroundColor": "#e8f5e8",
-                    "color": "black"
-                }
-            ],
-            sort_action="native",
-            page_size=15
-        )
-        
-        return html.Div([
-            # Primeira linha: Gráficos de volume (ORDEM INVERTIDA)
-            dbc.Row([
-                dbc.Col([dcc.Graph(figure=fig_bar_total)], md=6),
-                dbc.Col([dcc.Graph(figure=fig_bar_used)], md=6)
-            ], className="mb-4"),
-            
-            # Segunda linha: Pizza de situações + Evolução temporal
-            dbc.Row([
-                dbc.Col([dcc.Graph(figure=fig_pie)], md=6),
-                dbc.Col([dcc.Graph(figure=fig_line)], md=6)
-            ], className="mb-4"),
-            
-            # Tabela resumo das redes
-            html.Hr(),
-            html.H5("📋 Resumo Detalhado por Rede", className="mb-3"),
-            html.P(f"Análise baseada em {unique_days} dias de dados", className="text-muted mb-3"),
-            network_table
-        ])
-        
-    except Exception as e:
-        return dbc.Alert(f"Erro na visão geral: {str(e)}", color="danger")
             fig_bar_total = go.Figure()
             fig_bar_total.add_annotation(text="Dados de rede não disponíveis", x=0.5, y=0.5, showarrow=False)
             fig_bar_total.update_layout(height=400)
@@ -835,9 +612,6 @@ def generate_networks_content(df):
         
         if rede_col not in df.columns:
             return dbc.Alert("Dados de redes não disponíveis.", color="warning")
-        
-        # Filtrar Renov
-        df = df[df[rede_col].str.upper() != 'RENOV']
         
         # Análise por rede
         network_analysis = df.groupby(rede_col).agg({
@@ -898,10 +672,6 @@ def generate_rankings_content(df):
         filial_col = 'nome_da_filial' if 'nome_da_filial' in df.columns else 'nome_filial'
         rede_col = 'nome_da_rede' if 'nome_da_rede' in df.columns else 'nome_rede'
         valor_col = 'valor_do_dispositivo' if 'valor_do_dispositivo' in df.columns else 'valor_dispositivo'
-        
-        # Filtrar Renov
-        if rede_col in df.columns:
-            df = df[df[rede_col].str.upper() != 'RENOV']
         
         # Ranking de lojas
         if filial_col in df.columns:
@@ -972,28 +742,20 @@ def generate_lojas_content(df, vouchers_df=None):
         # Processar dados
         df = df.copy()
         
-        # Filtrar Renov
-        rede_col = None
-        for col in df.columns:
-            if 'rede' in col.lower() and 'nome' in col.lower():
-                rede_col = col
-                break
-        
-        if rede_col:
-            df = df[df[rede_col].str.upper() != 'RENOV']
-        
         # Remover horas das datas
         date_columns = ['data_de_inicio', 'data_inicio', 'criado_em', 'data_criacao']
         for col in date_columns:
             if col in df.columns:
                 df[col] = pd.to_datetime(df[col], errors='coerce').dt.date
         
-        # Identificar colunas de status
+        # Identificar colunas de status e rede
         status_col = None
+        rede_col = None
         for col in df.columns:
             if 'status' in col.lower() or 'situacao' in col.lower():
                 status_col = col
-                break
+            if 'rede' in col.lower() and 'nome' in col.lower():
+                rede_col = col
         
         # Calcular KPIs
         total_lojas = len(df)
@@ -1008,11 +770,6 @@ def generate_lojas_content(df, vouchers_df=None):
         # Lojas sem geração de voucher
         lojas_sem_voucher = 0
         if vouchers_df is not None and not vouchers_df.empty:
-            # Filtrar Renov dos vouchers também
-            rede_col_voucher = 'nome_da_rede' if 'nome_da_rede' in vouchers_df.columns else 'nome_rede'
-            if rede_col_voucher in vouchers_df.columns:
-                vouchers_df = vouchers_df[vouchers_df[rede_col_voucher].str.upper() != 'RENOV']
-            
             filial_col_voucher = 'nome_da_filial' if 'nome_da_filial' in vouchers_df.columns else 'nome_filial'
             filial_col_loja = 'nome_da_filial' if 'nome_da_filial' in df.columns else 'nome_filial'
             
@@ -1134,51 +891,6 @@ def generate_lojas_content(df, vouchers_df=None):
         ])
         
     except Exception as e:
-        return dbc.Alert(f"Erro ao processar base de lojas: {str(e)}", color="danger")filiais = df_ativas.groupby(
-                    df_ativas['data_temp'].dt.to_period('M')
-                ).size().reset_index(name='total_filiais')
-                evolucao_filiais['mes'] = evolucao_filiais['data_temp'].dt.to_timestamp()
-                
-                fig_filiais = px.bar(
-                    evolucao_filiais,
-                    x='mes',
-                    y='total_filiais',
-                    title='📊 Evolução Mensal - Total de Filiais Ativas',
-                    labels={'mes': 'Mês', 'total_filiais': 'Total de Filiais'}
-                )
-                fig_filiais.update_layout(height=400)
-                graphs.append(dbc.Col([dcc.Graph(figure=fig_filiais)], md=6))
-        
-        # Preparar dados da tabela
-        df_display = df.copy()
-        table_columns = [{"name": col.replace('_', ' ').title(), "id": col} for col in df_display.columns]
-        
-        lojas_table = dash_table.DataTable(
-            data=df_display.to_dict('records'),
-            columns=table_columns,
-            style_cell={'textAlign': 'left', 'fontSize': '12px'},
-            style_header={'backgroundColor': '#3498db', 'color': 'white', 'fontWeight': 'bold'},
-            sort_action="native",
-            filter_action="native",
-            page_size=20,
-            style_data_conditional=[
-                {
-                    'if': {'row_index': 'odd'},
-                    'backgroundColor': 'rgb(248, 248, 248)'
-                }
-            ]
-        )
-        
-        return html.Div([
-            html.H4("🏪 Base de Lojas", className="mb-4"),
-            stats_cards,
-            dbc.Row(graphs) if graphs else html.Div(),
-            html.Hr(),
-            html.P(f"Colunas disponíveis: {', '.join(df.columns.tolist())}", className="text-muted mb-3"),
-            lojas_table
-        ])
-        
-    except Exception as e:
         return dbc.Alert(f"Erro ao processar base de lojas: {str(e)}", color="danger")
 
 def generate_colaboradores_content(df):
@@ -1189,28 +901,20 @@ def generate_colaboradores_content(df):
         # Processar dados
         df = df.copy()
         
-        # Filtrar Renov
-        rede_col = None
-        for col in df.columns:
-            if 'rede' in col.lower() and 'nome' in col.lower():
-                rede_col = col
-                break
-        
-        if rede_col:
-            df = df[df[rede_col].str.upper() != 'RENOV']
-        
         # Remover horas das datas
         date_columns = ['data_de_cadastro', 'data_cadastro', 'criado_em', 'data_criacao']
         for col in date_columns:
             if col in df.columns:
                 df[col] = pd.to_datetime(df[col], errors='coerce').dt.date
         
-        # Identificar coluna de status
+        # Identificar colunas
         status_col = None
+        rede_col = None
         for col in df.columns:
             if 'status' in col.lower() or 'situacao' in col.lower():
                 status_col = col
-                break
+            if 'rede' in col.lower() and 'nome' in col.lower():
+                rede_col = col
         
         # Estatísticas gerais
         total_colaboradores = len(df)
