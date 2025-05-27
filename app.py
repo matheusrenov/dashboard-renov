@@ -556,6 +556,27 @@ def generate_projections_content(original_df, filtered_df):
     except Exception as e:
         return dbc.Alert(f"Erro nas projeções: {str(e)}", color="danger")
 
+def update_pending_users_table():
+    pending_users = db.get_pending_users()
+    if not pending_users:
+        return html.Div("Nenhum usuário pendente de aprovação.", className="text-muted")
+    
+    return dash_table.DataTable(
+        id='pending-users',
+        data=pending_users,
+        columns=[
+            {'name': 'Usuário', 'id': 'username'},
+            {'name': 'Email', 'id': 'email'},
+            {'name': 'Data de Registro', 'id': 'created_at'}
+        ],
+        style_cell={'textAlign': 'left', 'padding': '10px'},
+        style_header={
+            'backgroundColor': '#3498db',
+            'color': 'white',
+            'fontWeight': 'bold'
+        }
+    )
+
 # ========================
 # 📥 CALLBACK DE UPLOAD - Processa dados e popula filtros
 # ========================
@@ -870,6 +891,31 @@ def handle_auth_final(login_clicks, register_clicks, pathname,
     raise PreventUpdate
 
 @app.callback(
+    [Output('auth-status', 'children', allow_duplicate=True),
+     Output('url', 'pathname', allow_duplicate=True),
+     Output('page-content', 'children', allow_duplicate=True)],
+    [Input('show-register', 'n_clicks'),
+     Input('show-login', 'n_clicks'),
+     Input('logout-button', 'n_clicks')],
+    prevent_initial_call=True
+)
+def handle_nav_final(show_reg_clicks, show_login_clicks, logout_clicks):
+    ctx = callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+    
+    triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    
+    if triggered_id == 'show-register':
+        return "", "/register", create_register_layout()
+    elif triggered_id == 'show-login':
+        return "", "/", create_login_layout()
+    elif triggered_id == 'logout-button':
+        return "", "/", create_login_layout()
+    
+    raise PreventUpdate
+
+@app.callback(
     Output('pending-users-table', 'children'),
     [Input('url', 'pathname')]
 )
@@ -877,25 +923,32 @@ def update_pending_users(pathname):
     if pathname != "/dashboard":
         return html.Div()
     
-    pending_users = db.get_pending_users()
-    if not pending_users:
-        return html.Div("Nenhum usuário pendente de aprovação.", className="text-muted")
+    return update_pending_users_table()
+
+@app.callback(
+    Output('pending-users-table', 'children'),
+    [Input('approve-user-button', 'n_clicks'),
+     Input('reject-user-button', 'n_clicks')],
+    [State('pending-users-table', 'selected_rows'),
+     State('pending-users-table', 'data')]
+)
+def handle_user_approval(approve_clicks, reject_clicks, selected_rows, table_data):
+    if not selected_rows:
+        return dash.no_update
     
-    return dash_table.DataTable(
-        id='pending-users',
-        data=pending_users,
-        columns=[
-            {'name': 'Usuário', 'id': 'username'},
-            {'name': 'Email', 'id': 'email'},
-            {'name': 'Data de Registro', 'id': 'created_at'}
-        ],
-        style_cell={'textAlign': 'left', 'padding': '10px'},
-        style_header={
-            'backgroundColor': '#3498db',
-            'color': 'white',
-            'fontWeight': 'bold'
-        }
-    )
+    ctx = callback_context
+    if not ctx.triggered:
+        return dash.no_update
+    
+    triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    selected_user = table_data[selected_rows[0]]
+    
+    if triggered_id == 'approve-user-button':
+        db.approve_user(selected_user['email'])
+    elif triggered_id == 'reject-user-button':
+        db.reject_user(selected_user['email'])
+    
+    return update_pending_users_table()
 
 @app.callback(
     Output('approval-section', 'is_open'),
@@ -912,9 +965,77 @@ def toggle_approval_section(n_clicks, is_open):
     [Input('url', 'pathname')]
 )
 def update_content(pathname):
-    if not pathname.startswith('/login'):
-        return create_dashboard_layout()
-    return create_login_layout()
+    if pathname == "/dashboard":
+        return html.Div([
+            dbc.Row([
+                dbc.Col([
+                    dcc.Upload(
+                        id='upload-data',
+                        children=html.Div([
+                            'Arraste e solte ou ',
+                            html.A('selecione um arquivo', className="text-primary")
+                        ]),
+                        style={
+                            'width': '100%',
+                            'height': '60px',
+                            'lineHeight': '60px',
+                            'borderWidth': '1px',
+                            'borderStyle': 'dashed',
+                            'borderRadius': '5px',
+                            'textAlign': 'center',
+                            'margin': '10px'
+                        }
+                    ),
+                    html.Div(id='alerts'),
+                    html.Div(id='welcome-message', children=[
+                        html.H4("👋 Bem-vindo ao Dashboard!", className="text-center mt-5"),
+                        html.P("Faça o upload de um arquivo para começar.", className="text-center text-muted")
+                    ]),
+                    dcc.Store(id='store-data'),
+                    dcc.Store(id='store-filtered-data')
+                ])
+            ]),
+            
+            # Seção de Filtros
+            html.Div(id='filters-section', style={'display': 'none'}, children=[
+                dbc.Row([
+                    dbc.Col([
+                        html.H5("🔍 Filtros", className="mb-3"),
+                        dbc.Row([
+                            dbc.Col([
+                                html.Label("Mês:"),
+                                dcc.Dropdown(id='filter-month', multi=True)
+                            ], md=4),
+                            dbc.Col([
+                                html.Label("Rede:"),
+                                dcc.Dropdown(id='filter-network', multi=True)
+                            ], md=4),
+                            dbc.Col([
+                                html.Label("Situação:"),
+                                dcc.Dropdown(id='filter-status', multi=True)
+                            ], md=4)
+                        ]),
+                        dbc.Button("Limpar Filtros", id="clear-filters", 
+                                 color="secondary", size="sm", className="mt-2")
+                    ])
+                ], className="mb-4")
+            ]),
+            
+            # Seção de KPIs
+            html.Div(id='kpi-section'),
+            
+            # Seção de Tabs
+            html.Div(id='tabs-section', style={'display': 'none'}, children=[
+                dcc.Tabs(id='main-tabs', value='overview', children=[
+                    dcc.Tab(label='Visão Geral', value='overview'),
+                    dcc.Tab(label='Redes', value='networks'),
+                    dcc.Tab(label='Rankings', value='rankings'),
+                    dcc.Tab(label='Projeções', value='projections')
+                ], className="mb-4"),
+                html.Div(id='tab-content-area')
+            ])
+        ])
+    return html.Div()
 
 # ========================
 # 🔚 Execução
