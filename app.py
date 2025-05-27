@@ -29,11 +29,10 @@ server = app.server
 db = UserDatabase()
 
 # ========================
-# 🔐 Layout Principal com Autenticação
+# 🔐 Layout Principal
 # ========================
 app.layout = html.Div([
     dcc.Location(id='url', refresh=False),
-    dcc.Store(id='session-store', storage_type='session', data={'authenticated': False}),
     html.Div(id='page-content'),
     html.Div(id='auth-status')
 ])
@@ -791,39 +790,12 @@ app.clientside_callback(
 # 🔄 Callbacks de Autenticação
 # ========================
 @app.callback(
-    Output('page-content', 'children'),
-    [Input('url', 'pathname')],
-    [State('session-store', 'data')]
-)
-def display_page(pathname, session_data):
-    if not session_data or not session_data.get('authenticated'):
-        return create_login_layout()
-    return create_dashboard_layout(session_data.get('is_super_admin', False))
-
-@app.callback(
-    [Output('session-store', 'data'),
+    [Output('page-content', 'children'),
      Output('auth-status', 'children')],
-    [Input('show-register', 'n_clicks'),
-     Input('show-login', 'n_clicks')],
-    [State('session-store', 'data')]
-)
-def toggle_login_register(show_reg_clicks, show_login_clicks, session_data):
-    if not callback_context.triggered:
-        return session_data, ""
-    
-    triggered_id = callback_context.triggered[0]['prop_id'].split('.')[0]
-    
-    if triggered_id == 'show-register':
-        return session_data, create_register_layout()
-    elif triggered_id == 'show-login':
-        return session_data, create_login_layout()
-    
-    return session_data, ""
-
-@app.callback(
-    [Output('session-store', 'data'),
-     Output('auth-status', 'children')],
-    [Input('login-button', 'n_clicks'),
+    [Input('url', 'pathname'),
+     Input('show-register', 'n_clicks'),
+     Input('show-login', 'n_clicks'),
+     Input('login-button', 'n_clicks'),
      Input('register-button', 'n_clicks'),
      Input('logout-button', 'n_clicks')],
     [State('login-username', 'value'),
@@ -831,71 +803,97 @@ def toggle_login_register(show_reg_clicks, show_login_clicks, session_data):
      State('register-username', 'value'),
      State('register-email', 'value'),
      State('register-password', 'value'),
-     State('register-confirm-password', 'value'),
-     State('session-store', 'data')]
+     State('register-confirm-password', 'value')]
 )
-def handle_authentication(login_clicks, register_clicks, logout_clicks,
-                        username, password, reg_username, reg_email,
-                        reg_password, reg_confirm_password, session_data):
+def handle_auth_navigation(pathname, show_reg_clicks, show_login_clicks, 
+                         login_clicks, register_clicks, logout_clicks,
+                         username, password, reg_username, reg_email,
+                         reg_password, reg_confirm_password):
     ctx = callback_context
     if not ctx.triggered:
-        return session_data, ""
+        return create_login_layout(), ""
     
     triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
     
-    if triggered_id == 'logout-button':
-        return {'authenticated': False}, ""
+    # Navegação entre páginas
+    if triggered_id == 'show-register':
+        return create_register_layout(), ""
+    elif triggered_id == 'show-login':
+        return create_login_layout(), ""
+    elif triggered_id == 'logout-button':
+        return create_login_layout(), ""
     
+    # Login
     if triggered_id == 'login-button' and username and password:
         user = db.verify_user(username, password)
         if user:
             if not user['is_approved']:
-                return session_data, dbc.Alert(
+                return create_login_layout(), dbc.Alert(
                     "Sua conta ainda está pendente de aprovação.",
                     color="warning",
                     className="mt-3"
                 )
-            return {
-                'authenticated': True,
-                'username': user['username'],
-                'email': user['email'],
-                'is_admin': user['is_admin'],
-                'is_super_admin': user['is_super_admin']
-            }, ""
-        return session_data, dbc.Alert(
+            return create_dashboard_layout(user['is_super_admin']), ""
+        return create_login_layout(), dbc.Alert(
             "Usuário ou senha inválidos.",
             color="danger",
             className="mt-3"
         )
     
+    # Registro
     if triggered_id == 'register-button':
         if not all([reg_username, reg_email, reg_password, reg_confirm_password]):
-            return session_data, dbc.Alert(
+            return create_register_layout(), dbc.Alert(
                 "Todos os campos são obrigatórios.",
                 color="danger",
                 className="mt-3"
             )
         
         if reg_password != reg_confirm_password:
-            return session_data, dbc.Alert(
+            return create_register_layout(), dbc.Alert(
                 "As senhas não coincidem.",
                 color="danger",
                 className="mt-3"
             )
         
         if db.create_user(reg_username, reg_password, reg_email):
-            return session_data, dbc.Alert(
+            return create_login_layout(), dbc.Alert(
                 "Conta criada com sucesso! Aguarde a aprovação do administrador.",
                 color="success",
                 className="mt-3"
             )
-        return session_data, dbc.Alert(
+        return create_register_layout(), dbc.Alert(
             "Usuário ou email já existem.",
             color="danger",
             className="mt-3"
         )
     
-    return session_data, ""
+    return create_login_layout(), ""
+
+@app.callback(
+    Output('pending-users-table', 'children'),
+    [Input('url', 'pathname')]
+)
+def update_pending_users(pathname):
+    pending_users = db.get_pending_users()
+    if not pending_users:
+        return html.Div("Nenhum usuário pendente de aprovação.", className="text-muted")
+    
+    return dash_table.DataTable(
+        id='pending-users',
+        data=pending_users,
+        columns=[
+            {'name': 'Usuário', 'id': 'username'},
+            {'name': 'Email', 'id': 'email'},
+            {'name': 'Data de Registro', 'id': 'created_at'}
+        ],
+        style_cell={'textAlign': 'left', 'padding': '10px'},
+        style_header={
+            'backgroundColor': '#3498db',
+            'color': 'white',
+            'fontWeight': 'bold'
+        }
+    )
 
 @app.callback(
     Output('approval-section', 'is_open'),
@@ -908,55 +906,13 @@ def toggle_approval_section(n_clicks, is_open):
     return is_open
 
 @app.callback(
-    Output('pending-users-table', 'children'),
-    [Input('session-store', 'data')]
-)
-def update_pending_users(session_data):
-    if not session_data or not session_data.get('is_super_admin'):
-        return html.Div("Acesso não autorizado")
-    
-    pending_users = db.get_pending_users(session_data.get('email'))
-    if not pending_users:
-        return html.Div("Nenhum usuário pendente de aprovação.", className="text-muted")
-    
-    return dash_table.DataTable(
-        id='pending-users',
-        data=pending_users,
-        columns=[
-            {'name': 'Usuário', 'id': 'username'},
-            {'name': 'Email', 'id': 'email'},
-            {'name': 'Data de Registro', 'id': 'created_at'},
-            {
-                'name': 'Ações',
-                'id': 'id',
-                'type': 'text',
-                'presentation': 'button'
-            }
-        ],
-        style_cell={'textAlign': 'left', 'padding': '10px'},
-        style_header={
-            'backgroundColor': '#3498db',
-            'color': 'white',
-            'fontWeight': 'bold'
-        }
-    )
-
-@app.callback(
     Output('dashboard-content', 'children'),
-    [Input('session-store', 'data')]
+    [Input('url', 'pathname')]
 )
-def update_content(session_data):
-    if not session_data or not session_data.get('authenticated'):
-        return create_login_layout()
-    
-    return html.Div([
-        dbc.Alert(
-            f"Bem-vindo, {session_data.get('username')}!",
-            color="success",
-            className="mb-4"
-        ),
-        # Aqui você pode adicionar o resto do conteúdo do dashboard
-    ])
+def update_content(pathname):
+    if not pathname.startswith('/login'):
+        return create_dashboard_layout()
+    return create_login_layout()
 
 # ========================
 # 🔚 Execução
