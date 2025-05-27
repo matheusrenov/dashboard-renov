@@ -115,7 +115,6 @@ def create_admin_approval_layout():
                     ]),
                     dbc.CardBody([
                         html.Div(id="pending-users-table", className="pending-users-table"),
-                        html.Div(id="approval-status", className="mt-3"),
                         dbc.Button(
                             "Voltar ao Dashboard",
                             id="back-to-dashboard",
