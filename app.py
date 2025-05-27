@@ -791,19 +791,30 @@ app.clientside_callback(
 # ========================
 @app.callback(
     Output('page-content', 'children'),
-    [Input('url', 'pathname')]
+    [Input('url', 'pathname'),
+     Input('show-register', 'n_clicks'),
+     Input('show-login', 'n_clicks'),
+     Input('logout-button', 'n_clicks')]
 )
-def display_page(pathname):
+def display_page(pathname, show_reg_clicks, show_login_clicks, logout_clicks):
+    ctx = callback_context
+    if not ctx.triggered:
+        return create_login_layout()
+    
+    triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    
+    if triggered_id == 'show-register':
+        return create_register_layout()
+    elif triggered_id == 'show-login' or triggered_id == 'logout-button':
+        return create_login_layout()
+    
     return create_login_layout()
 
 @app.callback(
     [Output('auth-status', 'children'),
      Output('url', 'pathname')],
-    [Input('show-register', 'n_clicks'),
-     Input('show-login', 'n_clicks'),
-     Input('login-button', 'n_clicks'),
-     Input('register-button', 'n_clicks'),
-     Input('logout-button', 'n_clicks')],
+    [Input('login-button', 'n_clicks'),
+     Input('register-button', 'n_clicks')],
     [State('login-username', 'value'),
      State('login-password', 'value'),
      State('register-username', 'value'),
@@ -811,20 +822,14 @@ def display_page(pathname):
      State('register-password', 'value'),
      State('register-confirm-password', 'value')]
 )
-def handle_auth_navigation(show_reg_clicks, show_login_clicks, 
-                         login_clicks, register_clicks, logout_clicks,
-                         username, password, reg_username, reg_email,
-                         reg_password, reg_confirm_password):
+def handle_authentication(login_clicks, register_clicks,
+                        username, password, reg_username, reg_email,
+                        reg_password, reg_confirm_password):
     ctx = callback_context
     if not ctx.triggered:
         return "", "/"
     
     triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
-    
-    if triggered_id == 'show-register':
-        return "", "/register"
-    elif triggered_id == 'show-login' or triggered_id == 'logout-button':
-        return "", "/login"
     
     if triggered_id == 'login-button' and username and password:
         user = db.verify_user(username, password)
@@ -834,13 +839,13 @@ def handle_auth_navigation(show_reg_clicks, show_login_clicks,
                     "Sua conta ainda está pendente de aprovação.",
                     color="warning",
                     className="mt-3"
-                ), "/login"
+                ), "/"
             return "", "/dashboard"
         return dbc.Alert(
             "Usuário ou senha inválidos.",
             color="danger",
             className="mt-3"
-        ), "/login"
+        ), "/"
     
     if triggered_id == 'register-button':
         if not all([reg_username, reg_email, reg_password, reg_confirm_password]):
@@ -848,26 +853,26 @@ def handle_auth_navigation(show_reg_clicks, show_login_clicks,
                 "Todos os campos são obrigatórios.",
                 color="danger",
                 className="mt-3"
-            ), "/register"
+            ), "/"
         
         if reg_password != reg_confirm_password:
             return dbc.Alert(
                 "As senhas não coincidem.",
                 color="danger",
                 className="mt-3"
-            ), "/register"
+            ), "/"
         
         if db.create_user(reg_username, reg_password, reg_email):
             return dbc.Alert(
                 "Conta criada com sucesso! Aguarde a aprovação do administrador.",
                 color="success",
                 className="mt-3"
-            ), "/login"
+            ), "/"
         return dbc.Alert(
             "Usuário ou email já existem.",
             color="danger",
             className="mt-3"
-        ), "/register"
+        ), "/"
     
     return "", "/"
 

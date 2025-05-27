@@ -1,5 +1,5 @@
 import dash_bootstrap_components as dbc
-from dash import html, dcc, dash_table
+from dash import html, dcc
 
 def create_login_layout():
     return html.Div([
@@ -11,7 +11,7 @@ def create_login_layout():
                         dbc.Card([
                             dbc.CardBody([
                                 html.H3("Login", className="text-center mb-4"),
-                                dbc.Form([
+                                html.Form([
                                     dbc.Input(
                                         type="email",
                                         id="login-username",
@@ -28,17 +28,18 @@ def create_login_layout():
                                         "Entrar",
                                         id="login-button",
                                         color="primary",
-                                        className="w-100 mb-3"
+                                        className="w-100 mb-3",
+                                        n_clicks=0
                                     ),
                                     html.Div([
-                                        dbc.Button(
+                                        html.A(
                                             "Criar nova conta",
+                                            href="#",
                                             id="show-register",
-                                            color="link",
-                                            className="p-0"
+                                            className="text-primary text-decoration-none"
                                         )
                                     ], className="text-center")
-                                ])
+                                ], id="login-form")
                             ])
                         ], className="shadow-sm")
                     ], style={
@@ -61,7 +62,7 @@ def create_register_layout():
                         dbc.Card([
                             dbc.CardBody([
                                 html.H3("Criar Conta", className="text-center mb-4"),
-                                dbc.Form([
+                                html.Form([
                                     dbc.Input(
                                         type="text",
                                         id="register-username",
@@ -90,17 +91,18 @@ def create_register_layout():
                                         "Registrar",
                                         id="register-button",
                                         color="success",
-                                        className="w-100 mb-3"
+                                        className="w-100 mb-3",
+                                        n_clicks=0
                                     ),
                                     html.Div([
-                                        dbc.Button(
+                                        html.A(
                                             "Voltar para login",
+                                            href="#",
                                             id="show-login",
-                                            color="link",
-                                            className="p-0"
+                                            className="text-primary text-decoration-none"
                                         )
                                     ], className="text-center")
-                                ])
+                                ], id="register-form")
                             ])
                         ], className="shadow-sm")
                     ], style={
