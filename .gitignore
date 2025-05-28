@@ -16,19 +16,14 @@ lib64/
 parts/
 sdist/
 var/
+wheels/
 *.egg-info/
 .installed.cfg
 *.egg
 
 # Virtual Environment
 venv/
-.env
-.venv
 ENV/
-
-# Database
-*.db
-data/*.db
 
 # IDE
 .idea/
@@ -36,10 +31,15 @@ data/*.db
 *.swp
 *.swo
 
-# OS
+# Logs
+*.log
+
+# Local development
+.env
+.env.local
+*.db
+data/*.db
+
+# System Files
 .DS_Store
 Thumbs.db
-
-# Logs e Databases
-*.log
-*.sqlite

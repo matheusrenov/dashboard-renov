@@ -47,17 +47,23 @@ def get_available_port(start_port=8081):
 # ========================
 # 🚀 Inicialização do App
 # ========================
+
+# Configuração dos assets
+assets_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets')
+if not os.path.exists(assets_path):
+    os.makedirs(assets_path)
+
+# Inicialização do Dash com todas as configurações necessárias
 app = dash.Dash(
-    __name__, 
+    __name__,
     external_stylesheets=[dbc.themes.BOOTSTRAP],
     suppress_callback_exceptions=True,
     update_title='Carregando...',
     meta_tags=[
         {"name": "viewport", "content": "width=device-width, initial-scale=1"}
     ],
-    assets_folder='assets',  # Pasta de assets
-    assets_url_path='/assets',  # URL path para assets
-    serve_locally=True  # Servir assets localmente
+    assets_folder=assets_path,
+    serve_locally=True
 )
 
 # Configurações do servidor
@@ -69,7 +75,7 @@ if server:
     server.config.update(
         SECRET_KEY=os.environ.get('SECRET_KEY', secrets.token_hex(16)),
         FLASK_ENV=os.environ.get('FLASK_ENV', 'development'),
-        DEBUG=True
+        DEBUG=True if os.environ.get('FLASK_ENV') == 'development' else False
     )
 
     # Configurações de segurança adicionais para produção
