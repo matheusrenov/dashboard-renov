@@ -22,9 +22,14 @@ warnings.filterwarnings('ignore')
 app = dash.Dash(
     __name__, 
     external_stylesheets=[dbc.themes.BOOTSTRAP],
-    suppress_callback_exceptions=True
+    suppress_callback_exceptions=True,
+    update_title=None
 )
 server = app.server
+
+# Configurações para produção
+app.title = "Dashboard Renov"
+app._favicon = "assets/favicon.ico"
 
 # Inicializa o banco de dados
 db = UserDatabase()
@@ -1100,4 +1105,12 @@ def update_dashboard_content(pathname):
 # 🔚 Execução
 # ========================
 if __name__ == '__main__':
-    app.run(debug=True, port=int(os.environ.get("PORT", 8080)), host='0.0.0.0')
+    # Modo debug apenas em desenvolvimento
+    debug = os.environ.get("DASH_DEBUG", "False").lower() == "true"
+    port = int(os.environ.get("PORT", 8080))
+    
+    app.run(
+        debug=debug,
+        host='0.0.0.0',
+        port=port
+    )
