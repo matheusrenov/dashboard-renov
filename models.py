@@ -5,12 +5,15 @@ import os
 
 class UserDatabase:
     def __init__(self):
-        self.db_file = 'users.db'
+        self.db_file = 'data/users.db'
         self.super_admin_email = 'matheus@renovsmart.com.br'
         self._create_tables()
         self._create_initial_admin()
     
     def _create_tables(self):
+        # Garante que o diretório data existe
+        os.makedirs(os.path.dirname(self.db_file), exist_ok=True)
+        
         conn = sqlite3.connect(self.db_file)
         cursor = conn.cursor()
         
