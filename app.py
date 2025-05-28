@@ -30,7 +30,8 @@ app = dash.Dash(
     meta_tags=[
         {"name": "viewport", "content": "width=device-width, initial-scale=1"}
     ],
-    serve_locally=True
+    serve_locally=True,
+    url_base_pathname='/'  # Garante que a aplicação responda na raiz
 )
 server = app.server
 
@@ -45,16 +46,6 @@ server.config.update(
     PROPAGATE_EXCEPTIONS=True
 )
 
-# Endpoint de healthcheck mais robusto
-@server.route('/health')
-def health_check():
-    try:
-        # Verifica se o banco de dados está acessível
-        db.test_connection()
-        return 'OK', 200
-    except Exception as e:
-        return str(e), 500
-
 # Configuração para servir arquivos estáticos
 if not os.environ.get("DASH_DEBUG_MODE"):
     from whitenoise import WhiteNoise
@@ -63,6 +54,16 @@ if not os.environ.get("DASH_DEBUG_MODE"):
         root='assets/',
         prefix='assets/'
     )
+
+# Endpoint de healthcheck
+@server.route('/health')
+def health_check():
+    try:
+        # Verifica se o banco de dados está acessível
+        db.test_connection()
+        return 'OK', 200
+    except Exception as e:
+        return str(e), 500
 
 # Inicializa o banco de dados
 db = UserDatabase()
@@ -1141,12 +1142,9 @@ if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8080))
     host = os.environ.get("HOST", "0.0.0.0")
     
-    # Configuração do servidor para produção
-    server.config['PREFERRED_URL_SCHEME'] = 'https'
-    
     app.run(
         debug=False,
         host=host,
         port=port,
-        use_reloader=False  # Desativa o reloader em produção
+        use_reloader=False
     )
