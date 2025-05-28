@@ -103,4 +103,75 @@
 
 .approve-button:hover {
     background-color: #27ae60;
+}
+
+/* Estilos globais */
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f8f9fa;
+}
+
+/* Container principal */
+.container-fluid {
+    padding: 20px;
+}
+
+/* Loading spinner */
+._dash-loading {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 9999;
+}
+
+._dash-loading::after {
+    content: '';
+    display: block;
+    width: 40px;
+    height: 40px;
+    border: 4px solid #3498db;
+    border-radius: 50%;
+    border-top-color: transparent;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Cards */
+.card {
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transition: transform 0.2s ease-in-out;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+}
+
+/* Botões */
+.btn {
+    border-radius: 4px;
+    font-weight: 500;
+}
+
+/* Formulários */
+.form-control {
+    border-radius: 4px;
+}
+
+/* Tabs */
+.nav-tabs .nav-link {
+    border-radius: 4px 4px 0 0;
+}
+
+/* Alerts */
+.alert {
+    border-radius: 4px;
+    margin-bottom: 1rem;
 } 

@@ -26,17 +26,19 @@ app = dash.Dash(
     __name__, 
     external_stylesheets=[dbc.themes.BOOTSTRAP],
     suppress_callback_exceptions=True,
-    update_title=None,
+    update_title='Carregando...',
     meta_tags=[
         {"name": "viewport", "content": "width=device-width, initial-scale=1"}
     ],
     serve_locally=True,
-    url_base_pathname='/'  # Garante que a aplicação responda na raiz
+    url_base_pathname='/',
+    assets_folder='assets'
 )
-server = app.server
 
-# Configurações para produção
+# Configurações do servidor
+server = app.server
 app.title = "Dashboard Renov"
+app.config.suppress_callback_exceptions = True
 
 # Configurações do Flask
 server.config.update(
@@ -55,27 +57,32 @@ if not os.environ.get("DASH_DEBUG_MODE"):
         prefix='assets/'
     )
 
-# Endpoint de healthcheck
-@server.route('/health')
-def health_check():
-    try:
-        # Verifica se o banco de dados está acessível
-        db.test_connection()
-        return 'OK', 200
-    except Exception as e:
-        return str(e), 500
-
 # Inicializa o banco de dados
 db = UserDatabase()
 
 # ========================
 # 🔐 Layout Principal
 # ========================
-app.layout = html.Div([
-    dcc.Location(id='url', refresh=False),
-    html.Div(id='page-content'),
-    html.Div(id='auth-status')
-])
+def serve_layout():
+    return html.Div([
+        dcc.Location(id='url', refresh=False),
+        html.Div(id='page-content'),
+        html.Div(id='auth-status'),
+        # Store components para dados
+        dcc.Store(id='store-data'),
+        dcc.Store(id='store-filtered-data')
+    ])
+
+app.layout = serve_layout
+
+# Endpoint de healthcheck
+@server.route('/health')
+def health_check():
+    try:
+        db.test_connection()
+        return 'OK', 200
+    except Exception as e:
+        return str(e), 500
 
 # ========================
 # 📊 Layout do Dashboard
@@ -1134,6 +1141,24 @@ def update_dashboard_content(pathname):
         ])
     except Exception as e:
         return dbc.Alert(f"Erro ao carregar o dashboard: {str(e)}", color="danger")
+
+# ========================
+# 🔄 Callback Principal de Roteamento
+# ========================
+@app.callback(
+    [Output('page-content', 'children'),
+     Output('auth-status', 'children')],
+    [Input('url', 'pathname')]
+)
+def display_page(pathname):
+    if pathname == '/':
+        return create_login_layout(), ''
+    elif pathname == '/dashboard':
+        return create_dashboard_layout(), ''
+    elif pathname == '/register':
+        return create_register_layout(), ''
+    else:
+        return create_login_layout(), dbc.Alert("Página não encontrada. Redirecionando...", color="warning")
 
 # ========================
 # 🔚 Execução
