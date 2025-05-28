@@ -108,10 +108,77 @@ def create_dashboard_layout(is_super_admin=False):
             html.Hr(style={'borderColor': '#3498db', 'borderWidth': '2px'})
         ]),
         
-        # Conteúdo do Dashboard
-        html.Div(id='dashboard-content', className="mt-4"),
+        # Upload Section
+        dbc.Row([
+            dbc.Col([
+                dcc.Upload(
+                    id='upload-data',
+                    children=html.Div([
+                        'Arraste e solte ou ',
+                        html.A('selecione um arquivo Excel', className="text-primary")
+                    ]),
+                    style={
+                        'width': '100%',
+                        'height': '60px',
+                        'lineHeight': '60px',
+                        'borderWidth': '1px',
+                        'borderStyle': 'dashed',
+                        'borderRadius': '5px',
+                        'textAlign': 'center',
+                        'margin': '10px'
+                    },
+                    multiple=False
+                ),
+                html.Div(id='upload-status'),
+            ])
+        ]),
         
-        # Seção de Aprovação (visível apenas para super admin)
+        # Welcome Message (shown before upload)
+        html.Div(id='welcome-message', children=[
+            html.H4("👋 Bem-vindo ao Dashboard!", className="text-center mt-5"),
+            html.P("Faça o upload de um arquivo Excel para começar.", className="text-center text-muted")
+        ]),
+        
+        # Filters Section (hidden initially)
+        html.Div(id='filters-section', style={'display': 'none'}, children=[
+            dbc.Row([
+                dbc.Col([
+                    html.H5("🔍 Filtros", className="mb-3"),
+                    dbc.Row([
+                        dbc.Col([
+                            html.Label("Mês:"),
+                            dcc.Dropdown(id='filter-month', multi=True, placeholder="Selecione o(s) mês(es)")
+                        ], md=4),
+                        dbc.Col([
+                            html.Label("Rede:"),
+                            dcc.Dropdown(id='filter-network', multi=True, placeholder="Selecione a(s) rede(s)")
+                        ], md=4),
+                        dbc.Col([
+                            html.Label("Situação:"),
+                            dcc.Dropdown(id='filter-status', multi=True, placeholder="Selecione o(s) status")
+                        ], md=4)
+                    ]),
+                    dbc.Button("Limpar Filtros", id="clear-filters", 
+                             color="secondary", size="sm", className="mt-2")
+                ])
+            ], className="mb-4")
+        ]),
+        
+        # KPIs Section
+        html.Div(id='kpi-section'),
+        
+        # Tabs Section (hidden initially)
+        html.Div(id='tabs-section', style={'display': 'none'}, children=[
+            dcc.Tabs(id='main-tabs', value='overview', children=[
+                dcc.Tab(label='Visão Geral', value='overview'),
+                dcc.Tab(label='Redes', value='networks'),
+                dcc.Tab(label='Rankings', value='rankings'),
+                dcc.Tab(label='Projeções', value='projections')
+            ], className="mb-4"),
+            html.Div(id='tab-content-area')
+        ]),
+        
+        # Approval Section (visible only for super admin)
         dbc.Collapse(
             create_admin_approval_layout(),
             id="approval-section",
@@ -627,7 +694,7 @@ def update_pending_users_table():
 # 📥 Callbacks de Upload e Filtros
 # ========================
 @app.callback(
-    [Output('alerts', 'children'),
+    [Output('upload-status', 'children'),
      Output('store-data', 'data'),
      Output('welcome-message', 'style'),
      Output('filters-section', 'style'),
@@ -759,7 +826,7 @@ def handle_upload(contents, filename):
 
 @app.callback(
     [Output('store-filtered-data', 'data'),
-     Output('auth-status', 'children', allow_duplicate=True)],
+     Output('upload-status', 'children', allow_duplicate=True)],
     [Input('filter-month', 'value'),
      Input('filter-network', 'value'),
      Input('filter-status', 'value'),
@@ -1047,7 +1114,7 @@ def update_dashboard_content(pathname):
                         id='upload-data',
                         children=html.Div([
                             'Arraste e solte ou ',
-                            html.A('selecione um arquivo', className="text-primary")
+                            html.A('selecione um arquivo Excel', className="text-primary")
                         ]),
                         style={
                             'width': '100%',
@@ -1061,17 +1128,17 @@ def update_dashboard_content(pathname):
                         },
                         multiple=False
                     ),
-                    html.Div(id='alerts'),
-                    html.Div(id='welcome-message', children=[
-                        html.H4("👋 Bem-vindo ao Dashboard!", className="text-center mt-5"),
-                        html.P("Faça o upload de um arquivo Excel para começar.", className="text-center text-muted")
-                    ]),
-                    dcc.Store(id='store-data'),
-                    dcc.Store(id='store-filtered-data')
+                    html.Div(id='upload-status'),
                 ])
             ]),
             
-            # Seção de Filtros
+            # Welcome Message (shown before upload)
+            html.Div(id='welcome-message', children=[
+                html.H4("👋 Bem-vindo ao Dashboard!", className="text-center mt-5"),
+                html.P("Faça o upload de um arquivo Excel para começar.", className="text-center text-muted")
+            ]),
+            
+            # Filters Section (hidden initially)
             html.Div(id='filters-section', style={'display': 'none'}, children=[
                 dbc.Row([
                     dbc.Col([
@@ -1096,10 +1163,10 @@ def update_dashboard_content(pathname):
                 ], className="mb-4")
             ]),
             
-            # Seção de KPIs
+            # KPIs Section
             html.Div(id='kpi-section'),
             
-            # Seção de Tabs
+            # Tabs Section (hidden initially)
             html.Div(id='tabs-section', style={'display': 'none'}, children=[
                 dcc.Tabs(id='main-tabs', value='overview', children=[
                     dcc.Tab(label='Visão Geral', value='overview'),
