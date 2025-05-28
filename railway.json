@@ -7,6 +7,9 @@
     "deploy": {
         "startCommand": "gunicorn app:server --timeout 300 --workers 4 --preload",
         "restartPolicyType": "ON_FAILURE",
-        "restartPolicyMaxRetries": 10
+        "restartPolicyMaxRetries": 10,
+        "healthcheckPath": "/health",
+        "healthcheckTimeout": 300,
+        "healthcheckInterval": 60
     }
 } 

@@ -45,6 +45,11 @@ server.config.update(
     PROPAGATE_EXCEPTIONS=True
 )
 
+# Endpoint de healthcheck
+@server.route('/health')
+def health_check():
+    return 'OK', 200
+
 # Configuração para servir arquivos estáticos
 if not os.environ.get("DASH_DEBUG_MODE"):
     from whitenoise import WhiteNoise
