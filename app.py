@@ -737,6 +737,20 @@ def generate_network_base_content():
     try:
         stats = network_db.get_network_stats()
         
+        if all(v == 0 for v in stats.values()):
+            return dbc.Alert([
+                html.H4("📝 Nenhum dado encontrado", className="alert-heading"),
+                html.P(
+                    "Para começar, faça o upload dos arquivos de redes/filiais e colaboradores usando os botões acima.",
+                    className="mb-0"
+                ),
+                html.Hr(),
+                html.P(
+                    "Consulte a documentação para o formato correto dos arquivos.",
+                    className="mb-0"
+                )
+            ], color="info")
+        
         return html.Div([
             dbc.Row([
                 dbc.Col([
@@ -769,6 +783,22 @@ def generate_network_base_content():
                         ])
                     ], className="mb-4 shadow-sm")
                 ], md=4)
+            ]),
+            dbc.Row([
+                dbc.Col([
+                    dbc.Alert([
+                        html.H4("ℹ️ Informações", className="alert-heading"),
+                        html.P([
+                            "Os números acima representam apenas registros ativos. ",
+                            "Use os botões de upload acima para atualizar as bases quando necessário."
+                        ]),
+                        html.Hr(),
+                        html.P(
+                            "Mantenha as bases atualizadas para garantir a precisão das análises.",
+                            className="mb-0"
+                        )
+                    ], color="info")
+                ])
             ])
         ])
     except Exception as e:
@@ -1111,6 +1141,78 @@ def handle_logout(n_clicks):
     return '/'
 
 # ========================
+# 📥 Callbacks de Upload de Redes e Colaboradores
+# ========================
+@app.callback(
+    Output('network-upload-status', 'children'),
+    [Input('upload-networks-branches-file', 'contents'),
+     Input('upload-employees-file', 'contents')],
+    [State('upload-networks-branches-file', 'filename'),
+     State('upload-employees-file', 'filename')],
+    prevent_initial_call=True
+)
+def handle_network_upload(networks_contents, employees_contents, networks_filename, employees_filename):
+    ctx = callback_context
+    if not ctx.triggered:
+        return no_update
+
+    try:
+        trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+        
+        if trigger_id == 'upload-networks-branches-file' and networks_contents:
+            # Processar arquivo de redes e filiais
+            content_type, content_string = networks_contents.split(',')
+            decoded = base64.b64decode(content_string)
+            df = pd.read_excel(io.BytesIO(decoded))
+            
+            success, message = network_db.update_networks_and_branches(df)
+            
+            if success:
+                return dbc.Alert(
+                    f"✅ Base de redes e filiais atualizada! Arquivo: {networks_filename}",
+                    color="success",
+                    dismissable=True,
+                    duration=4000
+                )
+            else:
+                return dbc.Alert(
+                    f"❌ Erro ao atualizar base de redes e filiais: {message}",
+                    color="danger",
+                    dismissable=True
+                )
+                
+        elif trigger_id == 'upload-employees-file' and employees_contents:
+            # Processar arquivo de colaboradores
+            content_type, content_string = employees_contents.split(',')
+            decoded = base64.b64decode(content_string)
+            df = pd.read_excel(io.BytesIO(decoded))
+            
+            success, message = network_db.update_employees(df)
+            
+            if success:
+                return dbc.Alert(
+                    f"✅ Base de colaboradores atualizada! Arquivo: {employees_filename}",
+                    color="success",
+                    dismissable=True,
+                    duration=4000
+                )
+            else:
+                return dbc.Alert(
+                    f"❌ Erro ao atualizar base de colaboradores: {message}",
+                    color="danger",
+                    dismissable=True
+                )
+    
+    except Exception as e:
+        return dbc.Alert(
+            f"❌ Erro ao processar arquivo: {str(e)}",
+            color="danger",
+            dismissable=True
+        )
+
+    return no_update
+
+# ========================
 # 🔚 Execução e Documentação
 # ========================
 
@@ -1166,3 +1268,19 @@ if __name__ == '__main__':
         print("="*50)
         import traceback
         traceback.print_exc()
+
+# Callback para atualizar a aba de base de redes
+@app.callback(
+    Output('tab-content-area', 'children', allow_duplicate=True),
+    [Input('network-upload-status', 'children')],
+    [State('main-tabs', 'value')],
+    prevent_initial_call=True
+)
+def update_network_base_tab(upload_status, current_tab):
+    if not upload_status or current_tab != 'network-base':
+        return no_update
+        
+    if isinstance(upload_status, dict) and upload_status.get('props', {}).get('color') == 'success':
+        return generate_network_base_content()
+    
+    return no_update
