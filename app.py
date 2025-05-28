@@ -70,7 +70,7 @@ CURRENT_USER = None
 # ========================
 app.layout = html.Div([
     dcc.Location(id='url', refresh=False),
-    dcc.Store(id='session', storage_type='session'),
+    dcc.Store(id='session-store', storage_type='session'),
     html.Div(id='page-content'),
     html.Div(id='auth-status'),
     # Store components para dados
@@ -985,16 +985,17 @@ app.clientside_callback(
 # ========================
 @app.callback(
     Output('page-content', 'children'),
-    Input('url', 'pathname')
+    [Input('url', 'pathname')]
 )
 def display_page(pathname):
-    print(f"Roteamento para: {pathname}")
+    print(f"Roteamento para: {pathname}")  # Debug print
     
     if pathname == '/dashboard':
         return create_dashboard_layout()
     elif pathname == '/register':
         return create_register_layout()
     else:
+        print("Retornando layout de login")  # Debug print
         return create_login_layout()
 
 # ========================
@@ -1023,8 +1024,8 @@ def handle_navigation(show_reg_clicks, show_login_clicks):
 # 🔐 Callbacks de Autenticação
 # ========================
 @app.callback(
-    [Output('url', 'pathname'),
-     Output('auth-status', 'children')],
+    [Output('url', 'pathname', allow_duplicate=True),
+     Output('auth-status', 'children', allow_duplicate=True)],
     [Input('login-button', 'n_clicks')],
     [State('login-username', 'value'),
      State('login-password', 'value')],
