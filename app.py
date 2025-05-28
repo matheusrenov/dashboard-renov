@@ -30,62 +30,38 @@ app = dash.Dash(
     update_title='Carregando...',
     meta_tags=[
         {"name": "viewport", "content": "width=device-width, initial-scale=1"}
-    ],
-    serve_locally=True,
-    url_base_pathname='/',
-    assets_folder='assets'
+    ]
 )
 
 # Configurações do servidor
 server = app.server
 app.title = "Dashboard Renov"
-app.config.suppress_callback_exceptions = True
 
 # Configurações do Flask
 server.config.update(
     SECRET_KEY=os.environ.get('SECRET_KEY', os.urandom(24)),
     FLASK_ENV=os.environ.get('FLASK_ENV', 'production'),
-    DEBUG=False,
-    PROPAGATE_EXCEPTIONS=True
+    DEBUG=True
 )
-
-# Configuração para servir arquivos estáticos
-if not os.environ.get("DASH_DEBUG_MODE"):
-    from whitenoise import WhiteNoise
-    server.wsgi_app = WhiteNoise(
-        server.wsgi_app,
-        root='assets/',
-        prefix='assets/'
-    )
 
 # Inicializa os bancos de dados
 db = UserDatabase()
 network_db = NetworkDatabase()
 
-# Variável global para controle de autenticação
-CURRENT_USER = None
-
 # ========================
 # 🔐 Layout Principal
 # ========================
-app.layout = html.Div([
-    dcc.Location(id='url', refresh=False),
-    dcc.Store(id='session-store', storage_type='session'),
-    html.Div(id='page-content'),
-    html.Div(id='auth-status'),
-    # Store components para dados
-    dcc.Store(id='store-data'),
-    dcc.Store(id='store-filtered-data')
-])
+def serve_layout():
+    return html.Div([
+        dcc.Location(id='url', refresh=False),
+        dcc.Store(id='session-store', storage_type='session'),
+        html.Div(id='page-content'),
+        html.Div(id='auth-status'),
+        dcc.Store(id='store-data'),
+        dcc.Store(id='store-filtered-data')
+    ])
 
-# Endpoint de healthcheck
-@server.route('/health')
-def health_check():
-    try:
-        db.test_connection()
-        return 'OK', 200
-    except Exception as e:
-        return str(e), 500
+app.layout = serve_layout
 
 # ========================
 # 📊 Layout do Dashboard
@@ -996,7 +972,44 @@ def display_page(pathname):
         return create_register_layout()
     else:
         print("Retornando layout de login")  # Debug print
-        return create_login_layout()
+        return dbc.Container([
+            dbc.Row([
+                dbc.Col([
+                    html.H1("📊 Dashboard Renov", className="text-center mb-4"),
+                    dbc.Card([
+                        dbc.CardBody([
+                            html.H3("Login", className="text-center mb-4"),
+                            dbc.Input(
+                                id="login-username",
+                                placeholder="Email",
+                                type="email",
+                                className="mb-3"
+                            ),
+                            dbc.Input(
+                                id="login-password",
+                                placeholder="Senha",
+                                type="password",
+                                className="mb-3"
+                            ),
+                            dbc.Button(
+                                "Entrar",
+                                id="login-button",
+                                color="primary",
+                                className="w-100 mb-3"
+                            ),
+                            html.Hr(),
+                            html.P("Não tem uma conta?", className="text-center"),
+                            dbc.Button(
+                                "Registrar",
+                                id="show-register",
+                                color="secondary",
+                                className="w-100"
+                            )
+                        ])
+                    ], className="shadow-sm")
+                ], md=6, lg=4, className="mx-auto")
+            ], className="align-items-center min-vh-100")
+        ], fluid=True, className="bg-light")
 
 # ========================
 # 🔄 Callbacks de Navegação
@@ -1476,11 +1489,11 @@ if __name__ == '__main__':
     if not os.path.exists('assets/logo-renov.png'):
         import create_logo
     
-    port = int(os.environ.get("PORT", 8080))
+    port = int(os.environ.get("PORT", 8081))
     host = os.environ.get("HOST", "0.0.0.0")
     
     app.run(
-        debug=False,
+        debug=True,
         host=host,
         port=port,
         use_reloader=False
