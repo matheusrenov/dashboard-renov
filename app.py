@@ -113,54 +113,37 @@ def create_dashboard_layout(is_super_admin=False):
         # Upload Section with Network Buttons
         dbc.Row([
             dbc.Col([
-                dcc.Upload(
-                    id='upload-data',
-                    children=html.Div([
-                        'Arraste e solte ou ',
-                        html.A('selecione um arquivo Excel', className="text-primary")
-                    ]),
-                    style={
-                        'width': '100%',
-                        'height': '60px',
-                        'lineHeight': '60px',
-                        'borderWidth': '1px',
-                        'borderStyle': 'dashed',
-                        'borderRadius': '5px',
-                        'textAlign': 'center',
-                        'margin': '10px'
-                    },
-                    multiple=False
-                ),
-            ], width=8),
-            dbc.Col([
-                dbc.Button(
-                    "Atualizar Base de Redes e Filiais",
-                    id="upload-networks-branches",
-                    color="secondary",
-                    size="sm",
-                    className="me-2 mb-2"
-                ),
-                dcc.Upload(
-                    id='upload-networks-branches-file',
-                    children=[],
-                    style={'display': 'none'}
-                ),
-                html.Br(),
-                dbc.Button(
-                    "Atualizar Base de Colaboradores",
-                    id="upload-employees",
-                    color="secondary",
-                    size="sm",
-                    className="me-2"
-                ),
-                dcc.Upload(
-                    id='upload-employees-file',
-                    children=[],
-                    style={'display': 'none'}
-                ),
-            ], width=4),
-            html.Div(id='upload-status'),
-            html.Div(id='network-upload-status')
+                dbc.Row([
+                    dbc.Col([
+                        dcc.Upload(
+                            id='upload-networks-branches-file',
+                            children=dbc.Button(
+                                "Atualizar Base de Redes e Filiais",
+                                id="upload-networks-branches",
+                                color="secondary",
+                                size="sm",
+                                className="w-100"
+                            ),
+                            className="me-2"
+                        ),
+                    ], width=6),
+                    dbc.Col([
+                        dcc.Upload(
+                            id='upload-employees-file',
+                            children=dbc.Button(
+                                "Atualizar Base de Colaboradores",
+                                id="upload-employees",
+                                color="secondary",
+                                size="sm",
+                                className="w-100"
+                            ),
+                            className="me-2"
+                        ),
+                    ], width=6),
+                ], className="mb-3"),
+                html.Div(id='network-upload-status')
+            ], width=12),
+            html.Div(id='upload-status')
         ]),
         
         # Welcome Message (shown before upload)
@@ -1288,7 +1271,7 @@ def trigger_employee_upload(n_clicks):
 
 # Callback para processar os uploads de rede e colaboradores
 @app.callback(
-    Output('network-upload-status', 'children', allow_duplicate=True),
+    Output('network-upload-status', 'children'),
     [Input('upload-networks-branches-file', 'contents'),
      Input('upload-employees-file', 'contents')],
     [State('upload-networks-branches-file', 'filename'),
