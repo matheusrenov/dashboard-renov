@@ -6,7 +6,11 @@ from dash.exceptions import PreventUpdate
 import os
 
 # Inicialização do app
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
+app = dash.Dash(
+    __name__, 
+    external_stylesheets=[dbc.themes.BOOTSTRAP],
+    suppress_callback_exceptions=True
+)
 server = app.server
 
 # Layout principal
@@ -105,4 +109,9 @@ def handle_logout(n_clicks):
     raise PreventUpdate
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=8081) 
+    print("Iniciando servidor...")
+    app.run_server(
+        debug=True,
+        host='localhost',
+        port=8081
+    ) 
