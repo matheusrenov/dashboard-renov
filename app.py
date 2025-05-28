@@ -63,17 +63,14 @@ db = UserDatabase()
 # ========================
 # 🔐 Layout Principal
 # ========================
-def serve_layout():
-    return html.Div([
-        dcc.Location(id='url', refresh=False),
-        html.Div(id='page-content'),
-        html.Div(id='auth-status'),
-        # Store components para dados
-        dcc.Store(id='store-data'),
-        dcc.Store(id='store-filtered-data')
-    ])
-
-app.layout = serve_layout
+app.layout = html.Div([
+    dcc.Location(id='url', refresh=False),
+    html.Div(id='page-content'),
+    html.Div(id='auth-status'),
+    # Store components para dados
+    dcc.Store(id='store-data'),
+    dcc.Store(id='store-filtered-data')
+])
 
 # Endpoint de healthcheck
 @server.route('/health')
@@ -876,57 +873,29 @@ app.clientside_callback(
 )
 
 # ========================
-# 🔄 Callbacks de Autenticação
+# 🔄 Callback Principal de Roteamento
 # ========================
 @app.callback(
-    [Output('auth-status', 'children', allow_duplicate=True),
-     Output('url', 'pathname', allow_duplicate=True),
-     Output('page-content', 'children', allow_duplicate=True)],
-    [Input('login-button', 'n_clicks')],
-    [State('login-username', 'value'),
-     State('login-password', 'value')],
-    prevent_initial_call=True
+    Output('page-content', 'children'),
+    Input('url', 'pathname')
 )
-def handle_login(login_clicks, username, password):
-    if not login_clicks:
-        raise PreventUpdate
+def display_page(pathname):
+    print(f"Roteamento para: {pathname}")  # Debug log
     
-    print(f"Tentativa de login para usuário: {username}")  # Log para debug
-    
-    if not username or not password:
-        return (
-            dbc.Alert("Por favor, preencha todos os campos.", color="warning", duration=4000),
-            no_update,
-            no_update
-        )
-    
-    user = db.verify_user(username, password)
-    print(f"Resultado da verificação: {user is not None}")  # Log para debug
-    
-    if user:
-        if not user['is_approved']:
-            return (
-                dbc.Alert("Sua conta ainda está pendente de aprovação.", color="warning", duration=4000),
-                no_update,
-                no_update
-            )
-        is_super_admin = user['email'] == 'matheus@renovsmart.com.br'
-        return (
-            dbc.Alert("Login realizado com sucesso!", color="success", duration=2000),
-            "/dashboard",
-            create_dashboard_layout(is_super_admin)
-        )
-    
-    return (
-        dbc.Alert("Usuário ou senha inválidos.", color="danger", duration=4000),
-        no_update,
-        no_update
-    )
+    if pathname == '/' or pathname is None:
+        return create_login_layout()
+    elif pathname == '/dashboard':
+        return create_dashboard_layout()
+    elif pathname == '/register':
+        return create_register_layout()
+    else:
+        return create_login_layout()
 
+# ========================
+# 🔄 Callbacks de Navegação
+# ========================
 @app.callback(
-    [Output('auth-status', 'children', allow_duplicate=True),
-     Output('url', 'pathname', allow_duplicate=True),
-     Output('page-content', 'children', allow_duplicate=True)],
+    [Output('url', 'pathname', allow_duplicate=True)],
     [Input('show-register', 'n_clicks'),
      Input('show-login', 'n_clicks'),
      Input('logout-button', 'n_clicks')],
@@ -938,20 +907,66 @@ def handle_navigation(show_reg_clicks, show_login_clicks, logout_clicks):
         raise PreventUpdate
     
     triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
-    print(f"Navegação acionada por: {triggered_id}")  # Log para debug
+    print(f"Navegação acionada por: {triggered_id}")  # Debug log
     
     if triggered_id == 'show-register':
-        return no_update, "/register", create_register_layout()
+        return ['/register']
     elif triggered_id == 'show-login':
-        return no_update, "/", create_login_layout()
+        return ['/']
     elif triggered_id == 'logout-button':
-        return (
-            dbc.Alert("Logout realizado com sucesso!", color="success", duration=2000),
-            "/",
-            create_login_layout()
-        )
+        return ['/']
     
     raise PreventUpdate
+
+# ========================
+# 🔐 Callbacks de Autenticação
+# ========================
+@app.callback(
+    [Output('url', 'pathname', allow_duplicate=True),
+     Output('auth-status', 'children')],
+    [Input('login-button', 'n_clicks')],
+    [State('login-username', 'value'),
+     State('login-password', 'value')],
+    prevent_initial_call=True
+)
+def handle_login(n_clicks, username, password):
+    if not n_clicks:
+        raise PreventUpdate
+    
+    print(f"Tentativa de login para usuário: {username}")  # Debug log
+    
+    if not username or not password:
+        return no_update, dbc.Alert(
+            "Por favor, preencha todos os campos.",
+            color="warning",
+            duration=4000,
+            dismissable=True
+        )
+    
+    user = db.verify_user(username, password)
+    print(f"Resultado da verificação: {user is not None}")  # Debug log
+    
+    if user:
+        if not user['is_approved']:
+            return no_update, dbc.Alert(
+                "Sua conta ainda está pendente de aprovação.",
+                color="warning",
+                duration=4000,
+                dismissable=True
+            )
+        return '/dashboard', dbc.Alert(
+            "Login realizado com sucesso!",
+            color="success",
+            duration=2000,
+            dismissable=True
+        )
+    
+    return no_update, dbc.Alert(
+        "Usuário ou senha inválidos.",
+        color="danger",
+        duration=4000,
+        dismissable=True
+    )
 
 @app.callback(
     Output('pending-users-table', 'children'),
@@ -1144,27 +1159,13 @@ def handle_register(register_clicks, username, email, password, confirm_password
     )
 
 # ========================
-# 🔄 Callback Principal de Roteamento
-# ========================
-@app.callback(
-    [Output('page-content', 'children'),
-     Output('auth-status', 'children')],
-    [Input('url', 'pathname')]
-)
-def display_page(pathname):
-    if pathname == '/':
-        return create_login_layout(), ''
-    elif pathname == '/dashboard':
-        return create_dashboard_layout(), ''
-    elif pathname == '/register':
-        return create_register_layout(), ''
-    else:
-        return create_login_layout(), dbc.Alert("Página não encontrada. Redirecionando...", color="warning")
-
-# ========================
 # 🔚 Execução
 # ========================
 if __name__ == '__main__':
+    # Criar o logo se não existir
+    if not os.path.exists('assets/logo-renov.png'):
+        import create_logo
+    
     port = int(os.environ.get("PORT", 8080))
     host = os.environ.get("HOST", "0.0.0.0")
     
