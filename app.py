@@ -60,11 +60,15 @@ if not os.environ.get("DASH_DEBUG_MODE"):
 # Inicializa o banco de dados
 db = UserDatabase()
 
+# Variável global para controle de autenticação
+CURRENT_USER = None
+
 # ========================
 # 🔐 Layout Principal
 # ========================
 app.layout = html.Div([
     dcc.Location(id='url', refresh=False),
+    dcc.Store(id='session', storage_type='session'),
     html.Div(id='page-content'),
     html.Div(id='auth-status'),
     # Store components para dados
@@ -877,22 +881,24 @@ app.clientside_callback(
 # ========================
 @app.callback(
     Output('page-content', 'children'),
-    Input('url', 'pathname')
+    [Input('url', 'pathname'),
+     Input('session', 'data')]
 )
-def display_page(pathname):
-    global CURRENT_USER
+def display_page(pathname, session_data):
     print(f"Roteamento para: {pathname}")
+    print(f"Dados da sessão: {session_data}")
     
     if pathname == '/dashboard':
-        if CURRENT_USER:
-            is_super_admin = CURRENT_USER.get('email') == 'matheus@renovsmart.com.br'
+        if session_data:
+            is_super_admin = session_data.get('email') == 'matheus@renovsmart.com.br'
             return create_dashboard_layout(is_super_admin)
         return create_login_layout()
     elif pathname == '/register':
         return create_register_layout()
     else:
-        if CURRENT_USER and pathname == '/':
-            return create_dashboard_layout(CURRENT_USER.get('email') == 'matheus@renovsmart.com.br')
+        if session_data and pathname == '/':
+            is_super_admin = session_data.get('email') == 'matheus@renovsmart.com.br'
+            return create_dashboard_layout(is_super_admin)
         return create_login_layout()
 
 # ========================
@@ -901,12 +907,10 @@ def display_page(pathname):
 @app.callback(
     Output('url', 'pathname', allow_duplicate=True),
     [Input('show-register', 'n_clicks'),
-     Input('show-login', 'n_clicks'),
-     Input('logout-button', 'n_clicks')],
+     Input('show-login', 'n_clicks')],
     prevent_initial_call=True
 )
-def handle_navigation(show_reg_clicks, show_login_clicks, logout_clicks):
-    global CURRENT_USER
+def handle_navigation(show_reg_clicks, show_login_clicks):
     ctx = callback_context
     if not ctx.triggered:
         raise PreventUpdate
@@ -918,9 +922,6 @@ def handle_navigation(show_reg_clicks, show_login_clicks, logout_clicks):
         return '/register'
     elif triggered_id == 'show-login':
         return '/'
-    elif triggered_id == 'logout-button':
-        CURRENT_USER = None
-        return '/'
     
     raise PreventUpdate
 
@@ -928,52 +929,54 @@ def handle_navigation(show_reg_clicks, show_login_clicks, logout_clicks):
 # 🔐 Callbacks de Autenticação
 # ========================
 @app.callback(
-    [Output('url', 'pathname', allow_duplicate=True),
+    [Output('session', 'data'),
+     Output('url', 'pathname'),
      Output('auth-status', 'children')],
-    [Input('login-button', 'n_clicks')],
+    [Input('login-button', 'n_clicks'),
+     Input('logout-button', 'n_clicks')],
     [State('login-username', 'value'),
-     State('login-password', 'value')],
+     State('login-password', 'value'),
+     State('session', 'data')],
     prevent_initial_call=True
 )
-def handle_login(n_clicks, username, password):
-    global CURRENT_USER
-    if not n_clicks:
+def handle_authentication(login_clicks, logout_clicks, username, password, session_data):
+    ctx = callback_context
+    if not ctx.triggered:
         raise PreventUpdate
     
-    print(f"Tentativa de login para usuário: {username}")
+    button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    
+    if button_id == 'logout-button':
+        return None, '/', dbc.Alert("Logout realizado com sucesso!", color="success", duration=2000)
     
     if not username or not password:
-        return no_update, dbc.Alert(
+        return no_update, no_update, dbc.Alert(
             "Por favor, preencha todos os campos.",
             color="warning",
-            duration=4000,
-            dismissable=True
+            duration=4000
         )
     
     user = db.verify_user(username, password)
+    print(f"Tentativa de login para usuário: {username}")
     print(f"Resultado da verificação: {user}")
     
     if user:
         if not user['is_approved']:
-            return no_update, dbc.Alert(
+            return no_update, no_update, dbc.Alert(
                 "Sua conta ainda está pendente de aprovação.",
                 color="warning",
-                duration=4000,
-                dismissable=True
+                duration=4000
             )
-        CURRENT_USER = user
-        return '/dashboard', dbc.Alert(
+        return user, '/dashboard', dbc.Alert(
             "Login realizado com sucesso!",
             color="success",
-            duration=2000,
-            dismissable=True
+            duration=2000
         )
     
-    return no_update, dbc.Alert(
+    return no_update, no_update, dbc.Alert(
         "Usuário ou senha inválidos.",
         color="danger",
-        duration=4000,
-        dismissable=True
+        duration=4000
     )
 
 @app.callback(
