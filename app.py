@@ -578,12 +578,11 @@ def update_pending_users_table():
     )
 
 # ========================
-# 📥 CALLBACK DE UPLOAD - Processa dados e popula filtros
+# 📥 Callbacks de Upload e Filtros
 # ========================
 @app.callback(
     [Output('alerts', 'children'),
      Output('store-data', 'data'),
-     Output('export-pdf', 'disabled'),
      Output('welcome-message', 'style'),
      Output('filters-section', 'style'),
      Output('tabs-section', 'style'),
@@ -596,20 +595,24 @@ def update_pending_users_table():
 )
 def handle_upload(contents, filename):
     if not contents:
-        return "", {}, True, {'display': 'block'}, {'display': 'none'}, {'display': 'none'}, [], [], []
+        return no_update, no_update, no_update, no_update, no_update, [], [], []
 
     try:
+        # Validar extensão do arquivo
+        if not filename.lower().endswith(('.xls', '.xlsx')):
+            raise ValueError("Por favor, faça upload de um arquivo Excel (.xls ou .xlsx)")
+
         content_type, content_string = contents.split(',')
         decoded = base64.b64decode(content_string)
         df = pd.read_excel(io.BytesIO(decoded))
 
         if df.empty:
-            return (dbc.Alert("❌ Arquivo vazio!", color="danger"), {}, True, 
-                   {'display': 'block'}, {'display': 'none'}, {'display': 'none'}, [], [], [])
+            raise ValueError("O arquivo está vazio!")
 
+        # Normalizar nomes das colunas
         df.columns = [unidecode(str(col)).strip().lower().replace(' ', '_').replace('ç', 'c') for col in df.columns]
         
-        column_mapping = {}
+        # Validar colunas obrigatórias
         required_columns = {
             'imei': ['imei', 'device_id', 'dispositivo'],
             'criado_em': ['criado_em', 'data_criacao', 'data', 'created_at'],
@@ -621,6 +624,7 @@ def handle_upload(contents, filename):
             'nome_rede': ['nome_da_rede', 'rede', 'network_name']
         }
 
+        column_mapping = {}
         missing_columns = []
         for standard_name, possible_names in required_columns.items():
             found = False
@@ -633,15 +637,12 @@ def handle_upload(contents, filename):
                 missing_columns.append(standard_name)
 
         if missing_columns:
-            return (
-                dbc.Alert(f"❌ Colunas obrigatórias não encontradas: {', '.join(missing_columns)}", color="danger"),
-                {}, True, {'display': 'block'}, {'display': 'none'}, {'display': 'none'}, [], [], []
-            )
+            raise ValueError(f"Colunas obrigatórias não encontradas: {', '.join(missing_columns)}")
 
-        # Renomear colunas
+        # Renomear e processar colunas
         df = df.rename(columns=column_mapping)
 
-        # Processar dados
+        # Processar datas
         if 'criado_em' in df.columns:
             df['criado_em'] = pd.to_datetime(df['criado_em'], errors='coerce')
             df = df.dropna(subset=['criado_em'])
@@ -652,14 +653,12 @@ def handle_upload(contents, filename):
             df['data_str'] = df['criado_em'].dt.strftime('%Y-%m-%d')
 
         if df.empty:
-            return (dbc.Alert("❌ Nenhuma data válida encontrada!", color="danger"), {}, True,
-                   {'display': 'block'}, {'display': 'none'}, {'display': 'none'}, [], [], [])
+            raise ValueError("Nenhuma data válida encontrada após processamento!")
 
-        # Limpar dados numéricos
-        if 'valor_voucher' in df.columns:
-            df['valor_voucher'] = pd.to_numeric(df['valor_voucher'], errors='coerce').fillna(0)
-        if 'valor_dispositivo' in df.columns:
-            df['valor_dispositivo'] = pd.to_numeric(df['valor_dispositivo'], errors='coerce').fillna(0)
+        # Limpar e converter valores numéricos
+        for col in ['valor_voucher', 'valor_dispositivo']:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
         # Preparar opções para filtros
         month_options = []
@@ -669,7 +668,7 @@ def handle_upload(contents, filename):
         if 'mes' in df.columns and 'ano' in df.columns:
             month_options = [
                 {'label': f"{month} ({year})", 'value': f"{month}_{year}"} 
-                for month, year in df.groupby(['mes', 'ano']).size().index
+                for month, year in sorted(df.groupby(['mes', 'ano']).size().index)
             ]
         
         if 'nome_rede' in df.columns:
@@ -684,27 +683,37 @@ def handle_upload(contents, filename):
                 for status in sorted(df['situacao_voucher'].dropna().unique())
             ]
 
-        # Sucesso
         success_alert = dbc.Alert([
             html.I(className="fas fa-check-circle me-2"),
-            f"✅ Arquivo '{filename}' processado com sucesso! {len(df)} registros carregados."
-        ], color="success", dismissable=True)
+            f"✅ Arquivo '{filename}' processado com sucesso! {len(df):,} registros carregados."
+        ], color="success", dismissable=True, duration=4000)
 
-        return (success_alert, df.to_dict('records'), False,
-               {'display': 'none'}, {'display': 'block'}, {'display': 'block'},
-               month_options, network_options, status_options)
-
-    except Exception as e:
         return (
-            dbc.Alert(f"❌ Erro ao processar arquivo: {str(e)}", color="danger"),
-            {}, True, {'display': 'block'}, {'display': 'none'}, {'display': 'none'}, [], [], []
+            success_alert,
+            df.to_dict('records'),
+            {'display': 'none'},
+            {'display': 'block'},
+            {'display': 'block'},
+            month_options,
+            network_options,
+            status_options
         )
 
-# ========================
-# 🔄 CALLBACK PARA APLICAR FILTROS
-# ========================
+    except Exception as e:
+        error_alert = dbc.Alert(f"❌ Erro ao processar arquivo: {str(e)}", 
+                               color="danger", dismissable=True)
+        return (
+            error_alert,
+            no_update,
+            {'display': 'block'},
+            {'display': 'none'},
+            {'display': 'none'},
+            [], [], []
+        )
+
 @app.callback(
-    Output('store-filtered-data', 'data'),
+    [Output('store-filtered-data', 'data'),
+     Output('auth-status', 'children', allow_duplicate=True)],
     [Input('filter-month', 'value'),
      Input('filter-network', 'value'),
      Input('filter-status', 'value'),
@@ -714,25 +723,34 @@ def handle_upload(contents, filename):
 )
 def apply_filters(months, networks, statuses, clear_clicks, original_data):
     if not original_data:
-        return {}
+        return no_update, no_update
     
-    ctx = callback_context
-    if ctx.triggered and 'clear-filters' in ctx.triggered[0]['prop_id']:
-        return original_data
+    try:
+        ctx = callback_context
+        if ctx.triggered and 'clear-filters' in ctx.triggered[0]['prop_id']:
+            return original_data, dbc.Alert("Filtros limpos com sucesso!", color="info", duration=2000)
+        
+        df = pd.DataFrame(original_data)
+        
+        if months and 'mes' in df.columns and 'ano' in df.columns:
+            month_year_filters = [f"{row['mes']}_{row['ano']}" for _, row in df.iterrows()]
+            df = df[[mf in months for mf in month_year_filters]]
+        
+        if networks and 'nome_rede' in df.columns:
+            df = df[df['nome_rede'].isin(networks)]
+        
+        if statuses and 'situacao_voucher' in df.columns:
+            df = df[df['situacao_voucher'].isin(statuses)]
+        
+        if df.empty:
+            return no_update, dbc.Alert("Nenhum dado encontrado com os filtros selecionados!", 
+                                      color="warning", duration=4000)
+        
+        return df.to_dict('records'), no_update
     
-    df = pd.DataFrame(original_data)
-    
-    if months and 'mes' in df.columns and 'ano' in df.columns:
-        month_year_filters = [f"{row['mes']}_{row['ano']}" for _, row in df.iterrows()]
-        df = df[[mf in months for mf in month_year_filters]]
-    
-    if networks and 'nome_rede' in df.columns:
-        df = df[df['nome_rede'].isin(networks)]
-    
-    if statuses and 'situacao_voucher' in df.columns:
-        df = df[df['situacao_voucher'].isin(statuses)]
-    
-    return df.to_dict('records')
+    except Exception as e:
+        return no_update, dbc.Alert(f"Erro ao aplicar filtros: {str(e)}", 
+                                  color="danger", duration=4000)
 
 # ========================
 # 📊 CALLBACK PARA KPIs
@@ -744,12 +762,15 @@ def apply_filters(months, networks, statuses, clear_clicks, original_data):
     prevent_initial_call=True
 )
 def update_kpis(original_data, filtered_data):
-    data_to_use = filtered_data if filtered_data else original_data
-    if not data_to_use:
+    try:
+        data_to_use = filtered_data if filtered_data else original_data
+        if not data_to_use:
+            return html.Div()
+        
+        df = pd.DataFrame(data_to_use)
+        return generate_kpi_cards(df)
+    except Exception as e:
         return html.Div()
-    
-    df = pd.DataFrame(data_to_use)
-    return generate_kpi_cards(df)
 
 # ========================
 # 📈 CALLBACK PARA CONTEÚDO DAS ABAS
@@ -832,7 +853,11 @@ def handle_auth_final(login_clicks, register_clicks, pathname,
                      reg_password, reg_confirm_password):
     ctx = callback_context
     if not ctx.triggered:
-        raise PreventUpdate
+        if pathname == "/dashboard":
+            return no_update, no_update, create_dashboard_layout()
+        elif pathname == "/register":
+            return no_update, no_update, create_register_layout()
+        return no_update, no_update, create_login_layout()
     
     triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
     
@@ -842,14 +867,14 @@ def handle_auth_final(login_clicks, register_clicks, pathname,
             if not user['is_approved']:
                 return (
                     dbc.Alert("Sua conta ainda está pendente de aprovação.", color="warning", className="mt-3"),
-                    "/",
+                    no_update,
                     create_login_layout()
                 )
             is_super_admin = user['email'] == 'matheus@renovsmart.com.br'
             return "", "/dashboard", create_dashboard_layout(is_super_admin)
         return (
             dbc.Alert("Usuário ou senha inválidos.", color="danger", className="mt-3"),
-            "/",
+            no_update,
             create_login_layout()
         )
     
@@ -857,14 +882,14 @@ def handle_auth_final(login_clicks, register_clicks, pathname,
         if not all([reg_username, reg_email, reg_password, reg_confirm_password]):
             return (
                 dbc.Alert("Todos os campos são obrigatórios.", color="danger", className="mt-3"),
-                "/register",
+                no_update,
                 create_register_layout()
             )
         
         if reg_password != reg_confirm_password:
             return (
                 dbc.Alert("As senhas não coincidem.", color="danger", className="mt-3"),
-                "/register",
+                no_update,
                 create_register_layout()
             )
         
@@ -876,17 +901,17 @@ def handle_auth_final(login_clicks, register_clicks, pathname,
             )
         return (
             dbc.Alert("Usuário ou email já existem.", color="danger", className="mt-3"),
-            "/register",
+            no_update,
             create_register_layout()
         )
     
     # Handle URL changes
     if triggered_id == 'url':
         if pathname == "/dashboard":
-            return "", pathname, create_dashboard_layout()
+            return no_update, no_update, create_dashboard_layout()
         elif pathname == "/register":
-            return "", pathname, create_register_layout()
-        return "", "/", create_login_layout()
+            return no_update, no_update, create_register_layout()
+        return no_update, no_update, create_login_layout()
     
     raise PreventUpdate
 
@@ -907,65 +932,83 @@ def handle_nav_final(show_reg_clicks, show_login_clicks, logout_clicks):
     triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
     
     if triggered_id == 'show-register':
-        return "", "/register", create_register_layout()
+        return no_update, "/register", create_register_layout()
     elif triggered_id == 'show-login':
-        return "", "/", create_login_layout()
+        return no_update, "/", create_login_layout()
     elif triggered_id == 'logout-button':
-        return "", "/", create_login_layout()
+        return no_update, "/", create_login_layout()
     
     raise PreventUpdate
 
 @app.callback(
     Output('pending-users-table', 'children'),
-    [Input('url', 'pathname')]
+    [Input('url', 'pathname')],
+    prevent_initial_call=True
 )
 def update_pending_users(pathname):
     if pathname != "/dashboard":
-        return html.Div()
+        return no_update
     
-    return update_pending_users_table()
+    try:
+        return update_pending_users_table()
+    except Exception as e:
+        return html.Div(f"Erro ao carregar usuários pendentes: {str(e)}")
 
 @app.callback(
-    Output('pending-users-table', 'children'),
+    [Output('pending-users-table', 'children', allow_duplicate=True),
+     Output('auth-status', 'children', allow_duplicate=True)],
     [Input('approve-user-button', 'n_clicks'),
      Input('reject-user-button', 'n_clicks')],
     [State('pending-users-table', 'selected_rows'),
-     State('pending-users-table', 'data')]
+     State('pending-users-table', 'data')],
+    prevent_initial_call=True
 )
 def handle_user_approval(approve_clicks, reject_clicks, selected_rows, table_data):
-    if not selected_rows:
-        return dash.no_update
+    if not selected_rows or not table_data:
+        return no_update, no_update
     
     ctx = callback_context
     if not ctx.triggered:
-        return dash.no_update
+        return no_update, no_update
     
-    triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
-    selected_user = table_data[selected_rows[0]]
-    
-    if triggered_id == 'approve-user-button':
-        db.approve_user(selected_user['email'])
-    elif triggered_id == 'reject-user-button':
-        db.reject_user(selected_user['email'])
-    
-    return update_pending_users_table()
+    try:
+        triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
+        selected_user = table_data[selected_rows[0]]
+        
+        if triggered_id == 'approve-user-button':
+            db.approve_user(selected_user['email'])
+            message = f"Usuário {selected_user['email']} aprovado com sucesso!"
+        elif triggered_id == 'reject-user-button':
+            db.reject_user(selected_user['email'])
+            message = f"Usuário {selected_user['email']} rejeitado."
+        else:
+            return no_update, no_update
+        
+        return update_pending_users_table(), dbc.Alert(message, color="success", duration=4000)
+    except Exception as e:
+        return no_update, dbc.Alert(f"Erro ao processar ação: {str(e)}", color="danger", duration=4000)
 
 @app.callback(
     Output('approval-section', 'is_open'),
     [Input('show-approvals', 'n_clicks')],
-    [State('approval-section', 'is_open')]
+    [State('approval-section', 'is_open')],
+    prevent_initial_call=True
 )
 def toggle_approval_section(n_clicks, is_open):
-    if n_clicks:
-        return not is_open
-    return is_open
+    if n_clicks is None:
+        return False
+    return not is_open
 
 @app.callback(
     Output('dashboard-content', 'children'),
-    [Input('url', 'pathname')]
+    [Input('url', 'pathname')],
+    prevent_initial_call=True
 )
-def update_content(pathname):
-    if pathname == "/dashboard":
+def update_dashboard_content(pathname):
+    if pathname != "/dashboard":
+        return no_update
+    
+    try:
         return html.Div([
             dbc.Row([
                 dbc.Col([
@@ -984,12 +1027,13 @@ def update_content(pathname):
                             'borderRadius': '5px',
                             'textAlign': 'center',
                             'margin': '10px'
-                        }
+                        },
+                        multiple=False
                     ),
                     html.Div(id='alerts'),
                     html.Div(id='welcome-message', children=[
                         html.H4("👋 Bem-vindo ao Dashboard!", className="text-center mt-5"),
-                        html.P("Faça o upload de um arquivo para começar.", className="text-center text-muted")
+                        html.P("Faça o upload de um arquivo Excel para começar.", className="text-center text-muted")
                     ]),
                     dcc.Store(id='store-data'),
                     dcc.Store(id='store-filtered-data')
@@ -1004,15 +1048,15 @@ def update_content(pathname):
                         dbc.Row([
                             dbc.Col([
                                 html.Label("Mês:"),
-                                dcc.Dropdown(id='filter-month', multi=True)
+                                dcc.Dropdown(id='filter-month', multi=True, placeholder="Selecione o(s) mês(es)")
                             ], md=4),
                             dbc.Col([
                                 html.Label("Rede:"),
-                                dcc.Dropdown(id='filter-network', multi=True)
+                                dcc.Dropdown(id='filter-network', multi=True, placeholder="Selecione a(s) rede(s)")
                             ], md=4),
                             dbc.Col([
                                 html.Label("Situação:"),
-                                dcc.Dropdown(id='filter-status', multi=True)
+                                dcc.Dropdown(id='filter-status', multi=True, placeholder="Selecione o(s) status")
                             ], md=4)
                         ]),
                         dbc.Button("Limpar Filtros", id="clear-filters", 
@@ -1035,7 +1079,8 @@ def update_content(pathname):
                 html.Div(id='tab-content-area')
             ])
         ])
-    return html.Div()
+    except Exception as e:
+        return dbc.Alert(f"Erro ao carregar o dashboard: {str(e)}", color="danger")
 
 # ========================
 # 🔚 Execução
