@@ -4,7 +4,7 @@ import io
 import pandas as pd
 import numpy as np
 import dash
-from dash import dcc, html, Input, Output, State, dash_table, callback_context
+from dash import dcc, html, Input, Output, State, dash_table, callback_context, no_update
 import dash_bootstrap_components as dbc
 import plotly.express as px
 import plotly.graph_objects as go
@@ -14,7 +14,6 @@ import warnings
 from models import UserDatabase
 from auth_layout import create_login_layout, create_register_layout, create_admin_approval_layout
 from dash.exceptions import PreventUpdate
-from dash.dependencies import no_update
 warnings.filterwarnings('ignore')
 
 # ========================
