@@ -23,13 +23,23 @@ app = dash.Dash(
     __name__, 
     external_stylesheets=[dbc.themes.BOOTSTRAP],
     suppress_callback_exceptions=True,
-    update_title=None
+    update_title=None,
+    meta_tags=[
+        {"name": "viewport", "content": "width=device-width, initial-scale=1"}
+    ]
 )
 server = app.server
 
 # Configurações para produção
 app.title = "Dashboard Renov"
 app._favicon = "assets/favicon.ico"
+
+# Configurações do Flask
+server.config.update(
+    SECRET_KEY=os.environ.get('SECRET_KEY', os.urandom(24)),
+    FLASK_ENV=os.environ.get('FLASK_ENV', 'production'),
+    DEBUG=False
+)
 
 # Inicializa o banco de dados
 db = UserDatabase()
@@ -1105,12 +1115,9 @@ def update_dashboard_content(pathname):
 # 🔚 Execução
 # ========================
 if __name__ == '__main__':
-    # Modo debug apenas em desenvolvimento
-    debug = os.environ.get("DASH_DEBUG", "False").lower() == "true"
     port = int(os.environ.get("PORT", 8080))
-    
     app.run(
-        debug=debug,
+        debug=False,
         host='0.0.0.0',
         port=port
     )
