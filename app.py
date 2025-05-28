@@ -66,6 +66,7 @@ server = Flask(__name__)
 # Inicialização do Dash com todas as configurações necessárias
 app = dash.Dash(
     __name__,
+    server=cast(bool, server),
     external_stylesheets=[dbc.themes.BOOTSTRAP],
     suppress_callback_exceptions=True,
     update_title='Carregando...',
@@ -74,7 +75,7 @@ app = dash.Dash(
     ],
     assets_folder=assets_path,
     serve_locally=True,
-    url_base_pathname='/'
+    routes_pathname_prefix='/'
 )
 
 # Vincula o servidor Flask ao Dash

@@ -38,4 +38,4 @@ if __name__ == "__main__":
     print(f"Iniciando servidor em http://{HOST}:{PORT}")
     print(f"Ambiente: production")
     print(f"Porta: {PORT}")
-    flask_server.run(host=HOST, port=PORT) 
+    server.run() 
