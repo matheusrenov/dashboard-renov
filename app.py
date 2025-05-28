@@ -18,8 +18,10 @@ from dash.exceptions import PreventUpdate
 from dotenv import load_dotenv
 import secrets
 from flask_cors import CORS
+from flask import Flask
 import socket
 import psutil
+from typing import cast
 
 load_dotenv()  # carrega variáveis do .env se existir
 
@@ -30,7 +32,7 @@ def check_port(port):
     """Verifica se uma porta está disponível"""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         try:
-            s.bind(('127.0.0.1', port))
+            s.bind(('0.0.0.0', port))
             return True
         except OSError:
             return False
@@ -53,6 +55,9 @@ assets_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets')
 if not os.path.exists(assets_path):
     os.makedirs(assets_path)
 
+# Inicialização do Flask
+server = Flask(__name__)
+
 # Inicialização do Dash com todas as configurações necessárias
 app = dash.Dash(
     __name__,
@@ -63,31 +68,38 @@ app = dash.Dash(
         {"name": "viewport", "content": "width=device-width, initial-scale=1"}
     ],
     assets_folder=assets_path,
-    serve_locally=True
+    serve_locally=True,
+    url_base_pathname='/'
 )
 
-# Configurações do servidor
-server = app.server
+# Vincula o servidor Flask ao Dash
+app.server = server
 app.title = "Dashboard Renov"
 
-# Configurações do Flask para desenvolvimento
-if server:
-    server.config.update(
-        SECRET_KEY=os.environ.get('SECRET_KEY', secrets.token_hex(16)),
-        FLASK_ENV=os.environ.get('FLASK_ENV', 'development'),
-        DEBUG=True if os.environ.get('FLASK_ENV') == 'development' else False
-    )
+# Configurações do Flask para produção/desenvolvimento
+# Configurações básicas
+server.config.update(
+    SECRET_KEY=os.environ.get('SECRET_KEY', secrets.token_hex(16)),
+    FLASK_ENV=os.environ.get('FLASK_ENV', 'production'),  # Default para production
+    DEBUG=False  # Sempre False em produção
+)
 
-    # Configurações de segurança adicionais para produção
-    if os.environ.get('FLASK_ENV') == 'production':
-        CORS(server, resources={r"/*": {"origins": "*"}})
-        
-        server.config.update(
-            SESSION_COOKIE_SECURE=True,
-            SESSION_COOKIE_HTTPONLY=True,
-            SESSION_COOKIE_SAMESITE='Lax',
-            PERMANENT_SESSION_LIFETIME=timedelta(minutes=30)
-        )
+# Configurações de segurança
+CORS(server, resources={r"/*": {"origins": "*"}})
+server.config.update(
+    SESSION_COOKIE_SECURE=True,
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+    PERMANENT_SESSION_LIFETIME=timedelta(minutes=30)
+)
+
+# Configuração de proxy
+server.config['PREFERRED_URL_SCHEME'] = 'https'
+server.config['PROXY_FIX_X_FOR'] = 1
+server.config['PROXY_FIX_X_PROTO'] = 1
+server.config['PROXY_FIX_X_HOST'] = 1
+server.config['PROXY_FIX_X_PORT'] = 1
+server.config['PROXY_FIX_X_PREFIX'] = 1
 
 # Inicializa os bancos de dados
 db = UserDatabase()
