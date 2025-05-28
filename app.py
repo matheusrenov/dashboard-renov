@@ -37,7 +37,7 @@ def check_port(port):
         except OSError:
             return False
 
-def get_available_port(start_port=8081):
+def get_available_port(start_port=8080):
     """Encontra uma porta disponível"""
     port = start_port
     while not check_port(port):
@@ -56,8 +56,9 @@ if not os.path.exists(assets_path):
     os.makedirs(assets_path)
 
 # Configuração da porta
-PORT = int(os.environ.get('PORT', 8081))
-HOST = '0.0.0.0' if os.environ.get('FLASK_ENV') == 'production' else '127.0.0.1'
+# Em produção, usa a porta fornecida pelo ambiente ou 8080 como fallback
+PORT = int(os.environ.get('PORT', 8080))
+HOST = '0.0.0.0'  # Sempre usa 0.0.0.0 para aceitar conexões externas
 
 # Inicialização do Flask
 server = Flask(__name__)
@@ -84,10 +85,10 @@ app.title = "Dashboard Renov"
 # Configurações básicas
 server.config.update(
     SECRET_KEY=os.environ.get('SECRET_KEY', secrets.token_hex(16)),
-    FLASK_ENV=os.environ.get('FLASK_ENV', 'production'),  # Default para production
+    FLASK_ENV='production',  # Sempre production em deploy
     DEBUG=False,  # Sempre False em produção
-    PORT=PORT,  # Define a porta no config
-    HOST=HOST   # Define o host no config
+    PORT=PORT,
+    HOST=HOST
 )
 
 # Configurações de segurança
@@ -1117,39 +1118,50 @@ Instruções de Execução:
 
 1. Desenvolvimento Local:
    python app.py
-   - O servidor iniciará em http://127.0.0.1:8081
+   - O servidor iniciará em http://0.0.0.0:8080
    - Variáveis de ambiente opcionais:
      * FLASK_ENV=development (para modo debug)
-     * PORT=8081 (ou outra porta desejada)
+     * PORT=8080 (ou outra porta desejada)
 
 2. Produção:
    gunicorn wsgi:server
-   - O servidor iniciará em http://0.0.0.0:8081 (ou a porta definida em $PORT)
+   - O servidor iniciará em http://0.0.0.0:8080 (ou a porta definida em $PORT)
    - Variáveis de ambiente necessárias:
      * FLASK_ENV=production
-     * PORT=8081 (ou porta desejada)
+     * PORT=8080 (ou porta desejada)
      * SECRET_KEY=chave_secreta_segura
 
 3. Usando Procfile:
-   web: gunicorn wsgi:server --workers 4 --threads 2 --timeout 120
+   web: gunicorn wsgi:server --workers 4 --threads 2 --timeout 120 --bind 0.0.0.0:$PORT
    - Usa automaticamente a variável $PORT do ambiente
    - Configurado para performance em produção
+   - Recomendado para deploy no GitHub ou serviços similares
 """
 
 if __name__ == '__main__':
     try:
-        print(f"Iniciando servidor em http://{HOST}:{PORT}")
-        print(f"Ambiente: {os.environ.get('FLASK_ENV', 'development')}")
-        print(f"Porta: {PORT}")
+        # Configuração inicial
+        is_dev = os.environ.get('FLASK_ENV') == 'development'
         
+        # Mensagens de inicialização
+        print("="*50)
+        print(f"Iniciando servidor em http://{HOST}:{PORT}")
+        print(f"Ambiente: {'development' if is_dev else 'production'}")
+        print(f"Porta: {PORT}")
+        print(f"Debug: {'ativado' if is_dev else 'desativado'}")
+        print("="*50)
+        
+        # Inicia o servidor
         app.run_server(
-            debug=os.environ.get('FLASK_ENV') == 'development',
+            debug=is_dev,
             host=HOST,
             port=PORT,
             dev_tools_hot_reload=False,
             use_reloader=False
         )
     except Exception as e:
-        print(f"Erro ao iniciar o servidor: {str(e)}")
+        print("="*50)
+        print(f"❌ Erro ao iniciar o servidor: {str(e)}")
+        print("="*50)
         import traceback
         traceback.print_exc()

@@ -7,10 +7,10 @@ import os
 Arquivo WSGI para execução em produção
 
 Este arquivo é usado pelo Gunicorn para servir a aplicação.
-Por padrão, usa a porta 8081 ou a definida pela variável de ambiente PORT.
+Por padrão, usa a porta 8080 ou a definida pela variável de ambiente PORT.
 
 Execução via Gunicorn:
-    gunicorn wsgi:server --bind 0.0.0.0:8081
+    gunicorn wsgi:server --bind 0.0.0.0:8080
 
 Execução via Procfile:
     web: gunicorn wsgi:server --workers 4 --threads 2 --timeout 120
@@ -22,7 +22,12 @@ flask_server = cast(Flask, server)
 # Adiciona endpoint de healthcheck
 @flask_server.route('/health')
 def healthcheck():
-    return jsonify({"status": "healthy"}), 200
+    """Endpoint para verificação de saúde do servidor"""
+    return jsonify({
+        "status": "healthy",
+        "port": PORT,
+        "environment": os.environ.get('FLASK_ENV', 'production')
+    }), 200
 
 # Configura a rota raiz para servir o Dash app
 @flask_server.route('/')
@@ -31,6 +36,6 @@ def index():
 
 if __name__ == "__main__":
     print(f"Iniciando servidor em http://{HOST}:{PORT}")
-    print(f"Ambiente: {os.environ.get('FLASK_ENV', 'development')}")
+    print(f"Ambiente: production")
     print(f"Porta: {PORT}")
     flask_server.run(host=HOST, port=PORT) 
