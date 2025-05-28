@@ -17,8 +17,32 @@ from auth_layout import create_login_layout, create_register_layout, create_admi
 from dash.exceptions import PreventUpdate
 from dotenv import load_dotenv
 import secrets
+from flask_cors import CORS
+import socket
+import psutil
 
 load_dotenv()  # carrega variáveis do .env se existir
+
+# ========================
+# 🔧 Funções Utilitárias
+# ========================
+def check_port(port):
+    """Verifica se uma porta está disponível"""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        try:
+            s.bind(('127.0.0.1', port))
+            return True
+        except OSError:
+            return False
+
+def get_available_port(start_port=8081):
+    """Encontra uma porta disponível"""
+    port = start_port
+    while not check_port(port):
+        port += 1
+        if port > start_port + 100:  # Limite de tentativas
+            raise RuntimeError("Não foi possível encontrar uma porta disponível")
+    return port
 
 # ========================
 # 🚀 Inicialização do App
@@ -52,12 +76,21 @@ app.config.suppress_callback_exceptions = True
 
 # Configurações de segurança adicionais para produção
 if os.environ.get('FLASK_ENV') == 'production':
+    CORS(server, resources={r"/*": {"origins": "*"}})
+    
     server.config.update(
         SESSION_COOKIE_SECURE=True,
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE='Lax',
         PERMANENT_SESSION_LIFETIME=timedelta(minutes=30)
     )
+
+# Configuração de assets
+app.config.update({
+    'assets_external_path': '/',
+    'assets_url_path': '/assets/',
+    'serve_locally': True
+})
 
 # Inicializa os bancos de dados
 db = UserDatabase()
@@ -70,7 +103,7 @@ def serve_layout():
     return html.Div([
         dcc.Location(id='url', refresh=False),
         dcc.Store(id='session-store', storage_type='session'),
-        html.Div(id='page-content'),
+        html.Div(id='page-content', children=create_login_layout()),  # Layout inicial definido
         html.Div(id='auth-status'),
         dcc.Store(id='store-data'),
         dcc.Store(id='store-filtered-data')
@@ -976,55 +1009,20 @@ app.clientside_callback(
 # ========================
 @app.callback(
     Output('page-content', 'children'),
-    [Input('url', 'pathname')]
+    [Input('url', 'pathname')],
+    prevent_initial_call=True  # Previne chamada inicial
 )
 def display_page(pathname):
-    print(f"Roteamento para: {pathname}")  # Debug print
+    print(f"Roteamento para: {pathname}")
     
-    if pathname == '/dashboard':
+    if not pathname:  # Se não houver pathname, mostra login
+        return create_login_layout()
+    elif pathname == '/dashboard':
         return create_dashboard_layout()
     elif pathname == '/register':
         return create_register_layout()
     else:
-        print("Retornando layout de login")  # Debug print
-        return dbc.Container([
-            dbc.Row([
-                dbc.Col([
-                    html.H1("📊 Dashboard Renov", className="text-center mb-4"),
-                    dbc.Card([
-                        dbc.CardBody([
-                            html.H3("Login", className="text-center mb-4"),
-                            dbc.Input(
-                                id="login-username",
-                                placeholder="Email",
-                                type="email",
-                                className="mb-3"
-                            ),
-                            dbc.Input(
-                                id="login-password",
-                                placeholder="Senha",
-                                type="password",
-                                className="mb-3"
-                            ),
-                            dbc.Button(
-                                "Entrar",
-                                id="login-button",
-                                color="primary",
-                                className="w-100 mb-3"
-                            ),
-                            html.Hr(),
-                            html.P("Não tem uma conta?", className="text-center"),
-                            dbc.Button(
-                                "Registrar",
-                                id="show-register",
-                                color="secondary",
-                                className="w-100"
-                            )
-                        ])
-                    ], className="shadow-sm")
-                ], md=6, lg=4, className="mx-auto")
-            ], className="align-items-center min-vh-100")
-        ], fluid=True, className="bg-light")
+        return create_login_layout()
 
 # ========================
 # 🔄 Callbacks de Navegação
@@ -1500,16 +1498,30 @@ def create_register_layout():
 # 🔚 Execução
 # ========================
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 8081))
-    host = os.environ.get('HOST', '0.0.0.0')
-    debug = os.environ.get('FLASK_ENV') != 'production'
-    
-    print(f"Iniciando servidor em {host}:{port} (Debug: {debug})")
-    
-    app.run_server(
-        debug=debug,
-        host=host,
-        port=port,
-        dev_tools_hot_reload=False,
-        use_reloader=False
-    )
+    try:
+        # Configuração da porta
+        initial_port = int(os.environ.get('PORT', 8081))
+        try:
+            port = get_available_port(initial_port)
+        except RuntimeError as e:
+            print(f"Erro ao encontrar porta: {e}")
+            port = initial_port + 1
+        
+        # Configuração do host
+        host = '127.0.0.1'
+        
+        print(f"Iniciando servidor em http://{host}:{port}")
+        print(f"Ambiente: {os.environ.get('FLASK_ENV', 'development')}")
+        
+        # Inicia o servidor
+        app.run_server(
+            debug=True,
+            host=host,
+            port=port,
+            dev_tools_hot_reload=False,
+            use_reloader=False
+        )
+    except Exception as e:
+        print(f"Erro ao iniciar o servidor: {str(e)}")
+        import traceback
+        traceback.print_exc()
