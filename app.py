@@ -945,11 +945,19 @@ def handle_authentication(login_clicks, logout_clicks, username, password, sessi
         raise PreventUpdate
     
     button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    print(f"Botão acionado: {button_id}")
     
     if button_id == 'logout-button':
+        print("Realizando logout")
         return None, '/', dbc.Alert("Logout realizado com sucesso!", color="success", duration=2000)
     
+    if not login_clicks:
+        raise PreventUpdate
+    
+    print(f"Tentativa de login - Usuário: {username}, Senha: {'*' * len(password) if password else 'None'}")
+    
     if not username or not password:
+        print("Campos vazios detectados")
         return no_update, no_update, dbc.Alert(
             "Por favor, preencha todos os campos.",
             color="warning",
@@ -957,22 +965,24 @@ def handle_authentication(login_clicks, logout_clicks, username, password, sessi
         )
     
     user = db.verify_user(username, password)
-    print(f"Tentativa de login para usuário: {username}")
     print(f"Resultado da verificação: {user}")
     
     if user:
         if not user['is_approved']:
+            print("Usuário não aprovado")
             return no_update, no_update, dbc.Alert(
                 "Sua conta ainda está pendente de aprovação.",
                 color="warning",
                 duration=4000
             )
+        print("Login bem-sucedido")
         return user, '/dashboard', dbc.Alert(
             "Login realizado com sucesso!",
             color="success",
             duration=2000
         )
     
+    print("Login falhou - credenciais inválidas")
     return no_update, no_update, dbc.Alert(
         "Usuário ou senha inválidos.",
         color="danger",
