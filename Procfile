@@ -1,1 +1,1 @@
-web: gunicorn app:server --timeout 300 --workers 4 --preload 
+web: gunicorn wsgi:server --timeout 300 --workers 4 --preload --log-level debug 

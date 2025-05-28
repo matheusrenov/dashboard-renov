@@ -14,7 +14,9 @@ import warnings
 from models import UserDatabase
 from auth_layout import create_login_layout, create_register_layout, create_admin_approval_layout
 from dash.exceptions import PreventUpdate
-warnings.filterwarnings('ignore')
+from dotenv import load_dotenv
+
+load_dotenv()  # carrega variáveis do .env se existir
 
 # ========================
 # 🚀 Inicialização do App
@@ -26,7 +28,8 @@ app = dash.Dash(
     update_title=None,
     meta_tags=[
         {"name": "viewport", "content": "width=device-width, initial-scale=1"}
-    ]
+    ],
+    serve_locally=True
 )
 server = app.server
 
@@ -38,8 +41,14 @@ app._favicon = "assets/favicon.ico"
 server.config.update(
     SECRET_KEY=os.environ.get('SECRET_KEY', os.urandom(24)),
     FLASK_ENV=os.environ.get('FLASK_ENV', 'production'),
-    DEBUG=False
+    DEBUG=False,
+    PROPAGATE_EXCEPTIONS=True
 )
+
+# Configuração para servir arquivos estáticos
+if not os.environ.get("DASH_DEBUG_MODE"):
+    from whitenoise import WhiteNoise
+    server.wsgi_app = WhiteNoise(server.wsgi_app, root='assets/')
 
 # Inicializa o banco de dados
 db = UserDatabase()
