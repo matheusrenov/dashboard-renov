@@ -143,4 +143,16 @@ class UserDatabase:
         except sqlite3.IntegrityError:
             return False
         finally:
-            conn.close() 
+            conn.close()
+
+    def test_connection(self):
+        """Testa a conexão com o banco de dados"""
+        try:
+            conn = sqlite3.connect(self.db_file)
+            cursor = conn.cursor()
+            cursor.execute('SELECT 1')
+            cursor.fetchone()
+            conn.close()
+            return True
+        except Exception as e:
+            raise Exception(f"Erro na conexão com o banco de dados: {str(e)}") 

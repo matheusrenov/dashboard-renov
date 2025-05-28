@@ -15,6 +15,7 @@ from models import UserDatabase
 from auth_layout import create_login_layout, create_register_layout, create_admin_approval_layout
 from dash.exceptions import PreventUpdate
 from dotenv import load_dotenv
+import secrets
 
 load_dotenv()  # carrega variáveis do .env se existir
 
@@ -45,10 +46,15 @@ server.config.update(
     PROPAGATE_EXCEPTIONS=True
 )
 
-# Endpoint de healthcheck
+# Endpoint de healthcheck mais robusto
 @server.route('/health')
 def health_check():
-    return 'OK', 200
+    try:
+        # Verifica se o banco de dados está acessível
+        db.test_connection()
+        return 'OK', 200
+    except Exception as e:
+        return str(e), 500
 
 # Configuração para servir arquivos estáticos
 if not os.environ.get("DASH_DEBUG_MODE"):
@@ -1130,8 +1136,15 @@ def update_dashboard_content(pathname):
 # ========================
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8080))
+    host = os.environ.get("HOST", "0.0.0.0")
+    
+    # Configuração do servidor para produção
+    server.config['PREFERRED_URL_SCHEME'] = 'https'
+    server.config['SERVER_NAME'] = os.environ.get('SERVER_NAME')
+    
     app.run(
         debug=False,
-        host='0.0.0.0',
-        port=port
+        host=host,
+        port=port,
+        use_reloader=False  # Desativa o reloader em produção
     )
