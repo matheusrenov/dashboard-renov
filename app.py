@@ -55,6 +55,10 @@ assets_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets')
 if not os.path.exists(assets_path):
     os.makedirs(assets_path)
 
+# Configuração da porta
+PORT = int(os.environ.get('PORT', 8081))
+HOST = '0.0.0.0' if os.environ.get('FLASK_ENV') == 'production' else '127.0.0.1'
+
 # Inicialização do Flask
 server = Flask(__name__)
 
@@ -81,7 +85,9 @@ app.title = "Dashboard Renov"
 server.config.update(
     SECRET_KEY=os.environ.get('SECRET_KEY', secrets.token_hex(16)),
     FLASK_ENV=os.environ.get('FLASK_ENV', 'production'),  # Default para production
-    DEBUG=False  # Sempre False em produção
+    DEBUG=False,  # Sempre False em produção
+    PORT=PORT,  # Define a porta no config
+    HOST=HOST   # Define o host no config
 )
 
 # Configurações de segurança
@@ -1103,29 +1109,43 @@ def handle_logout(n_clicks):
     return '/'
 
 # ========================
-# 🔚 Execução
+# 🔚 Execução e Documentação
 # ========================
+
+"""
+Instruções de Execução:
+
+1. Desenvolvimento Local:
+   python app.py
+   - O servidor iniciará em http://127.0.0.1:8081
+   - Variáveis de ambiente opcionais:
+     * FLASK_ENV=development (para modo debug)
+     * PORT=8081 (ou outra porta desejada)
+
+2. Produção:
+   gunicorn wsgi:server
+   - O servidor iniciará em http://0.0.0.0:8081 (ou a porta definida em $PORT)
+   - Variáveis de ambiente necessárias:
+     * FLASK_ENV=production
+     * PORT=8081 (ou porta desejada)
+     * SECRET_KEY=chave_secreta_segura
+
+3. Usando Procfile:
+   web: gunicorn wsgi:server --workers 4 --threads 2 --timeout 120
+   - Usa automaticamente a variável $PORT do ambiente
+   - Configurado para performance em produção
+"""
+
 if __name__ == '__main__':
     try:
-        # Configuração da porta
-        initial_port = int(os.environ.get('PORT', 8081))
-        try:
-            port = get_available_port(initial_port)
-        except RuntimeError as e:
-            print(f"Erro ao encontrar porta: {e}")
-            port = initial_port + 1
-        
-        # Configuração do host
-        host = '127.0.0.1'
-        
-        print(f"Iniciando servidor em http://{host}:{port}")
+        print(f"Iniciando servidor em http://{HOST}:{PORT}")
         print(f"Ambiente: {os.environ.get('FLASK_ENV', 'development')}")
+        print(f"Porta: {PORT}")
         
-        # Inicia o servidor
         app.run_server(
-            debug=True,
-            host=host,
-            port=port,
+            debug=os.environ.get('FLASK_ENV') == 'development',
+            host=HOST,
+            port=PORT,
             dev_tools_hot_reload=False,
             use_reloader=False
         )

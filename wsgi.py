@@ -1,7 +1,20 @@
-from app import server, app
+from app import server, app, PORT, HOST
 from flask import Flask, jsonify
 from typing import cast
 import os
+
+"""
+Arquivo WSGI para execução em produção
+
+Este arquivo é usado pelo Gunicorn para servir a aplicação.
+Por padrão, usa a porta 8081 ou a definida pela variável de ambiente PORT.
+
+Execução via Gunicorn:
+    gunicorn wsgi:server --bind 0.0.0.0:8081
+
+Execução via Procfile:
+    web: gunicorn wsgi:server --workers 4 --threads 2 --timeout 120
+"""
 
 # Garante que o servidor é uma instância Flask
 flask_server = cast(Flask, server)
@@ -17,5 +30,7 @@ def index():
     return app.index()
 
 if __name__ == "__main__":
-    port = int(os.environ.get('PORT', 8081))
-    flask_server.run(host='0.0.0.0', port=port) 
+    print(f"Iniciando servidor em http://{HOST}:{PORT}")
+    print(f"Ambiente: {os.environ.get('FLASK_ENV', 'development')}")
+    print(f"Porta: {PORT}")
+    flask_server.run(host=HOST, port=PORT) 
