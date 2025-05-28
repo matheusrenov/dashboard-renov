@@ -876,47 +876,51 @@ app.clientside_callback(
 # 🔄 Callback Principal de Roteamento
 # ========================
 @app.callback(
-    Output('page-content', 'children', allow_duplicate=True),
-    Input('url', 'pathname'),
-    prevent_initial_call=True
+    Output('page-content', 'children'),
+    Input('url', 'pathname')
 )
 def display_page(pathname):
-    print(f"Roteamento para: {pathname}")  # Debug log
+    global CURRENT_USER
+    print(f"Roteamento para: {pathname}")
     
-    if pathname == '/' or pathname is None:
+    if pathname == '/dashboard':
+        if CURRENT_USER:
+            is_super_admin = CURRENT_USER.get('email') == 'matheus@renovsmart.com.br'
+            return create_dashboard_layout(is_super_admin)
         return create_login_layout()
-    elif pathname == '/dashboard':
-        return create_dashboard_layout()
     elif pathname == '/register':
         return create_register_layout()
     else:
+        if CURRENT_USER and pathname == '/':
+            return create_dashboard_layout(CURRENT_USER.get('email') == 'matheus@renovsmart.com.br')
         return create_login_layout()
 
 # ========================
 # 🔄 Callbacks de Navegação
 # ========================
 @app.callback(
-    [Output('url', 'pathname', allow_duplicate=True),
-     Output('page-content', 'children', allow_duplicate=True)],
+    Output('url', 'pathname', allow_duplicate=True),
     [Input('show-register', 'n_clicks'),
      Input('show-login', 'n_clicks'),
      Input('logout-button', 'n_clicks')],
     prevent_initial_call=True
 )
 def handle_navigation(show_reg_clicks, show_login_clicks, logout_clicks):
+    global CURRENT_USER
     ctx = callback_context
     if not ctx.triggered:
         raise PreventUpdate
     
     triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
-    print(f"Navegação acionada por: {triggered_id}")  # Debug log
+    print(f"Navegação acionada por: {triggered_id}")
     
     if triggered_id == 'show-register':
-        return '/register', create_register_layout()
+        return '/register'
     elif triggered_id == 'show-login':
-        return '/', create_login_layout()
+        return '/'
     elif triggered_id == 'logout-button':
-        return '/', create_login_layout()
+        CURRENT_USER = None
+        return '/'
     
     raise PreventUpdate
 
@@ -925,7 +929,6 @@ def handle_navigation(show_reg_clicks, show_login_clicks, logout_clicks):
 # ========================
 @app.callback(
     [Output('url', 'pathname', allow_duplicate=True),
-     Output('page-content', 'children', allow_duplicate=True),
      Output('auth-status', 'children')],
     [Input('login-button', 'n_clicks')],
     [State('login-username', 'value'),
@@ -933,13 +936,14 @@ def handle_navigation(show_reg_clicks, show_login_clicks, logout_clicks):
     prevent_initial_call=True
 )
 def handle_login(n_clicks, username, password):
+    global CURRENT_USER
     if not n_clicks:
         raise PreventUpdate
     
-    print(f"Tentativa de login para usuário: {username}")  # Debug log
+    print(f"Tentativa de login para usuário: {username}")
     
     if not username or not password:
-        return no_update, no_update, dbc.Alert(
+        return no_update, dbc.Alert(
             "Por favor, preencha todos os campos.",
             color="warning",
             duration=4000,
@@ -947,25 +951,25 @@ def handle_login(n_clicks, username, password):
         )
     
     user = db.verify_user(username, password)
-    print(f"Resultado da verificação: {user}")  # Debug log mais detalhado
+    print(f"Resultado da verificação: {user}")
     
     if user:
         if not user['is_approved']:
-            return no_update, no_update, dbc.Alert(
+            return no_update, dbc.Alert(
                 "Sua conta ainda está pendente de aprovação.",
                 color="warning",
                 duration=4000,
                 dismissable=True
             )
-        is_super_admin = user['email'] == 'matheus@renovsmart.com.br'
-        return '/dashboard', create_dashboard_layout(is_super_admin), dbc.Alert(
+        CURRENT_USER = user
+        return '/dashboard', dbc.Alert(
             "Login realizado com sucesso!",
             color="success",
             duration=2000,
             dismissable=True
         )
     
-    return no_update, no_update, dbc.Alert(
+    return no_update, dbc.Alert(
         "Usuário ou senha inválidos.",
         color="danger",
         duration=4000,
