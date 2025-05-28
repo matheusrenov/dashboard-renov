@@ -3,6 +3,7 @@ from dash import html, dcc
 import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output, State
 from dash.exceptions import PreventUpdate
+from dash import no_update
 import os
 
 # Inicialização do app
@@ -16,6 +17,12 @@ app = dash.Dash(
 # Configurações do servidor
 server = app.server
 app.title = "Dashboard Renov - Teste"
+
+# Configurações básicas
+server.config.update(
+    SECRET_KEY=os.environ.get('SECRET_KEY', 'dev-key-test'),
+    DEBUG=True
+)
 
 # Configuração para evitar loop infinito
 app._favicon = None

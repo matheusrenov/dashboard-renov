@@ -37,11 +37,11 @@ app = dash.Dash(
 server = app.server
 app.title = "Dashboard Renov"
 
-# Configurações do Flask
+# Configurações do Flask para produção
 server.config.update(
-    SECRET_KEY=os.environ.get('SECRET_KEY', os.urandom(24)),
+    SECRET_KEY=os.environ.get('SECRET_KEY', secrets.token_hex(16)),
     FLASK_ENV=os.environ.get('FLASK_ENV', 'production'),
-    DEBUG=True
+    DEBUG=False if os.environ.get('FLASK_ENV') == 'production' else True
 )
 
 # Configuração para evitar loop infinito
@@ -49,6 +49,15 @@ app._favicon = None
 
 # Configuração para permitir callbacks duplicados
 app.config.suppress_callback_exceptions = True
+
+# Configurações de segurança adicionais para produção
+if os.environ.get('FLASK_ENV') == 'production':
+    server.config.update(
+        SESSION_COOKIE_SECURE=True,
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE='Lax',
+        PERMANENT_SESSION_LIFETIME=timedelta(minutes=30)
+    )
 
 # Inicializa os bancos de dados
 db = UserDatabase()
@@ -1491,11 +1500,16 @@ def create_register_layout():
 # 🔚 Execução
 # ========================
 if __name__ == '__main__':
-    print("Iniciando servidor...")
+    port = int(os.environ.get('PORT', 8081))
+    host = os.environ.get('HOST', '0.0.0.0')
+    debug = os.environ.get('FLASK_ENV') != 'production'
+    
+    print(f"Iniciando servidor em {host}:{port} (Debug: {debug})")
+    
     app.run_server(
-        debug=True,
-        host='127.0.0.1',  # Usando localhost específico
-        port=8081,
-        dev_tools_hot_reload=False,  # Desabilita hot reload para evitar loops
-        use_reloader=False  # Desabilita reloader para evitar loops
+        debug=debug,
+        host=host,
+        port=port,
+        dev_tools_hot_reload=False,
+        use_reloader=False
     )
