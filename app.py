@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 from unidecode import unidecode
 import warnings
 from models import UserDatabase
+from models_network import NetworkDatabase
 from auth_layout import create_login_layout, create_register_layout, create_admin_approval_layout
 from dash.exceptions import PreventUpdate
 from dotenv import load_dotenv
@@ -57,8 +58,9 @@ if not os.environ.get("DASH_DEBUG_MODE"):
         prefix='assets/'
     )
 
-# Inicializa o banco de dados
+# Inicializa os bancos de dados
 db = UserDatabase()
+network_db = NetworkDatabase()
 
 # Variável global para controle de autenticação
 CURRENT_USER = None
@@ -108,7 +110,7 @@ def create_dashboard_layout(is_super_admin=False):
             html.Hr(style={'borderColor': '#3498db', 'borderWidth': '2px'})
         ]),
         
-        # Upload Section
+        # Upload Section with Network Buttons
         dbc.Row([
             dbc.Col([
                 dcc.Upload(
@@ -129,8 +131,36 @@ def create_dashboard_layout(is_super_admin=False):
                     },
                     multiple=False
                 ),
-                html.Div(id='upload-status'),
-            ])
+            ], width=8),
+            dbc.Col([
+                dbc.Button(
+                    "Atualizar Base de Redes e Filiais",
+                    id="upload-networks-branches",
+                    color="secondary",
+                    size="sm",
+                    className="me-2 mb-2"
+                ),
+                dcc.Upload(
+                    id='upload-networks-branches-file',
+                    children=[],
+                    style={'display': 'none'}
+                ),
+                html.Br(),
+                dbc.Button(
+                    "Atualizar Base de Colaboradores",
+                    id="upload-employees",
+                    color="secondary",
+                    size="sm",
+                    className="me-2"
+                ),
+                dcc.Upload(
+                    id='upload-employees-file',
+                    children=[],
+                    style={'display': 'none'}
+                ),
+            ], width=4),
+            html.Div(id='upload-status'),
+            html.Div(id='network-upload-status')
         ]),
         
         # Welcome Message (shown before upload)
@@ -173,7 +203,8 @@ def create_dashboard_layout(is_super_admin=False):
                 dcc.Tab(label='Visão Geral', value='overview'),
                 dcc.Tab(label='Redes', value='networks'),
                 dcc.Tab(label='Rankings', value='rankings'),
-                dcc.Tab(label='Projeções', value='projections')
+                dcc.Tab(label='Projeções', value='projections'),
+                dcc.Tab(label='Base de Redes e Colaboradores', value='network-base')
             ], className="mb-4"),
             html.Div(id='tab-content-area')
         ]),
@@ -897,6 +928,9 @@ def update_kpis(original_data, filtered_data):
 )
 def update_tab_content(active_tab, filtered_data, original_data):
     try:
+        if active_tab == "network-base":
+            return generate_network_base_content()
+            
         data_to_use = filtered_data if filtered_data else original_data
         if not data_to_use:
             return dbc.Alert("Nenhum dado disponível.", color="warning")
@@ -1172,7 +1206,8 @@ def update_dashboard_content(pathname):
                     dcc.Tab(label='Visão Geral', value='overview'),
                     dcc.Tab(label='Redes', value='networks'),
                     dcc.Tab(label='Rankings', value='rankings'),
-                    dcc.Tab(label='Projeções', value='projections')
+                    dcc.Tab(label='Projeções', value='projections'),
+                    dcc.Tab(label='Base de Redes e Colaboradores', value='network-base')
                 ], className="mb-4"),
                 html.Div(id='tab-content-area')
             ])
@@ -1227,6 +1262,109 @@ def handle_register(register_clicks, username, email, password, confirm_password
         no_update,
         no_update
     )
+
+# Novo callback para os botões de upload de rede
+@app.callback(
+    [Output('upload-networks-branches-file', 'contents'),
+     Output('network-upload-status', 'children')],
+    [Input('upload-networks-branches', 'n_clicks')],
+    prevent_initial_call=True
+)
+def trigger_network_branches_upload(n_clicks):
+    if not n_clicks:
+        raise PreventUpdate
+    return None, None
+
+@app.callback(
+    [Output('upload-employees-file', 'contents'),
+     Output('network-upload-status', 'children', allow_duplicate=True)],
+    [Input('upload-employees', 'n_clicks')],
+    prevent_initial_call=True
+)
+def trigger_employee_upload(n_clicks):
+    if not n_clicks:
+        raise PreventUpdate
+    return None, None
+
+# Callback para processar os uploads de rede e colaboradores
+@app.callback(
+    Output('network-upload-status', 'children', allow_duplicate=True),
+    [Input('upload-networks-branches-file', 'contents'),
+     Input('upload-employees-file', 'contents')],
+    [State('upload-networks-branches-file', 'filename'),
+     State('upload-employees-file', 'filename')],
+    prevent_initial_call=True
+)
+def process_network_upload(networks_contents, employees_contents, networks_filename, employees_filename):
+    ctx = callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+    
+    trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    
+    try:
+        if trigger_id == 'upload-networks-branches-file' and networks_contents:
+            content_type, content_string = networks_contents.split(',')
+            decoded = base64.b64decode(content_string)
+            df = pd.read_excel(io.BytesIO(decoded))
+            
+            success, message = network_db.update_networks_and_branches(df)
+            color = "success" if success else "danger"
+            return dbc.Alert(message, color=color, duration=4000)
+            
+        elif trigger_id == 'upload-employees-file' and employees_contents:
+            content_type, content_string = employees_contents.split(',')
+            decoded = base64.b64decode(content_string)
+            df = pd.read_excel(io.BytesIO(decoded))
+            
+            success, message = network_db.update_employees(df)
+            color = "success" if success else "danger"
+            return dbc.Alert(message, color=color, duration=4000)
+            
+    except Exception as e:
+        return dbc.Alert(f"Erro ao processar arquivo: {str(e)}", color="danger", duration=4000)
+
+def generate_network_base_content():
+    """Gera o conteúdo da aba de Base de Redes e Colaboradores"""
+    try:
+        stats = network_db.get_network_stats()
+        
+        return html.Div([
+            dbc.Row([
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            html.H4("🏢 Total de Redes", className="card-title text-center"),
+                            html.H2(f"{stats['total_networks']:,}", 
+                                   className="text-primary text-center display-4"),
+                            html.P("Redes ativas no sistema", className="text-muted text-center")
+                        ])
+                    ], className="mb-4 shadow-sm")
+                ], md=4),
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            html.H4("🏪 Total de Filiais", className="card-title text-center"),
+                            html.H2(f"{stats['total_branches']:,}", 
+                                   className="text-success text-center display-4"),
+                            html.P("Filiais ativas no sistema", className="text-muted text-center")
+                        ])
+                    ], className="mb-4 shadow-sm")
+                ], md=4),
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            html.H4("👥 Total de Colaboradores", className="card-title text-center"),
+                            html.H2(f"{stats['total_employees']:,}", 
+                                   className="text-info text-center display-4"),
+                            html.P("Colaboradores ativos no sistema", className="text-muted text-center")
+                        ])
+                    ], className="mb-4 shadow-sm")
+                ], md=4)
+            ])
+        ])
+    except Exception as e:
+        return dbc.Alert(f"Erro ao carregar estatísticas: {str(e)}", color="danger")
 
 # ========================
 # 🔚 Execução
