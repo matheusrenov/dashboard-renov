@@ -54,43 +54,34 @@ app = dash.Dash(
     update_title='Carregando...',
     meta_tags=[
         {"name": "viewport", "content": "width=device-width, initial-scale=1"}
-    ]
+    ],
+    assets_folder='assets',  # Pasta de assets
+    assets_url_path='/assets',  # URL path para assets
+    serve_locally=True  # Servir assets localmente
 )
 
 # Configurações do servidor
 server = app.server
 app.title = "Dashboard Renov"
 
-# Configurações do Flask para produção
-server.config.update(
-    SECRET_KEY=os.environ.get('SECRET_KEY', secrets.token_hex(16)),
-    FLASK_ENV=os.environ.get('FLASK_ENV', 'production'),
-    DEBUG=False if os.environ.get('FLASK_ENV') == 'production' else True
-)
-
-# Configuração para evitar loop infinito
-app._favicon = None
-
-# Configuração para permitir callbacks duplicados
-app.config.suppress_callback_exceptions = True
-
-# Configurações de segurança adicionais para produção
-if os.environ.get('FLASK_ENV') == 'production':
-    CORS(server, resources={r"/*": {"origins": "*"}})
-    
+# Configurações do Flask para desenvolvimento
+if server:
     server.config.update(
-        SESSION_COOKIE_SECURE=True,
-        SESSION_COOKIE_HTTPONLY=True,
-        SESSION_COOKIE_SAMESITE='Lax',
-        PERMANENT_SESSION_LIFETIME=timedelta(minutes=30)
+        SECRET_KEY=os.environ.get('SECRET_KEY', secrets.token_hex(16)),
+        FLASK_ENV=os.environ.get('FLASK_ENV', 'development'),
+        DEBUG=True
     )
 
-# Configuração de assets
-app.config.update({
-    'assets_external_path': '/',
-    'assets_url_path': '/assets/',
-    'serve_locally': True
-})
+    # Configurações de segurança adicionais para produção
+    if os.environ.get('FLASK_ENV') == 'production':
+        CORS(server, resources={r"/*": {"origins": "*"}})
+        
+        server.config.update(
+            SESSION_COOKIE_SECURE=True,
+            SESSION_COOKIE_HTTPONLY=True,
+            SESSION_COOKIE_SAMESITE='Lax',
+            PERMANENT_SESSION_LIFETIME=timedelta(minutes=30)
+        )
 
 # Inicializa os bancos de dados
 db = UserDatabase()
@@ -122,15 +113,10 @@ def create_dashboard_layout(is_super_admin=False):
                 html.H1("📊 Dashboard de Performance Renov", 
                        className="text-center mb-4", 
                        style={'color': '#2c3e50', 'fontWeight': 'bold'}),
-            ], width=8),
+            ], width=10),
             dbc.Col([
-                html.Div([
-                    dbc.Button("Aprovar Usuários", id="show-approvals", 
-                              color="success", className="me-2",
-                              style={'display': 'inline' if is_super_admin else 'none'}),
-                    dbc.Button("Sair", id="logout-button", color="danger")
-                ], className="d-flex justify-content-end")
-            ], width=4),
+                dbc.Button("Sair", id="logout-button", color="danger")
+            ], width=2),
             html.Hr(style={'borderColor': '#3498db', 'borderWidth': '2px'})
         ]),
         
@@ -234,14 +220,7 @@ def create_dashboard_layout(is_super_admin=False):
                 dcc.Tab(label='Base de Redes e Colaboradores', value='network-base')
             ], className="mb-4"),
             html.Div(id='tab-content-area')
-        ]),
-        
-        # Approval Section (visible only for super admin)
-        dbc.Collapse(
-            create_admin_approval_layout(),
-            id="approval-section",
-            is_open=False
-        )
+        ])
     ], fluid=True, style={'backgroundColor': '#f8f9fa', 'minHeight': '100vh', 'padding': '20px'})
 
 # ========================
@@ -727,26 +706,47 @@ def generate_projections_content(original_df, filtered_df):
     except Exception as e:
         return dbc.Alert(f"Erro nas projeções: {str(e)}", color="danger")
 
-def update_pending_users_table():
-    pending_users = db.get_pending_users()
-    if not pending_users:
-        return html.Div("Nenhum usuário pendente de aprovação.", className="text-muted")
-    
-    return dash_table.DataTable(
-        id='pending-users',
-        data=pending_users,
-        columns=[
-            {'name': 'Usuário', 'id': 'username'},
-            {'name': 'Email', 'id': 'email'},
-            {'name': 'Data de Registro', 'id': 'created_at'}
-        ],
-        style_cell={'textAlign': 'left', 'padding': '10px'},
-        style_header={
-            'backgroundColor': '#3498db',
-            'color': 'white',
-            'fontWeight': 'bold'
-        }
-    )
+def generate_network_base_content():
+    """Gera o conteúdo da aba de Base de Redes e Colaboradores"""
+    try:
+        stats = network_db.get_network_stats()
+        
+        return html.Div([
+            dbc.Row([
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            html.H4("🏢 Total de Redes", className="card-title text-center"),
+                            html.H2(f"{stats['total_networks']:,}", 
+                                   className="text-primary text-center display-4"),
+                            html.P("Redes ativas no sistema", className="text-muted text-center")
+                        ])
+                    ], className="mb-4 shadow-sm")
+                ], md=4),
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            html.H4("🏪 Total de Filiais", className="card-title text-center"),
+                            html.H2(f"{stats['total_branches']:,}", 
+                                   className="text-success text-center display-4"),
+                            html.P("Filiais ativas no sistema", className="text-muted text-center")
+                        ])
+                    ], className="mb-4 shadow-sm")
+                ], md=4),
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            html.H4("👥 Total de Colaboradores", className="card-title text-center"),
+                            html.H2(f"{stats['total_employees']:,}", 
+                                   className="text-info text-center display-4"),
+                            html.P("Colaboradores ativos no sistema", className="text-muted text-center")
+                        ])
+                    ], className="mb-4 shadow-sm")
+                ], md=4)
+            ])
+        ])
+    except Exception as e:
+        return dbc.Alert(f"Erro ao carregar estatísticas: {str(e)}", color="danger")
 
 # ========================
 # 📥 Callbacks de Upload e Filtros
@@ -1029,22 +1029,13 @@ def display_page(pathname):
 # ========================
 @app.callback(
     Output('url', 'pathname', allow_duplicate=True),
-    [Input('show-register', 'n_clicks'),
-     Input('show-login', 'n_clicks')],
+    [Input('show-login', 'n_clicks')],
     prevent_initial_call=True
 )
-def handle_navigation(show_reg_clicks, show_login_clicks):
-    ctx = callback_context
-    if not ctx.triggered:
+def handle_navigation(show_login_clicks):
+    if not show_login_clicks:
         raise PreventUpdate
-    
-    button_id = ctx.triggered[0]['prop_id'].split('.')[0]
-    if button_id == 'show-register':
-        return '/register'
-    elif button_id == 'show-login':
-        return '/'
-    
-    raise PreventUpdate
+    return '/'
 
 # ========================
 # 🔐 Callbacks de Autenticação
@@ -1061,8 +1052,6 @@ def handle_login(n_clicks, username, password):
     if not n_clicks:
         raise PreventUpdate
     
-    print(f"Tentativa de login - Usuário: {username}")
-    
     if not username or not password:
         return no_update, dbc.Alert(
             "Por favor, preencha todos os campos.",
@@ -1071,15 +1060,8 @@ def handle_login(n_clicks, username, password):
         )
     
     user = db.verify_user(username, password)
-    print(f"Resultado da verificação: {user}")
     
     if user:
-        if not user['is_approved']:
-            return no_update, dbc.Alert(
-                "Sua conta ainda está pendente de aprovação.",
-                color="warning",
-                duration=4000
-            )
         return '/dashboard', dbc.Alert(
             "Login realizado com sucesso!",
             color="success",
@@ -1101,398 +1083,6 @@ def handle_logout(n_clicks):
     if not n_clicks:
         raise PreventUpdate
     return '/'
-
-@app.callback(
-    Output('pending-users-table', 'children'),
-    [Input('url', 'pathname')],
-    prevent_initial_call=True
-)
-def update_pending_users(pathname):
-    if pathname != "/dashboard":
-        return no_update
-    
-    try:
-        return update_pending_users_table()
-    except Exception as e:
-        return html.Div(f"Erro ao carregar usuários pendentes: {str(e)}")
-
-@app.callback(
-    [Output('pending-users-table', 'children', allow_duplicate=True),
-     Output('auth-status', 'children', allow_duplicate=True)],
-    [Input('approve-user-button', 'n_clicks'),
-     Input('reject-user-button', 'n_clicks')],
-    [State('pending-users-table', 'selected_rows'),
-     State('pending-users-table', 'data')],
-    prevent_initial_call=True
-)
-def handle_user_approval(approve_clicks, reject_clicks, selected_rows, table_data):
-    if not selected_rows or not table_data:
-        return no_update, no_update
-    
-    ctx = callback_context
-    if not ctx.triggered:
-        return no_update, no_update
-    
-    try:
-        triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
-        selected_user = table_data[selected_rows[0]]
-        
-        if triggered_id == 'approve-user-button':
-            db.approve_user(selected_user['email'])
-            message = f"Usuário {selected_user['email']} aprovado com sucesso!"
-        elif triggered_id == 'reject-user-button':
-            db.reject_user(selected_user['email'])
-            message = f"Usuário {selected_user['email']} rejeitado."
-        else:
-            return no_update, no_update
-        
-        return update_pending_users_table(), dbc.Alert(message, color="success", duration=4000)
-    except Exception as e:
-        return no_update, dbc.Alert(f"Erro ao processar ação: {str(e)}", color="danger", duration=4000)
-
-@app.callback(
-    Output('approval-section', 'is_open'),
-    [Input('show-approvals', 'n_clicks')],
-    [State('approval-section', 'is_open')],
-    prevent_initial_call=True
-)
-def toggle_approval_section(n_clicks, is_open):
-    if n_clicks is None:
-        return False
-    return not is_open
-
-@app.callback(
-    Output('dashboard-content', 'children'),
-    [Input('url', 'pathname')],
-    prevent_initial_call=True
-)
-def update_dashboard_content(pathname):
-    if pathname != "/dashboard":
-        return no_update
-    
-    try:
-        return html.Div([
-            dbc.Row([
-                dbc.Col([
-                    dcc.Upload(
-                        id='upload-data',
-                        children=html.Div([
-                            'Arraste e solte ou ',
-                            html.A('selecione um arquivo Excel', className="text-primary")
-                        ]),
-                        style={
-                            'width': '100%',
-                            'height': '60px',
-                            'lineHeight': '60px',
-                            'borderWidth': '1px',
-                            'borderStyle': 'dashed',
-                            'borderRadius': '5px',
-                            'textAlign': 'center',
-                            'margin': '10px'
-                        },
-                        multiple=False
-                    ),
-                    html.Div(id='upload-status'),
-                ])
-            ]),
-            
-            # Welcome Message (shown before upload)
-            html.Div(id='welcome-message', children=[
-                html.H4("👋 Bem-vindo ao Dashboard!", className="text-center mt-5"),
-                html.P("Faça o upload de um arquivo Excel para começar.", className="text-center text-muted")
-            ]),
-            
-            # Filters Section (hidden initially)
-            html.Div(id='filters-section', style={'display': 'none'}, children=[
-                dbc.Row([
-                    dbc.Col([
-                        html.H5("🔍 Filtros", className="mb-3"),
-                        dbc.Row([
-                            dbc.Col([
-                                html.Label("Mês:"),
-                                dcc.Dropdown(id='filter-month', multi=True, placeholder="Selecione o(s) mês(es)")
-                            ], md=4),
-                            dbc.Col([
-                                html.Label("Rede:"),
-                                dcc.Dropdown(id='filter-network', multi=True, placeholder="Selecione a(s) rede(s)")
-                            ], md=4),
-                            dbc.Col([
-                                html.Label("Situação:"),
-                                dcc.Dropdown(id='filter-status', multi=True, placeholder="Selecione o(s) status")
-                            ], md=4)
-                        ]),
-                        dbc.Button("Limpar Filtros", id="clear-filters", 
-                                 color="secondary", size="sm", className="mt-2")
-                    ])
-                ], className="mb-4")
-            ]),
-            
-            # KPIs Section
-            html.Div(id='kpi-section'),
-            
-            # Tabs Section (hidden initially)
-            html.Div(id='tabs-section', style={'display': 'none'}, children=[
-                dcc.Tabs(id='main-tabs', value='overview', children=[
-                    dcc.Tab(label='Visão Geral', value='overview'),
-                    dcc.Tab(label='Redes', value='networks'),
-                    dcc.Tab(label='Rankings', value='rankings'),
-                    dcc.Tab(label='Projeções', value='projections'),
-                    dcc.Tab(label='Base de Redes e Colaboradores', value='network-base')
-                ], className="mb-4"),
-                html.Div(id='tab-content-area')
-            ])
-        ])
-    except Exception as e:
-        return dbc.Alert(f"Erro ao carregar o dashboard: {str(e)}", color="danger")
-
-@app.callback(
-    [Output('auth-status', 'children', allow_duplicate=True),
-     Output('url', 'pathname', allow_duplicate=True),
-     Output('page-content', 'children', allow_duplicate=True)],
-    [Input('register-button', 'n_clicks')],
-    [State('register-username', 'value'),
-     State('register-email', 'value'),
-     State('register-password', 'value'),
-     State('register-confirm-password', 'value')],
-    prevent_initial_call=True
-)
-def handle_register(register_clicks, username, email, password, confirm_password):
-    if not register_clicks:
-        raise PreventUpdate
-    
-    print(f"Tentativa de registro para usuário: {username}")  # Log para debug
-    
-    if not all([username, email, password, confirm_password]):
-        return (
-            dbc.Alert("Todos os campos são obrigatórios.", color="danger", duration=4000),
-            no_update,
-            no_update
-        )
-    
-    if password != confirm_password:
-        return (
-            dbc.Alert("As senhas não coincidem.", color="danger", duration=4000),
-            no_update,
-            no_update
-        )
-    
-    success = db.create_user(username, password, email)
-    print(f"Resultado do registro: {success}")  # Log para debug
-    
-    if success:
-        return (
-            dbc.Alert("Conta criada com sucesso! Aguarde a aprovação do administrador.", 
-                     color="success", duration=4000),
-            "/",
-            create_login_layout()
-        )
-    
-    return (
-        dbc.Alert("Usuário ou email já existem.", color="danger", duration=4000),
-        no_update,
-        no_update
-    )
-
-# Novo callback para os botões de upload de rede
-@app.callback(
-    [Output('upload-networks-branches-file', 'contents'),
-     Output('network-upload-status', 'children')],
-    [Input('upload-networks-branches', 'n_clicks')],
-    prevent_initial_call=True
-)
-def trigger_network_branches_upload(n_clicks):
-    if not n_clicks:
-        raise PreventUpdate
-    return None, None
-
-@app.callback(
-    [Output('upload-employees-file', 'contents'),
-     Output('network-upload-status', 'children', allow_duplicate=True)],
-    [Input('upload-employees', 'n_clicks')],
-    prevent_initial_call=True
-)
-def trigger_employee_upload(n_clicks):
-    if not n_clicks:
-        raise PreventUpdate
-    return None, None
-
-# Callback para processar os uploads de rede e colaboradores
-@app.callback(
-    Output('network-upload-status', 'children'),
-    [Input('upload-networks-branches-file', 'contents'),
-     Input('upload-employees-file', 'contents')],
-    [State('upload-networks-branches-file', 'filename'),
-     State('upload-employees-file', 'filename')],
-    prevent_initial_call=True
-)
-def process_network_upload(networks_contents, employees_contents, networks_filename, employees_filename):
-    ctx = callback_context
-    if not ctx.triggered:
-        raise PreventUpdate
-    
-    trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
-    
-    try:
-        if trigger_id == 'upload-networks-branches-file' and networks_contents:
-            content_type, content_string = networks_contents.split(',')
-            decoded = base64.b64decode(content_string)
-            df = pd.read_excel(io.BytesIO(decoded))
-            
-            success, message = network_db.update_networks_and_branches(df)
-            color = "success" if success else "danger"
-            return dbc.Alert(message, color=color, duration=4000)
-            
-        elif trigger_id == 'upload-employees-file' and employees_contents:
-            content_type, content_string = employees_contents.split(',')
-            decoded = base64.b64decode(content_string)
-            df = pd.read_excel(io.BytesIO(decoded))
-            
-            success, message = network_db.update_employees(df)
-            color = "success" if success else "danger"
-            return dbc.Alert(message, color=color, duration=4000)
-            
-    except Exception as e:
-        return dbc.Alert(f"Erro ao processar arquivo: {str(e)}", color="danger", duration=4000)
-
-def generate_network_base_content():
-    """Gera o conteúdo da aba de Base de Redes e Colaboradores"""
-    try:
-        stats = network_db.get_network_stats()
-        
-        return html.Div([
-            dbc.Row([
-                dbc.Col([
-                    dbc.Card([
-                        dbc.CardBody([
-                            html.H4("🏢 Total de Redes", className="card-title text-center"),
-                            html.H2(f"{stats['total_networks']:,}", 
-                                   className="text-primary text-center display-4"),
-                            html.P("Redes ativas no sistema", className="text-muted text-center")
-                        ])
-                    ], className="mb-4 shadow-sm")
-                ], md=4),
-                dbc.Col([
-                    dbc.Card([
-                        dbc.CardBody([
-                            html.H4("🏪 Total de Filiais", className="card-title text-center"),
-                            html.H2(f"{stats['total_branches']:,}", 
-                                   className="text-success text-center display-4"),
-                            html.P("Filiais ativas no sistema", className="text-muted text-center")
-                        ])
-                    ], className="mb-4 shadow-sm")
-                ], md=4),
-                dbc.Col([
-                    dbc.Card([
-                        dbc.CardBody([
-                            html.H4("👥 Total de Colaboradores", className="card-title text-center"),
-                            html.H2(f"{stats['total_employees']:,}", 
-                                   className="text-info text-center display-4"),
-                            html.P("Colaboradores ativos no sistema", className="text-muted text-center")
-                        ])
-                    ], className="mb-4 shadow-sm")
-                ], md=4)
-            ])
-        ])
-    except Exception as e:
-        return dbc.Alert(f"Erro ao carregar estatísticas: {str(e)}", color="danger")
-
-# ========================
-# 🔐 Layout de Login
-# ========================
-def create_login_layout():
-    return dbc.Container([
-        dbc.Row([
-            dbc.Col([
-                html.H1("📊 Dashboard Renov", className="text-center mb-4"),
-                dbc.Card([
-                    dbc.CardBody([
-                        html.H3("Login", className="text-center mb-4"),
-                        dbc.Input(
-                            id="login-username",
-                            placeholder="Email",
-                            type="email",
-                            className="mb-3"
-                        ),
-                        dbc.Input(
-                            id="login-password",
-                            placeholder="Senha",
-                            type="password",
-                            className="mb-3"
-                        ),
-                        dbc.Button(
-                            "Entrar",
-                            id="login-button",
-                            color="primary",
-                            className="w-100 mb-3"
-                        ),
-                        html.Hr(),
-                        html.P("Não tem uma conta?", className="text-center"),
-                        dbc.Button(
-                            "Registrar",
-                            id="show-register",
-                            color="secondary",
-                            className="w-100"
-                        )
-                    ])
-                ], className="shadow-sm")
-            ], md=6, lg=4, className="mx-auto")
-        ], className="align-items-center min-vh-100")
-    ], fluid=True, className="bg-light")
-
-# ========================
-# 📝 Layout de Registro
-# ========================
-def create_register_layout():
-    return dbc.Container([
-        dbc.Row([
-            dbc.Col([
-                html.H1("📊 Dashboard Renov", className="text-center mb-4"),
-                dbc.Card([
-                    dbc.CardBody([
-                        html.H3("Registro", className="text-center mb-4"),
-                        dbc.Input(
-                            id="register-username",
-                            placeholder="Nome de usuário",
-                            type="text",
-                            className="mb-3"
-                        ),
-                        dbc.Input(
-                            id="register-email",
-                            placeholder="Email",
-                            type="email",
-                            className="mb-3"
-                        ),
-                        dbc.Input(
-                            id="register-password",
-                            placeholder="Senha",
-                            type="password",
-                            className="mb-3"
-                        ),
-                        dbc.Input(
-                            id="register-confirm-password",
-                            placeholder="Confirme a senha",
-                            type="password",
-                            className="mb-3"
-                        ),
-                        dbc.Button(
-                            "Registrar",
-                            id="register-button",
-                            color="primary",
-                            className="w-100 mb-3"
-                        ),
-                        html.Hr(),
-                        html.P("Já tem uma conta?", className="text-center"),
-                        dbc.Button(
-                            "Fazer Login",
-                            id="show-login",
-                            color="secondary",
-                            className="w-100"
-                        )
-                    ])
-                ], className="shadow-sm")
-            ], md=6, lg=4, className="mx-auto")
-        ], className="align-items-center min-vh-100")
-    ], fluid=True, className="bg-light")
 
 # ========================
 # 🔚 Execução

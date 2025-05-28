@@ -60,14 +60,83 @@ class NetworkDatabase:
         conn.commit()
         conn.close()
 
+    def validate_networks_df(self, df):
+        """Valida o DataFrame de redes e filiais"""
+        required_columns = {
+            'codigo_rede': ['codigo_rede', 'code_rede', 'network_code'],
+            'nome_rede': ['nome_rede', 'name_rede', 'network_name'],
+            'status_rede': ['status_rede', 'network_status'],
+            'codigo_filial': ['codigo_filial', 'code_filial', 'branch_code'],
+            'nome_filial': ['nome_filial', 'name_filial', 'branch_name'],
+            'status_filial': ['status_filial', 'branch_status'],
+            'cidade': ['cidade', 'city'],
+            'estado': ['estado', 'state'],
+            'regiao': ['regiao', 'region']
+        }
+
+        # Normalizar nomes das colunas
+        df.columns = [col.lower().strip().replace(' ', '_') for col in df.columns]
+        
+        # Mapear colunas
+        column_mapping = {}
+        missing_columns = []
+        
+        for standard_name, possible_names in required_columns.items():
+            found = False
+            for possible_name in possible_names:
+                if possible_name in df.columns:
+                    column_mapping[possible_name] = standard_name
+                    found = True
+                    break
+            if not found:
+                missing_columns.append(standard_name)
+        
+        if missing_columns:
+            raise ValueError(f"Colunas obrigatórias não encontradas: {', '.join(missing_columns)}")
+        
+        return df.rename(columns=column_mapping)
+
+    def validate_employees_df(self, df):
+        """Valida o DataFrame de colaboradores"""
+        required_columns = {
+            'codigo_colaborador': ['codigo_colaborador', 'code_colaborador', 'employee_code'],
+            'codigo_rede': ['codigo_rede', 'code_rede', 'network_code'],
+            'codigo_filial': ['codigo_filial', 'code_filial', 'branch_code'],
+            'nome': ['nome', 'name'],
+            'cargo': ['cargo', 'role'],
+            'status': ['status']
+        }
+
+        # Normalizar nomes das colunas
+        df.columns = [col.lower().strip().replace(' ', '_') for col in df.columns]
+        
+        # Mapear colunas
+        column_mapping = {}
+        missing_columns = []
+        
+        for standard_name, possible_names in required_columns.items():
+            found = False
+            for possible_name in possible_names:
+                if possible_name in df.columns:
+                    column_mapping[possible_name] = standard_name
+                    found = True
+                    break
+            if not found:
+                missing_columns.append(standard_name)
+        
+        if missing_columns:
+            raise ValueError(f"Colunas obrigatórias não encontradas: {', '.join(missing_columns)}")
+        
+        return df.rename(columns=column_mapping)
+
     def update_networks_and_branches(self, df):
         """Atualiza a base de redes e filiais"""
         conn = sqlite3.connect(self.db_path)
         now = datetime.now()
 
         try:
-            # Normalizar nomes das colunas
-            df.columns = [col.lower().replace(' ', '_') for col in df.columns]
+            # Validar e preparar DataFrame
+            df = self.validate_networks_df(df)
             
             # Processar redes
             networks_df = df[['codigo_rede', 'nome_rede', 'status_rede']].drop_duplicates()
@@ -114,8 +183,8 @@ class NetworkDatabase:
         now = datetime.now()
 
         try:
-            # Normalizar nomes das colunas
-            df.columns = [col.lower().replace(' ', '_') for col in df.columns]
+            # Validar e preparar DataFrame
+            df = self.validate_employees_df(df)
             
             # Processar colaboradores
             for _, row in df.iterrows():
@@ -149,27 +218,27 @@ class NetworkDatabase:
             total_networks = conn.execute('''
                 SELECT COUNT(DISTINCT network_code) 
                 FROM networks 
-                WHERE status = 'ATIVA'
+                WHERE UPPER(status) = 'ATIVA'
             ''').fetchone()[0]
 
             # Total de filiais ativas
             total_branches = conn.execute('''
                 SELECT COUNT(DISTINCT branch_code) 
                 FROM branches 
-                WHERE status = 'ATIVA'
+                WHERE UPPER(status) = 'ATIVA'
             ''').fetchone()[0]
 
             # Total de colaboradores ativos
             total_employees = conn.execute('''
                 SELECT COUNT(DISTINCT employee_code) 
                 FROM employees 
-                WHERE status = 'ATIVO'
+                WHERE UPPER(status) = 'ATIVO'
             ''').fetchone()[0]
 
             return {
-                'total_networks': total_networks,
-                'total_branches': total_branches,
-                'total_employees': total_employees
+                'total_networks': total_networks or 0,
+                'total_branches': total_branches or 0,
+                'total_employees': total_employees or 0
             }
 
         except Exception as e:

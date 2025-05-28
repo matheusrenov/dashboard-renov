@@ -5,6 +5,8 @@ from dash.dependencies import Input, Output, State
 from dash.exceptions import PreventUpdate
 from dash import no_update
 import os
+from flask import Flask
+from typing import cast
 
 # Inicialização do app
 app = dash.Dash(
@@ -15,7 +17,7 @@ app = dash.Dash(
 )
 
 # Configurações do servidor
-server = app.server
+server = cast(Flask, app.server)
 app.title = "Dashboard Renov - Teste"
 
 # Configurações básicas
