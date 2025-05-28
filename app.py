@@ -36,7 +36,6 @@ server = app.server
 
 # Configurações para produção
 app.title = "Dashboard Renov"
-app._favicon = "assets/favicon.ico"
 
 # Configurações do Flask
 server.config.update(
@@ -59,7 +58,11 @@ def health_check():
 # Configuração para servir arquivos estáticos
 if not os.environ.get("DASH_DEBUG_MODE"):
     from whitenoise import WhiteNoise
-    server.wsgi_app = WhiteNoise(server.wsgi_app, root='assets/')
+    server.wsgi_app = WhiteNoise(
+        server.wsgi_app,
+        root='assets/',
+        prefix='assets/'
+    )
 
 # Inicializa o banco de dados
 db = UserDatabase()
