@@ -882,98 +882,46 @@ app.clientside_callback(
     [Output('auth-status', 'children', allow_duplicate=True),
      Output('url', 'pathname', allow_duplicate=True),
      Output('page-content', 'children', allow_duplicate=True)],
-    [Input('login-button', 'n_clicks'),
-     Input('register-button', 'n_clicks'),
-     Input('url', 'pathname')],
+    [Input('login-button', 'n_clicks')],
     [State('login-username', 'value'),
-     State('login-password', 'value'),
-     State('register-username', 'value'),
-     State('register-email', 'value'),
-     State('register-password', 'value'),
-     State('register-confirm-password', 'value')],
+     State('login-password', 'value')],
     prevent_initial_call=True
 )
-def handle_auth_final(login_clicks, register_clicks, pathname,
-                     username, password, reg_username, reg_email,
-                     reg_password, reg_confirm_password):
-    ctx = callback_context
-    if not ctx.triggered:
-        if pathname == "/dashboard":
-            return no_update, no_update, create_dashboard_layout()
-        elif pathname == "/register":
-            return no_update, no_update, create_register_layout()
-        return no_update, no_update, create_login_layout()
+def handle_login(login_clicks, username, password):
+    if not login_clicks:
+        raise PreventUpdate
     
-    triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    print(f"Tentativa de login para usuário: {username}")  # Log para debug
     
-    # Inicialização da página
-    if triggered_id == 'url':
-        if pathname == "/dashboard":
-            return no_update, no_update, create_dashboard_layout()
-        elif pathname == "/register":
-            return no_update, no_update, create_register_layout()
-        return no_update, no_update, create_login_layout()
-    
-    # Login
-    if triggered_id == 'login-button':
-        if not login_clicks:
-            raise PreventUpdate
-        
-        if not username or not password:
-            return (
-                dbc.Alert("Por favor, preencha todos os campos.", color="warning", className="mt-3"),
-                no_update,
-                create_login_layout()
-            )
-        
-        user = db.verify_user(username, password)
-        if user:
-            if not user['is_approved']:
-                return (
-                    dbc.Alert("Sua conta ainda está pendente de aprovação.", color="warning", className="mt-3"),
-                    no_update,
-                    create_login_layout()
-                )
-            is_super_admin = user['email'] == 'matheus@renovsmart.com.br'
-            return "", "/dashboard", create_dashboard_layout(is_super_admin)
+    if not username or not password:
         return (
-            dbc.Alert("Usuário ou senha inválidos.", color="danger", className="mt-3"),
+            dbc.Alert("Por favor, preencha todos os campos.", color="warning", duration=4000),
             no_update,
-            create_login_layout()
+            no_update
         )
     
-    # Registro
-    if triggered_id == 'register-button':
-        if not register_clicks:
-            raise PreventUpdate
-            
-        if not all([reg_username, reg_email, reg_password, reg_confirm_password]):
+    user = db.verify_user(username, password)
+    print(f"Resultado da verificação: {user is not None}")  # Log para debug
+    
+    if user:
+        if not user['is_approved']:
             return (
-                dbc.Alert("Todos os campos são obrigatórios.", color="danger", className="mt-3"),
+                dbc.Alert("Sua conta ainda está pendente de aprovação.", color="warning", duration=4000),
                 no_update,
-                create_register_layout()
+                no_update
             )
-        
-        if reg_password != reg_confirm_password:
-            return (
-                dbc.Alert("As senhas não coincidem.", color="danger", className="mt-3"),
-                no_update,
-                create_register_layout()
-            )
-        
-        if db.create_user(reg_username, reg_password, reg_email):
-            return (
-                dbc.Alert("Conta criada com sucesso! Aguarde a aprovação do administrador.", color="success", className="mt-3"),
-                "/",
-                create_login_layout()
-            )
+        is_super_admin = user['email'] == 'matheus@renovsmart.com.br'
         return (
-            dbc.Alert("Usuário ou email já existem.", color="danger", className="mt-3"),
-            no_update,
-            create_register_layout()
+            dbc.Alert("Login realizado com sucesso!", color="success", duration=2000),
+            "/dashboard",
+            create_dashboard_layout(is_super_admin)
         )
     
-    raise PreventUpdate
+    return (
+        dbc.Alert("Usuário ou senha inválidos.", color="danger", duration=4000),
+        no_update,
+        no_update
+    )
 
 @app.callback(
     [Output('auth-status', 'children', allow_duplicate=True),
@@ -984,19 +932,24 @@ def handle_auth_final(login_clicks, register_clicks, pathname,
      Input('logout-button', 'n_clicks')],
     prevent_initial_call=True
 )
-def handle_nav_final(show_reg_clicks, show_login_clicks, logout_clicks):
+def handle_navigation(show_reg_clicks, show_login_clicks, logout_clicks):
     ctx = callback_context
     if not ctx.triggered:
         raise PreventUpdate
     
     triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    print(f"Navegação acionada por: {triggered_id}")  # Log para debug
     
     if triggered_id == 'show-register':
         return no_update, "/register", create_register_layout()
     elif triggered_id == 'show-login':
         return no_update, "/", create_login_layout()
     elif triggered_id == 'logout-button':
-        return no_update, "/", create_login_layout()
+        return (
+            dbc.Alert("Logout realizado com sucesso!", color="success", duration=2000),
+            "/",
+            create_login_layout()
+        )
     
     raise PreventUpdate
 
@@ -1141,6 +1094,54 @@ def update_dashboard_content(pathname):
         ])
     except Exception as e:
         return dbc.Alert(f"Erro ao carregar o dashboard: {str(e)}", color="danger")
+
+@app.callback(
+    [Output('auth-status', 'children', allow_duplicate=True),
+     Output('url', 'pathname', allow_duplicate=True),
+     Output('page-content', 'children', allow_duplicate=True)],
+    [Input('register-button', 'n_clicks')],
+    [State('register-username', 'value'),
+     State('register-email', 'value'),
+     State('register-password', 'value'),
+     State('register-confirm-password', 'value')],
+    prevent_initial_call=True
+)
+def handle_register(register_clicks, username, email, password, confirm_password):
+    if not register_clicks:
+        raise PreventUpdate
+    
+    print(f"Tentativa de registro para usuário: {username}")  # Log para debug
+    
+    if not all([username, email, password, confirm_password]):
+        return (
+            dbc.Alert("Todos os campos são obrigatórios.", color="danger", duration=4000),
+            no_update,
+            no_update
+        )
+    
+    if password != confirm_password:
+        return (
+            dbc.Alert("As senhas não coincidem.", color="danger", duration=4000),
+            no_update,
+            no_update
+        )
+    
+    success = db.create_user(username, password, email)
+    print(f"Resultado do registro: {success}")  # Log para debug
+    
+    if success:
+        return (
+            dbc.Alert("Conta criada com sucesso! Aguarde a aprovação do administrador.", 
+                     color="success", duration=4000),
+            "/",
+            create_login_layout()
+        )
+    
+    return (
+        dbc.Alert("Usuário ou email já existem.", color="danger", duration=4000),
+        no_update,
+        no_update
+    )
 
 # ========================
 # 🔄 Callback Principal de Roteamento
