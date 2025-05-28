@@ -143,7 +143,27 @@ def create_dashboard_layout(is_super_admin=False):
                 ], className="mb-3"),
                 html.Div(id='network-upload-status')
             ], width=12),
-            html.Div(id='upload-status')
+            dbc.Col([
+                dcc.Upload(
+                    id='upload-data',
+                    children=html.Div([
+                        'Arraste e solte ou ',
+                        html.A('selecione um arquivo Excel', className="text-primary")
+                    ]),
+                    style={
+                        'width': '100%',
+                        'height': '60px',
+                        'lineHeight': '60px',
+                        'borderWidth': '1px',
+                        'borderStyle': 'dashed',
+                        'borderRadius': '5px',
+                        'textAlign': 'center',
+                        'margin': '10px'
+                    },
+                    multiple=False
+                ),
+                html.Div(id='upload-status')
+            ], width=12)
         ]),
         
         # Welcome Message (shown before upload)
@@ -1348,6 +1368,104 @@ def generate_network_base_content():
         ])
     except Exception as e:
         return dbc.Alert(f"Erro ao carregar estatísticas: {str(e)}", color="danger")
+
+# ========================
+# 🔐 Layout de Login
+# ========================
+def create_login_layout():
+    return dbc.Container([
+        dbc.Row([
+            dbc.Col([
+                html.H1("📊 Dashboard Renov", className="text-center mb-4"),
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H3("Login", className="text-center mb-4"),
+                        dbc.Input(
+                            id="login-username",
+                            placeholder="Email",
+                            type="email",
+                            className="mb-3"
+                        ),
+                        dbc.Input(
+                            id="login-password",
+                            placeholder="Senha",
+                            type="password",
+                            className="mb-3"
+                        ),
+                        dbc.Button(
+                            "Entrar",
+                            id="login-button",
+                            color="primary",
+                            className="w-100 mb-3"
+                        ),
+                        html.Hr(),
+                        html.P("Não tem uma conta?", className="text-center"),
+                        dbc.Button(
+                            "Registrar",
+                            id="show-register",
+                            color="secondary",
+                            className="w-100"
+                        )
+                    ])
+                ], className="shadow-sm")
+            ], md=6, lg=4, className="mx-auto")
+        ], className="align-items-center min-vh-100")
+    ], fluid=True, className="bg-light")
+
+# ========================
+# 📝 Layout de Registro
+# ========================
+def create_register_layout():
+    return dbc.Container([
+        dbc.Row([
+            dbc.Col([
+                html.H1("📊 Dashboard Renov", className="text-center mb-4"),
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H3("Registro", className="text-center mb-4"),
+                        dbc.Input(
+                            id="register-username",
+                            placeholder="Nome de usuário",
+                            type="text",
+                            className="mb-3"
+                        ),
+                        dbc.Input(
+                            id="register-email",
+                            placeholder="Email",
+                            type="email",
+                            className="mb-3"
+                        ),
+                        dbc.Input(
+                            id="register-password",
+                            placeholder="Senha",
+                            type="password",
+                            className="mb-3"
+                        ),
+                        dbc.Input(
+                            id="register-confirm-password",
+                            placeholder="Confirme a senha",
+                            type="password",
+                            className="mb-3"
+                        ),
+                        dbc.Button(
+                            "Registrar",
+                            id="register-button",
+                            color="primary",
+                            className="w-100 mb-3"
+                        ),
+                        html.Hr(),
+                        html.P("Já tem uma conta?", className="text-center"),
+                        dbc.Button(
+                            "Fazer Login",
+                            id="show-login",
+                            color="secondary",
+                            className="w-100"
+                        )
+                    ])
+                ], className="shadow-sm")
+            ], md=6, lg=4, className="mx-auto")
+        ], className="align-items-center min-vh-100")
+    ], fluid=True, className="bg-light")
 
 # ========================
 # 🔚 Execução
