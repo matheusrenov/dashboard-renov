@@ -44,6 +44,12 @@ server.config.update(
     DEBUG=True
 )
 
+# Configuração para evitar loop infinito
+app._favicon = None
+
+# Configuração para permitir callbacks duplicados
+app.config.suppress_callback_exceptions = True
+
 # Inicializa os bancos de dados
 db = UserDatabase()
 network_db = NetworkDatabase()
@@ -1485,16 +1491,11 @@ def create_register_layout():
 # 🔚 Execução
 # ========================
 if __name__ == '__main__':
-    # Criar o logo se não existir
-    if not os.path.exists('assets/logo-renov.png'):
-        import create_logo
-    
-    port = int(os.environ.get("PORT", 8081))
-    host = os.environ.get("HOST", "0.0.0.0")
-    
-    app.run(
+    print("Iniciando servidor...")
+    app.run_server(
         debug=True,
-        host=host,
-        port=port,
-        use_reloader=False
+        host='127.0.0.1',  # Usando localhost específico
+        port=8081,
+        dev_tools_hot_reload=False,  # Desabilita hot reload para evitar loops
+        use_reloader=False  # Desabilita reloader para evitar loops
     )

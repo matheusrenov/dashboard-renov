@@ -9,9 +9,19 @@ import os
 app = dash.Dash(
     __name__, 
     external_stylesheets=[dbc.themes.BOOTSTRAP],
-    suppress_callback_exceptions=True
+    suppress_callback_exceptions=True,
+    update_title='Carregando...'
 )
+
+# Configurações do servidor
 server = app.server
+app.title = "Dashboard Renov - Teste"
+
+# Configuração para evitar loop infinito
+app._favicon = None
+
+# Configuração para permitir callbacks duplicados
+app.config.suppress_callback_exceptions = True
 
 # Layout principal
 app.layout = html.Div([
@@ -109,9 +119,11 @@ def handle_logout(n_clicks):
     raise PreventUpdate
 
 if __name__ == '__main__':
-    print("Iniciando servidor...")
+    print("Iniciando servidor de teste...")
     app.run_server(
         debug=True,
-        host='localhost',
-        port=8081
+        host='127.0.0.1',  # Usando localhost específico
+        port=8081,
+        dev_tools_hot_reload=False,  # Desabilita hot reload para evitar loops
+        use_reloader=False  # Desabilita reloader para evitar loops
     ) 
