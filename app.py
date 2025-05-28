@@ -43,7 +43,8 @@ server.config.update(
     SECRET_KEY=os.environ.get('SECRET_KEY', os.urandom(24)),
     FLASK_ENV=os.environ.get('FLASK_ENV', 'production'),
     DEBUG=False,
-    PROPAGATE_EXCEPTIONS=True
+    PROPAGATE_EXCEPTIONS=True,
+    SERVER_NAME=os.environ.get('SERVER_NAME', 'dashboard-renov.up.railway.app')
 )
 
 # Endpoint de healthcheck mais robusto
