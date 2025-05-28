@@ -2,84 +2,112 @@ import dash_bootstrap_components as dbc
 from dash import html, dcc
 
 def create_login_layout():
-    return html.Div(className="auth-container", children=[
-        dbc.Card(className="auth-card", style={"width": "400px"}, children=[
-            dbc.CardBody([
-                html.Div(className="auth-header text-center", children=[
-                    html.Img(src="assets/logo-renov.png", style={"maxWidth": "200px"}),
-                    html.H3("Login", className="mb-4")
-                ]),
-                dbc.Row([
-                    dbc.Col([
-                        dbc.Label("Usuário"),
-                        dbc.Input(id="login-username", type="text", placeholder="Digite seu usuário")
-                    ], className="mb-3"),
-                ]),
-                dbc.Row([
-                    dbc.Col([
-                        dbc.Label("Senha"),
-                        dbc.Input(id="login-password", type="password", placeholder="Digite sua senha")
-                    ], className="mb-4"),
-                ]),
-                dbc.Row([
-                    dbc.Col([
-                        dbc.Button("Entrar", id="login-button", color="primary", className="w-100 mb-3", n_clicks=0)
+    return dbc.Container([
+        dbc.Row([
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.Div([
+                            html.Img(src="assets/logo-renov.png", style={"maxWidth": "200px"}),
+                            html.H3("Login", className="mt-3")
+                        ], className="text-center mb-4"),
+                        
+                        dbc.Input(
+                            id="login-username",
+                            type="text",
+                            placeholder="Usuário",
+                            className="mb-3"
+                        ),
+                        
+                        dbc.Input(
+                            id="login-password",
+                            type="password",
+                            placeholder="Senha",
+                            className="mb-4"
+                        ),
+                        
+                        dbc.Button(
+                            "Entrar",
+                            id="login-button",
+                            color="primary",
+                            className="w-100 mb-3",
+                            n_clicks=0
+                        ),
+                        
+                        html.Div([
+                            dbc.Button(
+                                "Criar nova conta",
+                                id="show-register",
+                                color="link",
+                                className="p-0"
+                            )
+                        ], className="text-center")
                     ])
-                ]),
-                dbc.Row([
-                    dbc.Col([
-                        html.A("Criar nova conta", id="show-register", href="#", className="auth-link")
-                    ], className="text-center")
-                ])
-            ])
-        ])
-    ])
+                ], className="shadow")
+            ], width=12, md=6, lg=4, className="mx-auto")
+        ], className="min-vh-100 align-items-center")
+    ], fluid=True, className="bg-light py-5")
 
 def create_register_layout():
-    return html.Div(className="auth-container", children=[
-        dbc.Card(className="auth-card", style={"width": "400px"}, children=[
-            dbc.CardBody([
-                html.Div(className="auth-header text-center", children=[
-                    html.Img(src="assets/logo-renov.png", style={"maxWidth": "200px"}),
-                    html.H3("Registro", className="mb-4")
-                ]),
-                dbc.Row([
-                    dbc.Col([
-                        dbc.Label("Usuário"),
-                        dbc.Input(id="register-username", type="text", placeholder="Escolha um usuário")
-                    ], className="mb-3"),
-                ]),
-                dbc.Row([
-                    dbc.Col([
-                        dbc.Label("Email"),
-                        dbc.Input(id="register-email", type="email", placeholder="Digite seu email")
-                    ], className="mb-3"),
-                ]),
-                dbc.Row([
-                    dbc.Col([
-                        dbc.Label("Senha"),
-                        dbc.Input(id="register-password", type="password", placeholder="Escolha uma senha")
-                    ], className="mb-3"),
-                ]),
-                dbc.Row([
-                    dbc.Col([
-                        dbc.Label("Confirmar Senha"),
-                        dbc.Input(id="register-confirm-password", type="password", placeholder="Confirme sua senha")
-                    ], className="mb-4"),
-                ]),
-                dbc.Row([
-                    dbc.Col([
-                        dbc.Button("Registrar", id="register-button", color="success", className="w-100 mb-3", n_clicks=0)
+    return dbc.Container([
+        dbc.Row([
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.Div([
+                            html.Img(src="assets/logo-renov.png", style={"maxWidth": "200px"}),
+                            html.H3("Registro", className="mt-3")
+                        ], className="text-center mb-4"),
+                        
+                        dbc.Input(
+                            id="register-username",
+                            type="text",
+                            placeholder="Usuário",
+                            className="mb-3"
+                        ),
+                        
+                        dbc.Input(
+                            id="register-email",
+                            type="email",
+                            placeholder="Email",
+                            className="mb-3"
+                        ),
+                        
+                        dbc.Input(
+                            id="register-password",
+                            type="password",
+                            placeholder="Senha",
+                            className="mb-3"
+                        ),
+                        
+                        dbc.Input(
+                            id="register-confirm-password",
+                            type="password",
+                            placeholder="Confirmar Senha",
+                            className="mb-4"
+                        ),
+                        
+                        dbc.Button(
+                            "Registrar",
+                            id="register-button",
+                            color="success",
+                            className="w-100 mb-3",
+                            n_clicks=0
+                        ),
+                        
+                        html.Div([
+                            dbc.Button(
+                                "Voltar para login",
+                                id="show-login",
+                                color="link",
+                                className="p-0"
+                            )
+                        ], className="text-center")
                     ])
-                ]),
-                dbc.Row([
-                    dbc.Col([
-                        html.A("Voltar para login", id="show-login", href="#", className="auth-link")
-                    ], className="text-center")
-                ])
-            ])
-        ])
-    ])
+                ], className="shadow")
+            ], width=12, md=6, lg=4, className="mx-auto")
+        ], className="min-vh-100 align-items-center")
+    ], fluid=True, className="bg-light py-5")
 
 def create_admin_approval_layout():
     return html.Div([

@@ -881,24 +881,16 @@ app.clientside_callback(
 # ========================
 @app.callback(
     Output('page-content', 'children'),
-    [Input('url', 'pathname'),
-     Input('session', 'data')]
+    Input('url', 'pathname')
 )
-def display_page(pathname, session_data):
+def display_page(pathname):
     print(f"Roteamento para: {pathname}")
-    print(f"Dados da sessão: {session_data}")
     
     if pathname == '/dashboard':
-        if session_data:
-            is_super_admin = session_data.get('email') == 'matheus@renovsmart.com.br'
-            return create_dashboard_layout(is_super_admin)
-        return create_login_layout()
+        return create_dashboard_layout()
     elif pathname == '/register':
         return create_register_layout()
     else:
-        if session_data and pathname == '/':
-            is_super_admin = session_data.get('email') == 'matheus@renovsmart.com.br'
-            return create_dashboard_layout(is_super_admin)
         return create_login_layout()
 
 # ========================
@@ -915,12 +907,10 @@ def handle_navigation(show_reg_clicks, show_login_clicks):
     if not ctx.triggered:
         raise PreventUpdate
     
-    triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
-    print(f"Navegação acionada por: {triggered_id}")
-    
-    if triggered_id == 'show-register':
+    button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    if button_id == 'show-register':
         return '/register'
-    elif triggered_id == 'show-login':
+    elif button_id == 'show-login':
         return '/'
     
     raise PreventUpdate
@@ -929,36 +919,21 @@ def handle_navigation(show_reg_clicks, show_login_clicks):
 # 🔐 Callbacks de Autenticação
 # ========================
 @app.callback(
-    [Output('session', 'data'),
-     Output('url', 'pathname'),
+    [Output('url', 'pathname'),
      Output('auth-status', 'children')],
-    [Input('login-button', 'n_clicks'),
-     Input('logout-button', 'n_clicks')],
+    [Input('login-button', 'n_clicks')],
     [State('login-username', 'value'),
-     State('login-password', 'value'),
-     State('session', 'data')],
+     State('login-password', 'value')],
     prevent_initial_call=True
 )
-def handle_authentication(login_clicks, logout_clicks, username, password, session_data):
-    ctx = callback_context
-    if not ctx.triggered:
+def handle_login(n_clicks, username, password):
+    if not n_clicks:
         raise PreventUpdate
     
-    button_id = ctx.triggered[0]['prop_id'].split('.')[0]
-    print(f"Botão acionado: {button_id}")
-    
-    if button_id == 'logout-button':
-        print("Realizando logout")
-        return None, '/', dbc.Alert("Logout realizado com sucesso!", color="success", duration=2000)
-    
-    if not login_clicks:
-        raise PreventUpdate
-    
-    print(f"Tentativa de login - Usuário: {username}, Senha: {'*' * len(password) if password else 'None'}")
+    print(f"Tentativa de login - Usuário: {username}")
     
     if not username or not password:
-        print("Campos vazios detectados")
-        return no_update, no_update, dbc.Alert(
+        return no_update, dbc.Alert(
             "Por favor, preencha todos os campos.",
             color="warning",
             duration=4000
@@ -969,25 +944,32 @@ def handle_authentication(login_clicks, logout_clicks, username, password, sessi
     
     if user:
         if not user['is_approved']:
-            print("Usuário não aprovado")
-            return no_update, no_update, dbc.Alert(
+            return no_update, dbc.Alert(
                 "Sua conta ainda está pendente de aprovação.",
                 color="warning",
                 duration=4000
             )
-        print("Login bem-sucedido")
-        return user, '/dashboard', dbc.Alert(
+        return '/dashboard', dbc.Alert(
             "Login realizado com sucesso!",
             color="success",
             duration=2000
         )
     
-    print("Login falhou - credenciais inválidas")
-    return no_update, no_update, dbc.Alert(
+    return no_update, dbc.Alert(
         "Usuário ou senha inválidos.",
         color="danger",
         duration=4000
     )
+
+@app.callback(
+    Output('url', 'pathname', allow_duplicate=True),
+    [Input('logout-button', 'n_clicks')],
+    prevent_initial_call=True
+)
+def handle_logout(n_clicks):
+    if not n_clicks:
+        raise PreventUpdate
+    return '/'
 
 @app.callback(
     Output('pending-users-table', 'children'),
