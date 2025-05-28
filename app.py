@@ -860,7 +860,26 @@ def handle_auth_final(login_clicks, register_clicks, pathname,
     
     triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
     
-    if triggered_id == 'login-button' and username and password:
+    # Inicialização da página
+    if triggered_id == 'url':
+        if pathname == "/dashboard":
+            return no_update, no_update, create_dashboard_layout()
+        elif pathname == "/register":
+            return no_update, no_update, create_register_layout()
+        return no_update, no_update, create_login_layout()
+    
+    # Login
+    if triggered_id == 'login-button':
+        if not login_clicks:
+            raise PreventUpdate
+        
+        if not username or not password:
+            return (
+                dbc.Alert("Por favor, preencha todos os campos.", color="warning", className="mt-3"),
+                no_update,
+                create_login_layout()
+            )
+        
         user = db.verify_user(username, password)
         if user:
             if not user['is_approved']:
@@ -877,7 +896,11 @@ def handle_auth_final(login_clicks, register_clicks, pathname,
             create_login_layout()
         )
     
+    # Registro
     if triggered_id == 'register-button':
+        if not register_clicks:
+            raise PreventUpdate
+            
         if not all([reg_username, reg_email, reg_password, reg_confirm_password]):
             return (
                 dbc.Alert("Todos os campos são obrigatórios.", color="danger", className="mt-3"),
@@ -903,14 +926,6 @@ def handle_auth_final(login_clicks, register_clicks, pathname,
             no_update,
             create_register_layout()
         )
-    
-    # Handle URL changes
-    if triggered_id == 'url':
-        if pathname == "/dashboard":
-            return no_update, no_update, create_dashboard_layout()
-        elif pathname == "/register":
-            return no_update, no_update, create_register_layout()
-        return no_update, no_update, create_login_layout()
     
     raise PreventUpdate
 
