@@ -11,32 +11,17 @@ class NetworkDatabase:
         conn = sqlite3.connect(self.db_path)
         c = conn.cursor()
 
-        # Tabela de Redes
+        # Tabela de Redes e Filiais
         c.execute('''
-        CREATE TABLE IF NOT EXISTS networks (
+        CREATE TABLE IF NOT EXISTS networks_branches (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            network_code TEXT UNIQUE,
-            network_name TEXT,
-            status TEXT,
-            created_at TIMESTAMP,
-            updated_at TIMESTAMP
-        )
-        ''')
-
-        # Tabela de Filiais
-        c.execute('''
-        CREATE TABLE IF NOT EXISTS branches (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            branch_code TEXT UNIQUE,
-            network_code TEXT,
-            branch_name TEXT,
-            status TEXT,
-            city TEXT,
-            state TEXT,
-            region TEXT,
-            created_at TIMESTAMP,
+            nome_rede TEXT NOT NULL,
+            nome_filial TEXT NOT NULL,
+            data_inicio TEXT,
+            ativo TEXT DEFAULT 'ATIVO',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP,
-            FOREIGN KEY (network_code) REFERENCES networks (network_code)
+            UNIQUE(nome_rede, nome_filial)
         )
         ''')
 
@@ -44,16 +29,14 @@ class NetworkDatabase:
         c.execute('''
         CREATE TABLE IF NOT EXISTS employees (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            employee_code TEXT UNIQUE,
-            network_code TEXT,
-            branch_code TEXT,
-            name TEXT,
-            role TEXT,
-            status TEXT,
-            created_at TIMESTAMP,
+            colaborador TEXT NOT NULL,
+            filial TEXT NOT NULL,
+            rede TEXT NOT NULL,
+            ativo TEXT DEFAULT 'ATIVO',
+            data_cadastro TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP,
-            FOREIGN KEY (network_code) REFERENCES networks (network_code),
-            FOREIGN KEY (branch_code) REFERENCES branches (branch_code)
+            FOREIGN KEY (filial, rede) REFERENCES networks_branches(nome_filial, nome_rede)
         )
         ''')
 
@@ -63,15 +46,9 @@ class NetworkDatabase:
     def validate_networks_df(self, df):
         """Valida o DataFrame de redes e filiais"""
         required_columns = {
-            'codigo_rede': ['codigo_rede', 'code_rede', 'network_code'],
-            'nome_rede': ['nome_rede', 'name_rede', 'network_name'],
-            'status_rede': ['status_rede', 'network_status'],
-            'codigo_filial': ['codigo_filial', 'code_filial', 'branch_code'],
-            'nome_filial': ['nome_filial', 'name_filial', 'branch_name'],
-            'status_filial': ['status_filial', 'branch_status'],
-            'cidade': ['cidade', 'city'],
-            'estado': ['estado', 'state'],
-            'regiao': ['regiao', 'region']
+            'nome_rede': ['nome da rede', 'nome_rede', 'rede'],
+            'nome_filial': ['nome da filial', 'nome_filial', 'filial'],
+            'data_inicio': ['data de início', 'data_inicio', 'data inicio']
         }
 
         # Normalizar nomes das colunas
@@ -99,12 +76,11 @@ class NetworkDatabase:
     def validate_employees_df(self, df):
         """Valida o DataFrame de colaboradores"""
         required_columns = {
-            'codigo_colaborador': ['codigo_colaborador', 'code_colaborador', 'employee_code'],
-            'codigo_rede': ['codigo_rede', 'code_rede', 'network_code'],
-            'codigo_filial': ['codigo_filial', 'code_filial', 'branch_code'],
-            'nome': ['nome', 'name'],
-            'cargo': ['cargo', 'role'],
-            'status': ['status']
+            'colaborador': ['colaborador', 'nome do colaborador', 'nome'],
+            'filial': ['filial', 'nome da filial', 'nome_filial'],
+            'rede': ['rede', 'nome da rede', 'nome_rede'],
+            'ativo': ['ativo', 'status', 'situacao'],
+            'data_cadastro': ['data de cadastro', 'data_cadastro', 'cadastro']
         }
 
         # Normalizar nomes das colunas
@@ -138,33 +114,18 @@ class NetworkDatabase:
             # Validar e preparar DataFrame
             df = self.validate_networks_df(df)
             
-            # Processar redes
-            networks_df = df[['codigo_rede', 'nome_rede', 'status_rede']].drop_duplicates()
-            networks_df['updated_at'] = now
-            
-            for _, row in networks_df.iterrows():
+            # Processar redes e filiais
+            for _, row in df.iterrows():
                 conn.execute('''
-                INSERT OR REPLACE INTO networks (network_code, network_name, status, updated_at)
-                VALUES (?, ?, ?, ?)
-                ''', (row['codigo_rede'], row['nome_rede'], row['status_rede'], now))
-
-            # Processar filiais
-            branches_df = df[[
-                'codigo_filial', 'codigo_rede', 'nome_filial', 'status_filial',
-                'cidade', 'estado', 'regiao'
-            ]].drop_duplicates()
-            
-            for _, row in branches_df.iterrows():
-                conn.execute('''
-                INSERT OR REPLACE INTO branches (
-                    branch_code, network_code, branch_name, status,
-                    city, state, region, updated_at
+                INSERT OR REPLACE INTO networks_branches (
+                    nome_rede, nome_filial, data_inicio, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?)
                 ''', (
-                    row['codigo_filial'], row['codigo_rede'], row['nome_filial'],
-                    row['status_filial'], row['cidade'], row['estado'],
-                    row['regiao'], now
+                    row['nome_rede'],
+                    row['nome_filial'],
+                    row['data_inicio'],
+                    now
                 ))
 
             conn.commit()
@@ -190,14 +151,16 @@ class NetworkDatabase:
             for _, row in df.iterrows():
                 conn.execute('''
                 INSERT OR REPLACE INTO employees (
-                    employee_code, network_code, branch_code,
-                    name, role, status, updated_at
+                    colaborador, filial, rede, ativo, data_cadastro, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?)
                 ''', (
-                    row['codigo_colaborador'], row['codigo_rede'],
-                    row['codigo_filial'], row['nome'], row['cargo'],
-                    row['status'], now
+                    row['colaborador'],
+                    row['filial'],
+                    row['rede'],
+                    row['ativo'],
+                    row['data_cadastro'],
+                    now
                 ))
 
             conn.commit()
@@ -216,23 +179,23 @@ class NetworkDatabase:
         try:
             # Total de redes ativas
             total_networks = conn.execute('''
-                SELECT COUNT(DISTINCT network_code) 
-                FROM networks 
-                WHERE UPPER(status) = 'ATIVA'
+                SELECT COUNT(DISTINCT nome_rede) 
+                FROM networks_branches 
+                WHERE UPPER(ativo) = 'ATIVO'
             ''').fetchone()[0]
 
             # Total de filiais ativas
             total_branches = conn.execute('''
-                SELECT COUNT(DISTINCT branch_code) 
-                FROM branches 
-                WHERE UPPER(status) = 'ATIVA'
+                SELECT COUNT(DISTINCT nome_filial) 
+                FROM networks_branches 
+                WHERE UPPER(ativo) = 'ATIVO'
             ''').fetchone()[0]
 
             # Total de colaboradores ativos
             total_employees = conn.execute('''
-                SELECT COUNT(DISTINCT employee_code) 
+                SELECT COUNT(DISTINCT colaborador) 
                 FROM employees 
-                WHERE UPPER(status) = 'ATIVO'
+                WHERE UPPER(ativo) = 'ATIVO'
             ''').fetchone()[0]
 
             return {

@@ -740,15 +740,18 @@ def generate_network_base_content():
         if all(v == 0 for v in stats.values()):
             return dbc.Alert([
                 html.H4("📝 Nenhum dado encontrado", className="alert-heading"),
-                html.P(
-                    "Para começar, faça o upload dos arquivos de redes/filiais e colaboradores usando os botões acima.",
-                    className="mb-0"
-                ),
+                html.P([
+                    "Para começar, faça o upload dos arquivos de redes/filiais e colaboradores usando os botões acima. ",
+                    "Consulte o arquivo GLOSSARIO.md para entender a estrutura dos dados."
+                ], className="mb-0"),
                 html.Hr(),
-                html.P(
-                    "Consulte a documentação para o formato correto dos arquivos.",
-                    className="mb-0"
-                )
+                html.P([
+                    "Estrutura necessária:",
+                    html.Ul([
+                        html.Li("Redes e Filiais: Nome da Rede, Nome da Filial, Data de Início"),
+                        html.Li("Colaboradores: Nome, Filial, Rede, Status Ativo, Data de Cadastro")
+                    ])
+                ], className="mb-0")
             ], color="info")
         
         return html.Div([
@@ -759,7 +762,7 @@ def generate_network_base_content():
                             html.H4("🏢 Total de Redes", className="card-title text-center"),
                             html.H2(f"{stats['total_networks']:,}", 
                                    className="text-primary text-center display-4"),
-                            html.P("Redes ativas no sistema", className="text-muted text-center")
+                            html.P("Redes parceiras ativas", className="text-muted text-center")
                         ])
                     ], className="mb-4 shadow-sm")
                 ], md=4),
@@ -779,7 +782,7 @@ def generate_network_base_content():
                             html.H4("👥 Total de Colaboradores", className="card-title text-center"),
                             html.H2(f"{stats['total_employees']:,}", 
                                    className="text-info text-center display-4"),
-                            html.P("Colaboradores ativos no sistema", className="text-muted text-center")
+                            html.P("Colaboradores ativos", className="text-muted text-center")
                         ])
                     ], className="mb-4 shadow-sm")
                 ], md=4)
@@ -787,16 +790,25 @@ def generate_network_base_content():
             dbc.Row([
                 dbc.Col([
                     dbc.Alert([
-                        html.H4("ℹ️ Informações", className="alert-heading"),
+                        html.H4("ℹ️ Informações Importantes", className="alert-heading"),
                         html.P([
                             "Os números acima representam apenas registros ativos. ",
                             "Use os botões de upload acima para atualizar as bases quando necessário."
                         ]),
                         html.Hr(),
-                        html.P(
-                            "Mantenha as bases atualizadas para garantir a precisão das análises.",
-                            className="mb-0"
-                        )
+                        html.P([
+                            "Definições:",
+                            html.Ul([
+                                html.Li("Rede: Nível mais alto da estrutura organizacional"),
+                                html.Li("Filial: Unidade pertencente a uma rede"),
+                                html.Li("Colaborador: Profissional ativo na filial")
+                            ])
+                        ]),
+                        html.Hr(),
+                        html.P([
+                            "Para mais detalhes sobre a estrutura dos dados e regras de negócio, ",
+                            "consulte o arquivo GLOSSARIO.md na pasta data."
+                        ], className="mb-0")
                     ], color="info")
                 ])
             ])
