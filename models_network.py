@@ -17,8 +17,8 @@ class NetworkDatabase:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             nome_rede TEXT NOT NULL,
             nome_filial TEXT NOT NULL,
-            data_inicio TEXT,
             ativo TEXT DEFAULT 'ATIVO',
+            data_inicio TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP,
             UNIQUE(nome_rede, nome_filial)
@@ -46,14 +46,12 @@ class NetworkDatabase:
     def validate_networks_df(self, df):
         """Valida o DataFrame de redes e filiais"""
         required_columns = {
-            'nome_rede': ['nome da rede', 'nome_rede', 'rede'],
-            'nome_filial': ['nome da filial', 'nome_filial', 'filial'],
-            'data_inicio': ['data de início', 'data_inicio', 'data inicio']
+            'nome_rede': ['Nome da Rede'],
+            'nome_filial': ['Nome da Filial'],
+            'ativo': ['Ativa'],
+            'data_inicio': ['Data de Início']
         }
 
-        # Normalizar nomes das colunas
-        df.columns = [col.lower().strip().replace(' ', '_') for col in df.columns]
-        
         # Mapear colunas
         column_mapping = {}
         missing_columns = []
@@ -66,7 +64,7 @@ class NetworkDatabase:
                     found = True
                     break
             if not found:
-                missing_columns.append(standard_name)
+                missing_columns.append(possible_names[0])  # Mostra o nome exato da coluna esperada
         
         if missing_columns:
             raise ValueError(f"Colunas obrigatórias não encontradas: {', '.join(missing_columns)}")
@@ -76,16 +74,13 @@ class NetworkDatabase:
     def validate_employees_df(self, df):
         """Valida o DataFrame de colaboradores"""
         required_columns = {
-            'colaborador': ['colaborador', 'nome do colaborador', 'nome'],
-            'filial': ['filial', 'nome da filial', 'nome_filial'],
-            'rede': ['rede', 'nome da rede', 'nome_rede'],
-            'ativo': ['ativo', 'status', 'situacao'],
-            'data_cadastro': ['data de cadastro', 'data_cadastro', 'cadastro']
+            'colaborador': ['Colaborador'],
+            'filial': ['Filial'],
+            'rede': ['Rede'],
+            'ativo': ['Ativo'],
+            'data_cadastro': ['Data de Cadastro']
         }
 
-        # Normalizar nomes das colunas
-        df.columns = [col.lower().strip().replace(' ', '_') for col in df.columns]
-        
         # Mapear colunas
         column_mapping = {}
         missing_columns = []
@@ -98,7 +93,7 @@ class NetworkDatabase:
                     found = True
                     break
             if not found:
-                missing_columns.append(standard_name)
+                missing_columns.append(possible_names[0])  # Mostra o nome exato da coluna esperada
         
         if missing_columns:
             raise ValueError(f"Colunas obrigatórias não encontradas: {', '.join(missing_columns)}")
@@ -118,12 +113,13 @@ class NetworkDatabase:
             for _, row in df.iterrows():
                 conn.execute('''
                 INSERT OR REPLACE INTO networks_branches (
-                    nome_rede, nome_filial, data_inicio, updated_at
+                    nome_rede, nome_filial, ativo, data_inicio, updated_at
                 )
-                VALUES (?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?)
                 ''', (
                     row['nome_rede'],
                     row['nome_filial'],
+                    row['ativo'],
                     row['data_inicio'],
                     now
                 ))

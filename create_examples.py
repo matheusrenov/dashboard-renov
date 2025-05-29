@@ -7,9 +7,10 @@ os.makedirs('data', exist_ok=True)
 
 # Criar DataFrame de redes e filiais com exemplos mais completos
 redes_filiais = pd.DataFrame({
-    'nome_rede': ['Rede Sul', 'Rede Sul', 'Rede Norte', 'Rede Norte', 'Rede Centro'],
-    'nome_filial': ['Filial Porto Alegre', 'Filial Florianópolis', 'Filial Manaus', 'Filial Belém', 'Filial Brasília'],
-    'data_inicio': [
+    'Nome da Rede': ['Rede Sul', 'Rede Sul', 'Rede Norte', 'Rede Norte', 'Rede Centro'],
+    'Nome da Filial': ['Filial Porto Alegre', 'Filial Florianópolis', 'Filial Manaus', 'Filial Belém', 'Filial Brasília'],
+    'Ativa': ['ATIVO', 'ATIVO', 'ATIVO', 'ATIVO', 'ATIVO'],
+    'Data de Início': [
         (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d'),
         (datetime.now() - timedelta(days=300)).strftime('%Y-%m-%d'),
         (datetime.now() - timedelta(days=180)).strftime('%Y-%m-%d'),
@@ -20,11 +21,11 @@ redes_filiais = pd.DataFrame({
 
 # Criar DataFrame de colaboradores
 colaboradores = pd.DataFrame({
-    'colaborador': ['João Silva', 'Maria Santos', 'Pedro Oliveira', 'Ana Costa', 'Carlos Souza'],
-    'filial': ['Filial Porto Alegre', 'Filial Florianópolis', 'Filial Manaus', 'Filial Belém', 'Filial Brasília'],
-    'rede': ['Rede Sul', 'Rede Sul', 'Rede Norte', 'Rede Norte', 'Rede Centro'],
-    'ativo': ['ATIVO', 'ATIVO', 'ATIVO', 'ATIVO', 'ATIVO'],
-    'data_cadastro': [
+    'Colaborador': ['João Silva', 'Maria Santos', 'Pedro Oliveira', 'Ana Costa', 'Carlos Souza'],
+    'Filial': ['Filial Porto Alegre', 'Filial Florianópolis', 'Filial Manaus', 'Filial Belém', 'Filial Brasília'],
+    'Rede': ['Rede Sul', 'Rede Sul', 'Rede Norte', 'Rede Norte', 'Rede Centro'],
+    'Ativo': ['ATIVO', 'ATIVO', 'ATIVO', 'ATIVO', 'ATIVO'],
+    'Data de Cadastro': [
         (datetime.now() - timedelta(days=300)).strftime('%Y-%m-%d'),
         (datetime.now() - timedelta(days=250)).strftime('%Y-%m-%d'),
         (datetime.now() - timedelta(days=150)).strftime('%Y-%m-%d'),
