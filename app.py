@@ -803,14 +803,20 @@ def generate_network_base_content():
                 x=evolution_data['mes'],
                 y=evolution_data['total_redes'],
                 name='Total de Redes',
-                marker_color='#3498db'
+                marker_color='#3498db',
+                text=evolution_data['total_redes'],
+                textposition='outside'
             ))
             fig_networks.update_layout(
                 title='Evolução Mensal - Total de Redes Ativas',
                 xaxis_title='Mês',
                 yaxis_title='Total de Redes',
                 height=400,
-                showlegend=False
+                showlegend=False,
+                plot_bgcolor='white',
+                paper_bgcolor='white',
+                xaxis=dict(showgrid=False),
+                yaxis=dict(showgrid=False)
             )
             
             # Gráfico de evolução de filiais
@@ -819,14 +825,20 @@ def generate_network_base_content():
                 x=evolution_data['mes'],
                 y=evolution_data['total_filiais'],
                 name='Total de Filiais',
-                marker_color='#2ecc71'
+                marker_color='#2ecc71',
+                text=evolution_data['total_filiais'],
+                textposition='outside'
             ))
             fig_branches.update_layout(
                 title='Evolução Mensal - Total de Filiais Ativas',
                 xaxis_title='Mês',
                 yaxis_title='Total de Filiais',
                 height=400,
-                showlegend=False
+                showlegend=False,
+                plot_bgcolor='white',
+                paper_bgcolor='white',
+                xaxis=dict(showgrid=False),
+                yaxis=dict(showgrid=False)
             )
             
             # Gráfico de evolução de colaboradores
@@ -835,14 +847,20 @@ def generate_network_base_content():
                 x=evolution_data['mes'],
                 y=evolution_data['total_colaboradores'],
                 name='Total de Colaboradores',
-                marker_color='#9b59b6'
+                marker_color='#9b59b6',
+                text=evolution_data['total_colaboradores'],
+                textposition='outside'
             ))
             fig_employees.update_layout(
                 title='Evolução Mensal - Total de Colaboradores Ativos',
                 xaxis_title='Mês',
                 yaxis_title='Total de Colaboradores',
                 height=400,
-                showlegend=False
+                showlegend=False,
+                plot_bgcolor='white',
+                paper_bgcolor='white',
+                xaxis=dict(showgrid=False),
+                yaxis=dict(showgrid=False)
             )
             
             evolution_graphs = dbc.Row([
