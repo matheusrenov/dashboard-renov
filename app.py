@@ -798,6 +798,7 @@ def generate_network_base_content():
         evolution_data = db.get_evolution_data()
         if not evolution_data.empty:
             # Gráfico de evolução de redes
+            max_redes = evolution_data['total_redes'].max()
             fig_networks = go.Figure()
             fig_networks.add_trace(go.Bar(
                 x=evolution_data['mes'],
@@ -816,10 +817,14 @@ def generate_network_base_content():
                 plot_bgcolor='white',
                 paper_bgcolor='white',
                 xaxis=dict(showgrid=False),
-                yaxis=dict(showgrid=False)
+                yaxis=dict(
+                    showgrid=False,
+                    range=[0, max_redes * 1.15]  # Adiciona 15% de espaço superior
+                )
             )
             
             # Gráfico de evolução de filiais
+            max_filiais = evolution_data['total_filiais'].max()
             fig_branches = go.Figure()
             fig_branches.add_trace(go.Bar(
                 x=evolution_data['mes'],
@@ -838,10 +843,14 @@ def generate_network_base_content():
                 plot_bgcolor='white',
                 paper_bgcolor='white',
                 xaxis=dict(showgrid=False),
-                yaxis=dict(showgrid=False)
+                yaxis=dict(
+                    showgrid=False,
+                    range=[0, max_filiais * 1.15]  # Adiciona 15% de espaço superior
+                )
             )
             
             # Gráfico de evolução de colaboradores
+            max_colaboradores = evolution_data['total_colaboradores'].max()
             fig_employees = go.Figure()
             fig_employees.add_trace(go.Bar(
                 x=evolution_data['mes'],
@@ -860,7 +869,10 @@ def generate_network_base_content():
                 plot_bgcolor='white',
                 paper_bgcolor='white',
                 xaxis=dict(showgrid=False),
-                yaxis=dict(showgrid=False)
+                yaxis=dict(
+                    showgrid=False,
+                    range=[0, max_colaboradores * 1.15]  # Adiciona 15% de espaço superior
+                )
             )
             
             evolution_graphs = dbc.Row([
