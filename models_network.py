@@ -118,14 +118,27 @@ class NetworkDatabase:
         print("Colunas após mapeamento:", df.columns.tolist())
         
         # Limpar e validar dados
-        df['nome_rede'] = df['nome_rede'].apply(self.clean_text)
         df['nome_filial'] = df['nome_filial'].apply(self.clean_text)
+        
+        # Tratar nome_rede: se estiver vazio, usar o nome_filial como nome da rede
+        df['nome_rede'] = df.apply(lambda row: 
+            self.clean_text(row['nome_filial']) if pd.isna(row['nome_rede']) or str(row['nome_rede']).strip() == '' 
+            else self.clean_text(row['nome_rede']), axis=1)
+        
         df['ativo'] = df['ativo'].apply(lambda x: 'ATIVO' if str(x).upper().strip() in ['SIM', 'S', 'TRUE', '1', 'ATIVO'] else 'INATIVO')
         df['data_inicio'] = df['data_inicio'].apply(self.format_date)
         
         print("\nAmostra após limpeza:")
         print(df.head())
         print(f"Total de registros válidos: {len(df)}")
+        
+        # Debug: mostrar contagem de redes únicas
+        redes_unicas = df['nome_rede'].unique()
+        print(f"\nTotal de redes únicas: {len(redes_unicas)}")
+        print("Algumas redes encontradas:")
+        for rede in sorted(redes_unicas)[:5]:
+            filiais = len(df[df['nome_rede'] == rede])
+            print(f"- {rede}: {filiais} filiais")
         
         return df
 
@@ -180,18 +193,21 @@ class NetworkDatabase:
             # Validar e preparar DataFrame
             df = self.validate_networks_df(df)
             
+            # Limpar tabela antes de inserir
+            conn.execute('DELETE FROM networks_branches')
+            
             # Processar redes e filiais
             registros_inseridos = 0
             for _, row in df.iterrows():
                 try:
                     # Verificar se todos os campos obrigatórios estão preenchidos
-                    if any(pd.isna(row[col]) for col in ['nome_rede', 'nome_filial', 'ativo', 'data_inicio']):
-                        print(f"Pulando registro com campos nulos: {row.to_dict()}")
+                    if pd.isna(row['nome_filial']) or row['nome_filial'].strip() == '':
+                        print(f"Pulando registro com nome da filial vazio: {row.to_dict()}")
                         continue
                     
                     # Inserir registro
                     conn.execute('''
-                    INSERT OR REPLACE INTO networks_branches (
+                    INSERT INTO networks_branches (
                         nome_rede, nome_filial, ativo, data_inicio, created_at, updated_at
                     )
                     VALUES (?, ?, ?, ?, ?, ?)
@@ -231,10 +247,11 @@ class NetworkDatabase:
                 SELECT DISTINCT nome_rede, COUNT(*) as total
                 FROM networks_branches
                 GROUP BY nome_rede
-                LIMIT 5
+                ORDER BY nome_rede
+                LIMIT 10
             ''').fetchall()
             
-            print("\nAlgumas redes inseridas:")
+            print("\nPrimeiras 10 redes inseridas:")
             for rede in redes:
                 print(f"- {rede[0]}: {rede[1]} filiais")
             
@@ -336,7 +353,7 @@ class NetworkDatabase:
         try:
             print("\n=== Consultando estatísticas do banco de dados ===")
             
-            # Total de redes ativas
+            # Total de redes ativas (contagem distinta de nome_rede)
             total_networks = conn.execute('''
                 SELECT COUNT(DISTINCT nome_rede) 
                 FROM networks_branches 
@@ -344,6 +361,19 @@ class NetworkDatabase:
             ''').fetchone()[0]
             
             print(f"Total de redes ativas: {total_networks}")
+            
+            # Debug: mostrar redes encontradas
+            redes = conn.execute('''
+                SELECT DISTINCT nome_rede, COUNT(*) as total_filiais
+                FROM networks_branches
+                WHERE UPPER(TRIM(ativo)) = 'ATIVO'
+                GROUP BY nome_rede
+                ORDER BY nome_rede
+            ''').fetchall()
+            
+            print("\nRedes ativas encontradas:")
+            for rede in redes:
+                print(f"- {rede[0]}: {rede[1]} filiais")
             
             # Total de filiais ativas
             total_branches = conn.execute('''
@@ -362,19 +392,6 @@ class NetworkDatabase:
             ''').fetchone()[0]
             
             print(f"Total de colaboradores ativos: {total_employees}")
-            
-            # Mostrar algumas redes e suas filiais
-            redes = conn.execute('''
-                SELECT nome_rede, COUNT(*) as total_filiais
-                FROM networks_branches
-                WHERE UPPER(TRIM(ativo)) = 'ATIVO'
-                GROUP BY nome_rede
-                LIMIT 5
-            ''').fetchall()
-            
-            print("\nAlgumas redes e suas filiais:")
-            for rede in redes:
-                print(f"- {rede[0]}: {rede[1]} filiais")
 
             return {
                 'total_networks': total_networks or 0,
