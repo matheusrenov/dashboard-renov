@@ -498,4 +498,148 @@ class NetworkDatabase:
             traceback.print_exc()
             return False
         finally:
+            conn.close()
+
+    def get_executive_summary(self):
+        """Retorna o resumo executivo com totais por rede"""
+        conn = sqlite3.connect(self.db_path)
+        try:
+            # Consulta para obter totais por rede
+            query = '''
+            WITH rede_stats AS (
+                -- Contagem de filiais por rede
+                SELECT 
+                    nb.nome_rede,
+                    COUNT(DISTINCT nb.nome_filial) as total_filiais,
+                    COUNT(DISTINCT e.colaborador) as total_colaboradores
+                FROM networks_branches nb
+                LEFT JOIN employees e ON e.rede = nb.nome_rede 
+                    AND e.filial = nb.nome_filial
+                    AND UPPER(TRIM(e.ativo)) = 'ATIVO'
+                WHERE UPPER(TRIM(nb.ativo)) = 'ATIVO'
+                GROUP BY nb.nome_rede
+            )
+            SELECT 
+                nome_rede as "Nome da Rede",
+                total_filiais as "Total de Filiais",
+                total_colaboradores as "Total de Colaboradores"
+            FROM rede_stats
+            ORDER BY total_filiais DESC, nome_rede ASC
+            '''
+            
+            df = pd.read_sql_query(query, conn)
+            return df
+            
+        except Exception as e:
+            print(f"Erro ao gerar resumo executivo: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return pd.DataFrame()
+        finally:
+            conn.close()
+
+    def get_evolution_data(self):
+        """Retorna dados para os gráficos evolutivos mensais"""
+        conn = sqlite3.connect(self.db_path)
+        try:
+            # Consulta para evolução de redes
+            networks_query = '''
+            WITH RECURSIVE dates(date) AS (
+                SELECT MIN(date(data_inicio, 'start of month'))
+                FROM networks_branches
+                UNION ALL
+                SELECT date(date, '+1 month')
+                FROM dates
+                WHERE date < (SELECT MAX(date(data_inicio, 'start of month')) FROM networks_branches)
+            ),
+            monthly_networks AS (
+                SELECT 
+                    date(data_inicio, 'start of month') as month,
+                    COUNT(DISTINCT nome_rede) as total_redes
+                FROM networks_branches
+                WHERE UPPER(TRIM(ativo)) = 'ATIVO'
+                GROUP BY date(data_inicio, 'start of month')
+            )
+            SELECT 
+                strftime('%Y-%m', dates.date) as mes,
+                SUM(monthly_networks.total_redes) OVER (ORDER BY dates.date) as total_redes
+            FROM dates
+            LEFT JOIN monthly_networks ON strftime('%Y-%m', dates.date) = strftime('%Y-%m', monthly_networks.month)
+            ORDER BY dates.date
+            '''
+            
+            # Consulta para evolução de filiais
+            branches_query = '''
+            WITH RECURSIVE dates(date) AS (
+                SELECT MIN(date(data_inicio, 'start of month'))
+                FROM networks_branches
+                UNION ALL
+                SELECT date(date, '+1 month')
+                FROM dates
+                WHERE date < (SELECT MAX(date(data_inicio, 'start of month')) FROM networks_branches)
+            ),
+            monthly_branches AS (
+                SELECT 
+                    date(data_inicio, 'start of month') as month,
+                    COUNT(*) as total_filiais
+                FROM networks_branches
+                WHERE UPPER(TRIM(ativo)) = 'ATIVO'
+                GROUP BY date(data_inicio, 'start of month')
+            )
+            SELECT 
+                strftime('%Y-%m', dates.date) as mes,
+                SUM(monthly_branches.total_filiais) OVER (ORDER BY dates.date) as total_filiais
+            FROM dates
+            LEFT JOIN monthly_branches ON strftime('%Y-%m', dates.date) = strftime('%Y-%m', monthly_branches.month)
+            ORDER BY dates.date
+            '''
+            
+            # Consulta para evolução de colaboradores
+            employees_query = '''
+            WITH RECURSIVE dates(date) AS (
+                SELECT MIN(date(data_cadastro, 'start of month'))
+                FROM employees
+                UNION ALL
+                SELECT date(date, '+1 month')
+                FROM dates
+                WHERE date < (SELECT MAX(date(data_cadastro, 'start of month')) FROM employees)
+            ),
+            monthly_employees AS (
+                SELECT 
+                    date(data_cadastro, 'start of month') as month,
+                    COUNT(*) as total_colaboradores
+                FROM employees
+                WHERE UPPER(TRIM(ativo)) = 'ATIVO'
+                GROUP BY date(data_cadastro, 'start of month')
+            )
+            SELECT 
+                strftime('%Y-%m', dates.date) as mes,
+                SUM(monthly_employees.total_colaboradores) OVER (ORDER BY dates.date) as total_colaboradores
+            FROM dates
+            LEFT JOIN monthly_employees ON strftime('%Y-%m', dates.date) = strftime('%Y-%m', monthly_employees.month)
+            ORDER BY dates.date
+            '''
+            
+            networks_df = pd.read_sql_query(networks_query, conn)
+            branches_df = pd.read_sql_query(branches_query, conn)
+            employees_df = pd.read_sql_query(employees_query, conn)
+            
+            # Combinar todos os dados em um único DataFrame
+            df = networks_df.merge(branches_df, on='mes', how='outer')
+            df = df.merge(employees_df, on='mes', how='outer')
+            
+            # Preencher valores nulos
+            df = df.fillna(0)
+            
+            # Converter mês para formato mais amigável
+            df['mes'] = pd.to_datetime(df['mes']).dt.strftime('%b/%Y')
+            
+            return df
+            
+        except Exception as e:
+            print(f"Erro ao gerar dados evolutivos: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return pd.DataFrame()
+        finally:
             conn.close() 

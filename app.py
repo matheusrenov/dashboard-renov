@@ -760,66 +760,144 @@ def generate_network_base_content():
                 ], className="mb-0")
             ], color="info")
         
-        print("Gerando cards com as estatísticas")
-        return html.Div([
-            dbc.Row([
-                dbc.Col([
-                    dbc.Card([
-                        dbc.CardBody([
-                            html.H4("🏢 Total de Redes", className="card-title text-center"),
-                            html.H2(f"{stats['total_networks']:,}", 
-                                   className="text-primary text-center display-4"),
-                            html.P("Redes parceiras ativas", className="text-muted text-center")
-                        ])
-                    ], className="mb-4 shadow-sm")
-                ], md=4),
-                dbc.Col([
-                    dbc.Card([
-                        dbc.CardBody([
-                            html.H4("🏪 Total de Filiais", className="card-title text-center"),
-                            html.H2(f"{stats['total_branches']:,}", 
-                                   className="text-success text-center display-4"),
-                            html.P("Filiais ativas no sistema", className="text-muted text-center")
-                        ])
-                    ], className="mb-4 shadow-sm")
-                ], md=4),
-                dbc.Col([
-                    dbc.Card([
-                        dbc.CardBody([
-                            html.H4("👥 Total de Colaboradores", className="card-title text-center"),
-                            html.H2(f"{stats['total_employees']:,}", 
-                                   className="text-info text-center display-4"),
-                            html.P("Colaboradores ativos", className="text-muted text-center")
-                        ])
-                    ], className="mb-4 shadow-sm")
-                ], md=4)
-            ]),
-            dbc.Row([
-                dbc.Col([
-                    dbc.Alert([
-                        html.H4("ℹ️ Informações Importantes", className="alert-heading"),
-                        html.P([
-                            "Os números acima representam apenas registros ativos. ",
-                            "Use os botões de upload acima para atualizar as bases quando necessário."
-                        ]),
-                        html.Hr(),
-                        html.P([
-                            "Definições:",
-                            html.Ul([
-                                html.Li("Rede: Nível mais alto da estrutura organizacional"),
-                                html.Li("Filial: Unidade pertencente a uma rede"),
-                                html.Li("Colaborador: Profissional ativo na filial")
-                            ])
-                        ]),
-                        html.Hr(),
-                        html.P([
-                            "Para mais detalhes sobre a estrutura dos dados e regras de negócio, ",
-                            "consulte o arquivo GLOSSARIO.md na pasta data."
-                        ], className="mb-0")
-                    ], color="info")
-                ])
-            ])
+        # KPIs principais
+        kpi_cards = dbc.Row([
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H4("🏢 Total de Redes", className="card-title text-center"),
+                        html.H2(f"{stats['total_networks']:,}", 
+                               className="text-primary text-center display-4"),
+                        html.P("Redes parceiras ativas", className="text-muted text-center")
+                    ])
+                ], className="mb-4 shadow-sm")
+            ], md=4),
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H4("🏪 Total de Filiais", className="card-title text-center"),
+                        html.H2(f"{stats['total_branches']:,}", 
+                               className="text-success text-center display-4"),
+                        html.P("Filiais ativas no sistema", className="text-muted text-center")
+                    ])
+                ], className="mb-4 shadow-sm")
+            ], md=4),
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H4("👥 Total de Colaboradores", className="card-title text-center"),
+                        html.H2(f"{stats['total_employees']:,}", 
+                               className="text-info text-center display-4"),
+                        html.P("Colaboradores ativos", className="text-muted text-center")
+                    ])
+                ], className="mb-4 shadow-sm")
+            ], md=4)
         ])
+        
+        # Gráficos evolutivos
+        evolution_data = db.get_evolution_data()
+        if not evolution_data.empty:
+            # Gráfico de evolução de redes
+            fig_networks = go.Figure()
+            fig_networks.add_trace(go.Bar(
+                x=evolution_data['mes'],
+                y=evolution_data['total_redes'],
+                name='Total de Redes',
+                marker_color='#3498db'
+            ))
+            fig_networks.update_layout(
+                title='Evolução Mensal - Total de Redes Ativas',
+                xaxis_title='Mês',
+                yaxis_title='Total de Redes',
+                height=400,
+                showlegend=False
+            )
+            
+            # Gráfico de evolução de filiais
+            fig_branches = go.Figure()
+            fig_branches.add_trace(go.Bar(
+                x=evolution_data['mes'],
+                y=evolution_data['total_filiais'],
+                name='Total de Filiais',
+                marker_color='#2ecc71'
+            ))
+            fig_branches.update_layout(
+                title='Evolução Mensal - Total de Filiais Ativas',
+                xaxis_title='Mês',
+                yaxis_title='Total de Filiais',
+                height=400,
+                showlegend=False
+            )
+            
+            # Gráfico de evolução de colaboradores
+            fig_employees = go.Figure()
+            fig_employees.add_trace(go.Bar(
+                x=evolution_data['mes'],
+                y=evolution_data['total_colaboradores'],
+                name='Total de Colaboradores',
+                marker_color='#9b59b6'
+            ))
+            fig_employees.update_layout(
+                title='Evolução Mensal - Total de Colaboradores Ativos',
+                xaxis_title='Mês',
+                yaxis_title='Total de Colaboradores',
+                height=400,
+                showlegend=False
+            )
+            
+            evolution_graphs = dbc.Row([
+                dbc.Col([dcc.Graph(figure=fig_networks)], md=4),
+                dbc.Col([dcc.Graph(figure=fig_branches)], md=4),
+                dbc.Col([dcc.Graph(figure=fig_employees)], md=4)
+            ], className="mb-4")
+        else:
+            evolution_graphs = html.Div()
+        
+        # Tabela de resumo executivo
+        executive_summary = db.get_executive_summary()
+        if not executive_summary.empty:
+            summary_table = dash_table.DataTable(
+                data=executive_summary.to_dict('records'),
+                columns=[{"name": i, "id": i} for i in executive_summary.columns],
+                style_header={
+                    'backgroundColor': '#3498db',
+                    'color': 'white',
+                    'fontWeight': 'bold',
+                    'textAlign': 'center'
+                },
+                style_cell={
+                    'textAlign': 'center',
+                    'padding': '10px',
+                    'whiteSpace': 'normal',
+                    'height': 'auto',
+                },
+                style_data_conditional=[
+                    {
+                        'if': {'row_index': 'odd'},
+                        'backgroundColor': '#f9f9f9'
+                    }
+                ],
+                page_size=10,
+                sort_action='native'
+            )
+        else:
+            summary_table = html.Div()
+        
+        return html.Div([
+            # KPIs
+            kpi_cards,
+            
+            # Gráficos evolutivos
+            html.H4("📈 Evolução Mensal", className="mt-4 mb-3"),
+            evolution_graphs,
+            
+            # Resumo executivo
+            html.H4("📊 Resumo Executivo por Rede", className="mt-4 mb-3"),
+            html.Div([
+                summary_table
+            ], className="table-responsive")
+        ])
+        
     except Exception as e:
         print(f"Erro ao gerar conteúdo: {str(e)}")
         import traceback
