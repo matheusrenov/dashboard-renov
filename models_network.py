@@ -16,7 +16,7 @@ class NetworkDatabase:
         c.execute('DROP TABLE IF EXISTS employees')
         c.execute('DROP TABLE IF EXISTS networks_branches')
 
-        # Tabela de Redes e Filiais
+        # Tabela de Redes e Filiais - Usando apenas TEXT para datas
         c.execute('''
         CREATE TABLE IF NOT EXISTS networks_branches (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -24,13 +24,13 @@ class NetworkDatabase:
             nome_filial TEXT NOT NULL,
             ativo TEXT DEFAULT 'ATIVO',
             data_inicio TEXT,
-            created_at TEXT DEFAULT (datetime('now', 'localtime')),
+            created_at TEXT,
             updated_at TEXT,
             UNIQUE(nome_rede, nome_filial)
         )
         ''')
 
-        # Tabela de Colaboradores
+        # Tabela de Colaboradores - Usando apenas TEXT para datas
         c.execute('''
         CREATE TABLE IF NOT EXISTS employees (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -39,7 +39,7 @@ class NetworkDatabase:
             rede TEXT NOT NULL,
             ativo TEXT DEFAULT 'ATIVO',
             data_cadastro TEXT,
-            created_at TEXT DEFAULT (datetime('now', 'localtime')),
+            created_at TEXT,
             updated_at TEXT,
             FOREIGN KEY (filial, rede) REFERENCES networks_branches(nome_filial, nome_rede)
         )
@@ -47,6 +47,16 @@ class NetworkDatabase:
 
         conn.commit()
         conn.close()
+
+    def format_date(self, date_str):
+        """Formata a data para o formato YYYY-MM-DD"""
+        if not date_str:
+            return None
+        try:
+            # Tenta converter para datetime e depois para string no formato desejado
+            return pd.to_datetime(date_str).strftime('%Y-%m-%d')
+        except:
+            return date_str
 
     def validate_networks_df(self, df):
         """Valida o DataFrame de redes e filiais"""
@@ -74,7 +84,13 @@ class NetworkDatabase:
         if missing_columns:
             raise ValueError(f"Colunas obrigatórias não encontradas: {', '.join(missing_columns)}")
         
-        return df.rename(columns=column_mapping)
+        df = df.rename(columns=column_mapping)
+        
+        # Formatar datas
+        if 'data_inicio' in df.columns:
+            df['data_inicio'] = df['data_inicio'].apply(self.format_date)
+            
+        return df
 
     def validate_employees_df(self, df):
         """Valida o DataFrame de colaboradores"""
@@ -103,11 +119,18 @@ class NetworkDatabase:
         if missing_columns:
             raise ValueError(f"Colunas obrigatórias não encontradas: {', '.join(missing_columns)}")
         
-        return df.rename(columns=column_mapping)
+        df = df.rename(columns=column_mapping)
+        
+        # Formatar datas
+        if 'data_cadastro' in df.columns:
+            df['data_cadastro'] = df['data_cadastro'].apply(self.format_date)
+            
+        return df
 
     def update_networks_and_branches(self, df):
         """Atualiza a base de redes e filiais"""
         conn = sqlite3.connect(self.db_path)
+        current_date = datetime.now().strftime('%Y-%m-%d')
 
         try:
             # Validar e preparar DataFrame
@@ -117,14 +140,16 @@ class NetworkDatabase:
             for _, row in df.iterrows():
                 conn.execute('''
                 INSERT OR REPLACE INTO networks_branches (
-                    nome_rede, nome_filial, ativo, data_inicio, updated_at
+                    nome_rede, nome_filial, ativo, data_inicio, created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, datetime('now', 'localtime'))
+                VALUES (?, ?, ?, ?, ?, ?)
                 ''', (
                     row['nome_rede'],
                     row['nome_filial'],
                     row['ativo'],
-                    row['data_inicio']
+                    row['data_inicio'],
+                    current_date,
+                    current_date
                 ))
 
             conn.commit()
@@ -140,6 +165,7 @@ class NetworkDatabase:
     def update_employees(self, df):
         """Atualiza a base de colaboradores"""
         conn = sqlite3.connect(self.db_path)
+        current_date = datetime.now().strftime('%Y-%m-%d')
 
         try:
             # Validar e preparar DataFrame
@@ -149,15 +175,17 @@ class NetworkDatabase:
             for _, row in df.iterrows():
                 conn.execute('''
                 INSERT OR REPLACE INTO employees (
-                    colaborador, filial, rede, ativo, data_cadastro, updated_at
+                    colaborador, filial, rede, ativo, data_cadastro, created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, datetime('now', 'localtime'))
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     row['colaborador'],
                     row['filial'],
                     row['rede'],
                     row['ativo'],
-                    row['data_cadastro']
+                    row['data_cadastro'],
+                    current_date,
+                    current_date
                 ))
 
             conn.commit()
