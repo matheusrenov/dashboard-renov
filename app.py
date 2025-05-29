@@ -734,13 +734,16 @@ def generate_projections_content(original_df, filtered_df):
 
 def generate_network_base_content():
     """Gera o conteúdo da aba de Base de Redes e Colaboradores"""
+    print("\n=== Gerando conteúdo da base de redes ===")
     try:
         db = NetworkDatabase()
         stats = db.get_network_stats()
         
-        print("DEBUG - Stats retornados:", stats)  # Debug
+        print("Estatísticas para exibição:")
+        print(stats)
         
         if all(v == 0 for v in stats.values()):
+            print("Nenhum dado encontrado nas estatísticas")
             return dbc.Alert([
                 html.H4("📝 Nenhum dado encontrado", className="alert-heading"),
                 html.P([
@@ -757,6 +760,7 @@ def generate_network_base_content():
                 ], className="mb-0")
             ], color="info")
         
+        print("Gerando cards com as estatísticas")
         return html.Div([
             dbc.Row([
                 dbc.Col([
@@ -817,7 +821,9 @@ def generate_network_base_content():
             ])
         ])
     except Exception as e:
-        print(f"Erro ao gerar conteúdo da base: {str(e)}")  # Debug
+        print(f"Erro ao gerar conteúdo: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return dbc.Alert(f"Erro ao carregar estatísticas: {str(e)}", color="danger")
 
 # ========================
@@ -1174,16 +1180,24 @@ def handle_network_upload(networks_contents, employees_contents, networks_filena
 
     try:
         trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+        db = NetworkDatabase()
         
         if trigger_id == 'upload-networks-branches-file' and networks_contents:
+            print("\n=== Processando upload de Redes e Filiais ===")
             # Processar arquivo de redes e filiais
             content_type, content_string = networks_contents.split(',')
             decoded = base64.b64decode(content_string)
             df = pd.read_excel(io.BytesIO(decoded))
             
-            success, message = network_db.update_networks_and_branches(df)
+            print(f"Dados lidos do arquivo:")
+            print(df.head())
+            print(f"Total de registros: {len(df)}")
+            
+            success, message = db.update_networks_and_branches(df)
             
             if success:
+                # Verificar dados após inserção
+                db.debug_data()
                 return dbc.Alert(
                     f"✅ Base de redes e filiais atualizada! Arquivo: {networks_filename}",
                     color="success",
@@ -1198,14 +1212,21 @@ def handle_network_upload(networks_contents, employees_contents, networks_filena
                 )
                 
         elif trigger_id == 'upload-employees-file' and employees_contents:
+            print("\n=== Processando upload de Colaboradores ===")
             # Processar arquivo de colaboradores
             content_type, content_string = employees_contents.split(',')
             decoded = base64.b64decode(content_string)
             df = pd.read_excel(io.BytesIO(decoded))
             
-            success, message = network_db.update_employees(df)
+            print(f"Dados lidos do arquivo:")
+            print(df.head())
+            print(f"Total de registros: {len(df)}")
+            
+            success, message = db.update_employees(df)
             
             if success:
+                # Verificar dados após inserção
+                db.debug_data()
                 return dbc.Alert(
                     f"✅ Base de colaboradores atualizada! Arquivo: {employees_filename}",
                     color="success",
@@ -1220,6 +1241,9 @@ def handle_network_upload(networks_contents, employees_contents, networks_filena
                 )
     
     except Exception as e:
+        print(f"Erro durante o upload: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return dbc.Alert(
             f"❌ Erro ao processar arquivo: {str(e)}",
             color="danger",
@@ -1227,6 +1251,39 @@ def handle_network_upload(networks_contents, employees_contents, networks_filena
         )
 
     return no_update
+
+@app.callback(
+    Output('tab-content-area', 'children', allow_duplicate=True),
+    [Input('network-upload-status', 'children'),
+     Input('main-tabs', 'value')],
+    prevent_initial_call=True
+)
+def update_network_base_tab(upload_status, current_tab):
+    """Atualiza a aba de base de redes quando há um novo upload"""
+    print("\n=== Atualizando conteúdo da aba de base ===")
+    print(f"Tab atual: {current_tab}")
+    print(f"Status do upload: {upload_status}")
+    
+    if not upload_status or current_tab != 'network-base':
+        return no_update
+    
+    try:
+        db = NetworkDatabase()
+        stats = db.get_network_stats()
+        print("\nEstatísticas atuais:")
+        print(f"Redes: {stats['total_networks']}")
+        print(f"Filiais: {stats['total_branches']}")
+        print(f"Colaboradores: {stats['total_employees']}")
+        
+        return generate_network_base_content()
+    except Exception as e:
+        print(f"Erro ao atualizar aba: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return dbc.Alert(
+            f"Erro ao atualizar conteúdo: {str(e)}",
+            color="danger"
+        )
 
 # ========================
 # 🔚 Execução e Documentação
@@ -1284,24 +1341,3 @@ if __name__ == '__main__':
         print("="*50)
         import traceback
         traceback.print_exc()
-
-# Callback para atualizar a aba de base de redes
-@app.callback(
-    Output('tab-content-area', 'children', allow_duplicate=True),
-    [Input('network-upload-status', 'children')],
-    [State('main-tabs', 'value')],
-    prevent_initial_call=True
-)
-def update_network_base_tab(upload_status, current_tab):
-    """Atualiza a aba de base de redes quando há um novo upload"""
-    if not upload_status or current_tab != 'network-base':
-        raise PreventUpdate
-        
-    # Se houve um upload bem sucedido, atualiza o conteúdo
-    if isinstance(upload_status, dict) and upload_status.get('props', {}).get('color') == 'success':
-        # Debug: Imprimir estatísticas antes de gerar o conteúdo
-        db = NetworkDatabase()
-        db.debug_data()  # Imprime os dados das tabelas
-        return generate_network_base_content()
-    
-    return no_update

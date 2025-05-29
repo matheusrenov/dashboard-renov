@@ -5,6 +5,8 @@ from datetime import datetime
 class NetworkDatabase:
     def __init__(self):
         self.db_path = 'network_data.db'
+        print(f"\n=== Inicializando NetworkDatabase ===")
+        print(f"Caminho do banco: {self.db_path}")
         self.init_db()
 
     def init_db(self):
@@ -12,41 +14,57 @@ class NetworkDatabase:
         conn = sqlite3.connect(self.db_path)
         c = conn.cursor()
 
-        # Remover tabelas existentes para garantir estrutura atualizada
-        c.execute('DROP TABLE IF EXISTS employees')
-        c.execute('DROP TABLE IF EXISTS networks_branches')
+        print("\n=== Inicializando banco de dados ===")
+        try:
+            # Remover tabelas existentes para garantir estrutura atualizada
+            print("Removendo tabelas existentes...")
+            c.execute('DROP TABLE IF EXISTS employees')
+            c.execute('DROP TABLE IF EXISTS networks_branches')
 
-        # Tabela de Redes e Filiais - Usando apenas TEXT para datas
-        c.execute('''
-        CREATE TABLE IF NOT EXISTS networks_branches (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nome_rede TEXT NOT NULL,
-            nome_filial TEXT NOT NULL,
-            ativo TEXT NOT NULL DEFAULT 'ATIVO',
-            data_inicio TEXT NOT NULL,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL,
-            UNIQUE(nome_rede, nome_filial)
-        )
-        ''')
+            # Tabela de Redes e Filiais
+            print("Criando tabela networks_branches...")
+            c.execute('''
+            CREATE TABLE IF NOT EXISTS networks_branches (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nome_rede TEXT NOT NULL,
+                nome_filial TEXT NOT NULL,
+                ativo TEXT NOT NULL DEFAULT 'ATIVO',
+                data_inicio TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(nome_rede, nome_filial)
+            )
+            ''')
 
-        # Tabela de Colaboradores - Usando apenas TEXT para datas
-        c.execute('''
-        CREATE TABLE IF NOT EXISTS employees (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            colaborador TEXT NOT NULL,
-            filial TEXT NOT NULL,
-            rede TEXT NOT NULL,
-            ativo TEXT NOT NULL DEFAULT 'ATIVO',
-            data_cadastro TEXT NOT NULL,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL,
-            FOREIGN KEY (filial, rede) REFERENCES networks_branches(nome_filial, nome_rede)
-        )
-        ''')
+            # Tabela de Colaboradores
+            print("Criando tabela employees...")
+            c.execute('''
+            CREATE TABLE IF NOT EXISTS employees (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                colaborador TEXT NOT NULL,
+                filial TEXT NOT NULL,
+                rede TEXT NOT NULL,
+                ativo TEXT NOT NULL DEFAULT 'ATIVO',
+                data_cadastro TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (filial, rede) REFERENCES networks_branches(nome_filial, nome_rede)
+            )
+            ''')
 
-        conn.commit()
-        conn.close()
+            conn.commit()
+            print("Banco de dados inicializado com sucesso!")
+            
+            # Verificar estrutura criada
+            self.check_database_structure()
+            
+        except Exception as e:
+            print(f"Erro ao inicializar banco: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            conn.rollback()
+        finally:
+            conn.close()
 
     def format_date(self, date_str):
         """Formata a data para o formato YYYY-MM-DD"""
@@ -230,52 +248,94 @@ class NetworkDatabase:
         """Retorna estatísticas das redes"""
         conn = sqlite3.connect(self.db_path)
         try:
-            # Total de redes ativas - usando DISTINCT e UPPER para normalização
+            print("\n=== Consultando estatísticas do banco de dados ===")
+            
+            # Verificar se as tabelas existem
+            tables = conn.execute('''
+                SELECT name FROM sqlite_master 
+                WHERE type='table' AND 
+                name IN ('networks_branches', 'employees')
+            ''').fetchall()
+            
+            print(f"Tabelas encontradas: {tables}")
+            
+            if len(tables) < 2:
+                print("Erro: Tabelas não encontradas")
+                return {'total_networks': 0, 'total_branches': 0, 'total_employees': 0}
+            
+            # Total de redes ativas
             total_networks = conn.execute('''
                 SELECT COUNT(DISTINCT nome_rede) 
                 FROM networks_branches 
                 WHERE UPPER(TRIM(ativo)) = 'ATIVO'
             ''').fetchone()[0]
+            
+            print(f"Total de redes encontradas: {total_networks}")
+            
+            # Listar todas as redes para debug
+            redes = conn.execute('''
+                SELECT DISTINCT nome_rede, COUNT(*) as total_filiais
+                FROM networks_branches
+                GROUP BY nome_rede
+            ''').fetchall()
+            
+            print("\nRedes e quantidade de filiais:")
+            for rede in redes:
+                print(f"- {rede[0]}: {rede[1]} filiais")
 
-            # Total de filiais ativas - usando DISTINCT e UPPER para normalização
+            # Total de filiais ativas
             total_branches = conn.execute('''
                 SELECT COUNT(*) 
                 FROM networks_branches 
                 WHERE UPPER(TRIM(ativo)) = 'ATIVO'
             ''').fetchone()[0]
+            
+            print(f"\nTotal de filiais encontradas: {total_branches}")
+            
+            # Listar algumas filiais para debug
+            filiais = conn.execute('''
+                SELECT nome_filial, nome_rede, ativo
+                FROM networks_branches
+                LIMIT 5
+            ''').fetchall()
+            
+            print("\nAmostras de filiais:")
+            for filial in filiais:
+                print(f"- {filial[0]} ({filial[1]}): {filial[2]}")
 
-            # Total de colaboradores ativos - usando DISTINCT e UPPER para normalização
+            # Total de colaboradores ativos
             total_employees = conn.execute('''
                 SELECT COUNT(*) 
                 FROM employees 
                 WHERE UPPER(TRIM(ativo)) = 'ATIVO'
             ''').fetchone()[0]
-
-            # Debug: Imprimir os resultados para verificação
-            print(f"DEBUG - Estatísticas encontradas:")
-            print(f"Redes: {total_networks}")
-            print(f"Filiais: {total_branches}")
-            print(f"Colaboradores: {total_employees}")
-
-            # Verificar dados brutos
-            print("\nDEBUG - Dados brutos:")
-            networks = conn.execute('SELECT DISTINCT nome_rede FROM networks_branches').fetchall()
-            print(f"Redes encontradas: {[r[0] for r in networks]}")
             
-            branches = conn.execute('SELECT nome_filial, ativo FROM networks_branches').fetchall()
-            print(f"Filiais encontradas: {len(branches)}")
+            print(f"\nTotal de colaboradores encontrados: {total_employees}")
             
-            employees = conn.execute('SELECT COUNT(*) FROM employees').fetchone()
-            print(f"Total de registros de colaboradores: {employees[0]}")
+            # Listar alguns colaboradores para debug
+            colaboradores = conn.execute('''
+                SELECT colaborador, filial, rede, ativo
+                FROM employees
+                LIMIT 5
+            ''').fetchall()
+            
+            print("\nAmostras de colaboradores:")
+            for colab in colaboradores:
+                print(f"- {colab[0]} ({colab[1]} - {colab[2]}): {colab[3]}")
 
-            return {
+            stats = {
                 'total_networks': total_networks or 0,
                 'total_branches': total_branches or 0,
                 'total_employees': total_employees or 0
             }
+            
+            print("\nEstatísticas finais:", stats)
+            return stats
 
         except Exception as e:
             print(f"Erro ao buscar estatísticas: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return {
                 'total_networks': 0,
                 'total_branches': 0,
@@ -304,5 +364,58 @@ class NetworkDatabase:
             
         except Exception as e:
             print(f"Erro ao debugar dados: {str(e)}")
+        finally:
+            conn.close()
+
+    def check_database_structure(self):
+        """Verifica a estrutura do banco de dados e retorna informações detalhadas"""
+        conn = sqlite3.connect(self.db_path)
+        try:
+            print("\n=== Verificando estrutura do banco de dados ===")
+            
+            # Verificar tabelas existentes
+            tables = conn.execute('''
+                SELECT name, sql FROM sqlite_master 
+                WHERE type='table' AND 
+                name IN ('networks_branches', 'employees')
+            ''').fetchall()
+            
+            print("\nTabelas encontradas:")
+            for table in tables:
+                print(f"\nTabela: {table[0]}")
+                print("Estrutura SQL:")
+                print(table[1])
+                
+                # Verificar colunas
+                columns = conn.execute(f'PRAGMA table_info({table[0]})').fetchall()
+                print("\nColunas:")
+                for col in columns:
+                    print(f"- {col[1]} ({col[2]})")
+                
+                # Verificar quantidade de registros
+                count = conn.execute(f'SELECT COUNT(*) FROM {table[0]}').fetchone()[0]
+                print(f"\nTotal de registros: {count}")
+                
+                # Verificar registros ativos
+                if 'ativo' in [col[1] for col in columns]:
+                    active_count = conn.execute(f'''
+                        SELECT COUNT(*) FROM {table[0]}
+                        WHERE UPPER(TRIM(ativo)) = 'ATIVO'
+                    ''').fetchone()[0]
+                    print(f"Registros ativos: {active_count}")
+                
+                # Mostrar alguns exemplos de registros
+                print("\nExemplos de registros:")
+                records = conn.execute(f'SELECT * FROM {table[0]} LIMIT 3').fetchall()
+                for record in records:
+                    print(record)
+            
+            return True
+            
+        except Exception as e:
+            print(f"Erro ao verificar estrutura: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return False
         finally:
             conn.close() 
