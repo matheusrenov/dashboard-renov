@@ -93,76 +93,80 @@ class NetworkDatabase:
 
     def validate_networks_df(self, df):
         """Valida o DataFrame de redes e filiais"""
-        required_columns = {
-            'nome_rede': ['Nome da Rede'],
-            'nome_filial': ['Nome da Filial'],
-            'ativo': ['Ativa'],
-            'data_inicio': ['Data de Início']
-        }
-
-        # Mapear colunas
-        column_mapping = {}
-        missing_columns = []
+        print("\n=== Validando DataFrame de redes e filiais ===")
+        print("Colunas originais:", df.columns.tolist())
         
-        for standard_name, possible_names in required_columns.items():
-            found = False
-            for possible_name in possible_names:
-                if possible_name in df.columns:
-                    column_mapping[possible_name] = standard_name
-                    found = True
-                    break
-            if not found:
-                missing_columns.append(possible_names[0])
+        # Mapear colunas
+        column_mapping = {
+            'Nome da Filial': 'nome_filial',
+            'Nome da Rede': 'nome_rede',
+            'Ativa': 'ativo',
+            'Data de Início': 'data_inicio'
+        }
+        
+        # Verificar colunas obrigatórias
+        missing_columns = []
+        for original, _ in column_mapping.items():
+            if original not in df.columns:
+                missing_columns.append(original)
         
         if missing_columns:
             raise ValueError(f"Colunas obrigatórias não encontradas: {', '.join(missing_columns)}")
         
+        # Renomear colunas
         df = df.rename(columns=column_mapping)
+        print("Colunas após mapeamento:", df.columns.tolist())
         
         # Limpar e validar dados
         df['nome_rede'] = df['nome_rede'].apply(self.clean_text)
         df['nome_filial'] = df['nome_filial'].apply(self.clean_text)
-        df['ativo'] = df['ativo'].apply(lambda x: 'ATIVO' if pd.isna(x) else str(x).strip().upper())
+        df['ativo'] = df['ativo'].apply(lambda x: 'ATIVO' if str(x).upper().strip() in ['SIM', 'S', 'TRUE', '1', 'ATIVO'] else 'INATIVO')
         df['data_inicio'] = df['data_inicio'].apply(self.format_date)
-            
+        
+        print("\nAmostra após limpeza:")
+        print(df.head())
+        print(f"Total de registros válidos: {len(df)}")
+        
         return df
 
     def validate_employees_df(self, df):
         """Valida o DataFrame de colaboradores"""
-        required_columns = {
-            'colaborador': ['Colaborador'],
-            'filial': ['Filial'],
-            'rede': ['Rede'],
-            'ativo': ['Ativo'],
-            'data_cadastro': ['Data de Cadastro']
-        }
-
-        # Mapear colunas
-        column_mapping = {}
-        missing_columns = []
+        print("\n=== Validando DataFrame de colaboradores ===")
+        print("Colunas originais:", df.columns.tolist())
         
-        for standard_name, possible_names in required_columns.items():
-            found = False
-            for possible_name in possible_names:
-                if possible_name in df.columns:
-                    column_mapping[possible_name] = standard_name
-                    found = True
-                    break
-            if not found:
-                missing_columns.append(possible_names[0])
+        # Mapear colunas
+        column_mapping = {
+            'Colaborador': 'colaborador',
+            'Filial': 'filial',
+            'Rede': 'rede',
+            'Ativo': 'ativo',
+            'Data de Cadastro': 'data_cadastro'
+        }
+        
+        # Verificar colunas obrigatórias
+        missing_columns = []
+        for original, _ in column_mapping.items():
+            if original not in df.columns:
+                missing_columns.append(original)
         
         if missing_columns:
             raise ValueError(f"Colunas obrigatórias não encontradas: {', '.join(missing_columns)}")
         
+        # Renomear colunas
         df = df.rename(columns=column_mapping)
+        print("Colunas após mapeamento:", df.columns.tolist())
         
         # Limpar e validar dados
         df['colaborador'] = df['colaborador'].apply(self.clean_text)
         df['filial'] = df['filial'].apply(self.clean_text)
         df['rede'] = df['rede'].apply(self.clean_text)
-        df['ativo'] = df['ativo'].apply(lambda x: 'ATIVO' if pd.isna(x) else str(x).strip().upper())
+        df['ativo'] = df['ativo'].apply(lambda x: 'ATIVO' if str(x).upper().strip() in ['SIM', 'S', 'TRUE', '1', 'ATIVO'] else 'INATIVO')
         df['data_cadastro'] = df['data_cadastro'].apply(self.format_date)
-            
+        
+        print("\nAmostra após limpeza:")
+        print(df.head())
+        print(f"Total de registros válidos: {len(df)}")
+        
         return df
 
     def update_networks_and_branches(self, df):
@@ -172,16 +176,9 @@ class NetworkDatabase:
 
         try:
             print("\n=== Atualizando redes e filiais ===")
-            print("DataFrame original:")
-            print(df.head())
-            print(f"Total de registros: {len(df)}")
             
             # Validar e preparar DataFrame
             df = self.validate_networks_df(df)
-            
-            print("\nDataFrame após validação:")
-            print(df.head())
-            print(f"Total de registros após validação: {len(df)}")
             
             # Processar redes e filiais
             registros_inseridos = 0
@@ -192,6 +189,7 @@ class NetworkDatabase:
                         print(f"Pulando registro com campos nulos: {row.to_dict()}")
                         continue
                     
+                    # Inserir registro
                     conn.execute('''
                     INSERT OR REPLACE INTO networks_branches (
                         nome_rede, nome_filial, ativo, data_inicio, created_at, updated_at
@@ -206,6 +204,10 @@ class NetworkDatabase:
                         current_date
                     ))
                     registros_inseridos += 1
+                    
+                    if registros_inseridos % 100 == 0:
+                        print(f"Processados {registros_inseridos} registros...")
+                        
                 except Exception as e:
                     print(f"Erro ao inserir registro: {row.to_dict()}")
                     print(f"Erro: {str(e)}")
@@ -216,7 +218,25 @@ class NetworkDatabase:
             
             # Verificar dados após inserção
             total = conn.execute('SELECT COUNT(*) FROM networks_branches').fetchone()[0]
+            ativos = conn.execute('''
+                SELECT COUNT(*) FROM networks_branches 
+                WHERE UPPER(TRIM(ativo)) = 'ATIVO'
+            ''').fetchone()[0]
+            
             print(f"Total de registros na tabela: {total}")
+            print(f"Total de registros ativos: {ativos}")
+            
+            # Mostrar algumas redes inseridas
+            redes = conn.execute('''
+                SELECT DISTINCT nome_rede, COUNT(*) as total
+                FROM networks_branches
+                GROUP BY nome_rede
+                LIMIT 5
+            ''').fetchall()
+            
+            print("\nAlgumas redes inseridas:")
+            for rede in redes:
+                print(f"- {rede[0]}: {rede[1]} filiais")
             
             return True, f"Base de redes e filiais atualizada com sucesso! {registros_inseridos} registros inseridos."
         
@@ -316,19 +336,6 @@ class NetworkDatabase:
         try:
             print("\n=== Consultando estatísticas do banco de dados ===")
             
-            # Verificar se as tabelas existem
-            tables = conn.execute('''
-                SELECT name FROM sqlite_master 
-                WHERE type='table' AND 
-                name IN ('networks_branches', 'employees')
-            ''').fetchall()
-            
-            print(f"Tabelas encontradas: {tables}")
-            
-            if len(tables) < 2:
-                print("Erro: Tabelas não encontradas")
-                return {'total_networks': 0, 'total_branches': 0, 'total_employees': 0}
-            
             # Total de redes ativas
             total_networks = conn.execute('''
                 SELECT COUNT(DISTINCT nome_rede) 
@@ -336,19 +343,8 @@ class NetworkDatabase:
                 WHERE UPPER(TRIM(ativo)) = 'ATIVO'
             ''').fetchone()[0]
             
-            print(f"Total de redes encontradas: {total_networks}")
+            print(f"Total de redes ativas: {total_networks}")
             
-            # Listar todas as redes para debug
-            redes = conn.execute('''
-                SELECT DISTINCT nome_rede, COUNT(*) as total_filiais
-                FROM networks_branches
-                GROUP BY nome_rede
-            ''').fetchall()
-            
-            print("\nRedes e quantidade de filiais:")
-            for rede in redes:
-                print(f"- {rede[0]}: {rede[1]} filiais")
-
             # Total de filiais ativas
             total_branches = conn.execute('''
                 SELECT COUNT(*) 
@@ -356,19 +352,8 @@ class NetworkDatabase:
                 WHERE UPPER(TRIM(ativo)) = 'ATIVO'
             ''').fetchone()[0]
             
-            print(f"\nTotal de filiais encontradas: {total_branches}")
+            print(f"Total de filiais ativas: {total_branches}")
             
-            # Listar algumas filiais para debug
-            filiais = conn.execute('''
-                SELECT nome_filial, nome_rede, ativo
-                FROM networks_branches
-                LIMIT 5
-            ''').fetchall()
-            
-            print("\nAmostras de filiais:")
-            for filial in filiais:
-                print(f"- {filial[0]} ({filial[1]}): {filial[2]}")
-
             # Total de colaboradores ativos
             total_employees = conn.execute('''
                 SELECT COUNT(*) 
@@ -376,27 +361,26 @@ class NetworkDatabase:
                 WHERE UPPER(TRIM(ativo)) = 'ATIVO'
             ''').fetchone()[0]
             
-            print(f"\nTotal de colaboradores encontrados: {total_employees}")
+            print(f"Total de colaboradores ativos: {total_employees}")
             
-            # Listar alguns colaboradores para debug
-            colaboradores = conn.execute('''
-                SELECT colaborador, filial, rede, ativo
-                FROM employees
+            # Mostrar algumas redes e suas filiais
+            redes = conn.execute('''
+                SELECT nome_rede, COUNT(*) as total_filiais
+                FROM networks_branches
+                WHERE UPPER(TRIM(ativo)) = 'ATIVO'
+                GROUP BY nome_rede
                 LIMIT 5
             ''').fetchall()
             
-            print("\nAmostras de colaboradores:")
-            for colab in colaboradores:
-                print(f"- {colab[0]} ({colab[1]} - {colab[2]}): {colab[3]}")
+            print("\nAlgumas redes e suas filiais:")
+            for rede in redes:
+                print(f"- {rede[0]}: {rede[1]} filiais")
 
-            stats = {
+            return {
                 'total_networks': total_networks or 0,
                 'total_branches': total_branches or 0,
                 'total_employees': total_employees or 0
             }
-            
-            print("\nEstatísticas finais:", stats)
-            return stats
 
         except Exception as e:
             print(f"Erro ao buscar estatísticas: {str(e)}")
