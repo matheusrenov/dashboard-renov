@@ -949,14 +949,32 @@ def generate_engagement_content(df, network_db):
         total_filiais = executive_summary['Total de Filiais'].sum()
         total_colaboradores = executive_summary['Total de Colaboradores'].sum()
         
+        # Calcular métricas de vouchers utilizados
+        vouchers_utilizados = df[df['situacao_voucher'].str.lower().str.contains('utilizado|usado|ativo', na=False)]
+        
         redes_ativas = df['nome_rede'].nunique()
         filiais_ativas = df['nome_filial'].nunique()
         colaboradores_ativos = df['nome_vendedor'].nunique()
+        colaboradores_com_vouchers_utilizados = vouchers_utilizados['nome_vendedor'].nunique()
+        
+        # Análise de inatividade nos últimos 30 dias
+        if 'data_str' in df.columns:
+            df['data_str'] = pd.to_datetime(df['data_str'])
+            ultima_data = df['data_str'].max()
+            dias_inatividade = 30
+            data_corte = ultima_data - pd.Timedelta(days=dias_inatividade)
+            
+            colaboradores_ativos_periodo = df[df['data_str'] > data_corte]['nome_vendedor'].unique()
+            total_colaboradores_inativos = total_colaboradores - len(colaboradores_ativos_periodo)
+            taxa_ausencia_vouchers = (total_colaboradores_inativos / total_colaboradores * 100) if total_colaboradores > 0 else 0
+        else:
+            taxa_ausencia_vouchers = 0
         
         # Calcular taxas de ativação
         taxa_ativacao_redes = (redes_ativas / total_redes * 100) if total_redes > 0 else 0
         taxa_ativacao_filiais = (filiais_ativas / total_filiais * 100) if total_filiais > 0 else 0
         taxa_ativacao_colaboradores = (colaboradores_ativos / total_colaboradores * 100) if total_colaboradores > 0 else 0
+        taxa_ativacao_colaboradores_utilizados = (colaboradores_com_vouchers_utilizados / total_colaboradores * 100) if total_colaboradores > 0 else 0
 
         # KPIs de Engajamento
         kpi_cards = dbc.Row([
@@ -970,7 +988,7 @@ def generate_engagement_content(df, network_db):
                               className="text-muted text-center")
                     ])
                 ], className="mb-4 shadow-sm")
-            ], md=4),
+            ], md=3),
             dbc.Col([
                 dbc.Card([
                     dbc.CardBody([
@@ -981,104 +999,121 @@ def generate_engagement_content(df, network_db):
                               className="text-muted text-center")
                     ])
                 ], className="mb-4 shadow-sm")
-            ], md=4),
+            ], md=3),
             dbc.Col([
                 dbc.Card([
                     dbc.CardBody([
-                        html.H4("👥 Taxa de Ativação de Colaboradores", className="card-title text-center"),
-                        html.H2(f"{taxa_ativacao_colaboradores:.1f}%", 
+                        html.H4("👥 Taxa de Ativação - Vouchers Utilizados", className="card-title text-center"),
+                        html.H2(f"{taxa_ativacao_colaboradores_utilizados:.1f}%", 
                                className="text-info text-center display-4"),
-                        html.P(f"{colaboradores_ativos} de {total_colaboradores} colaboradores ativos", 
+                        html.P(f"{colaboradores_com_vouchers_utilizados} de {total_colaboradores} colaboradores", 
                               className="text-muted text-center")
                     ])
                 ], className="mb-4 shadow-sm")
-            ], md=4)
+            ], md=3),
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H4("⚠️ Taxa de Ausência de Vouchers", className="card-title text-center"),
+                        html.H2(f"{taxa_ausencia_vouchers:.1f}%", 
+                               className="text-danger text-center display-4"),
+                        html.P(f"{total_colaboradores_inativos} colaboradores sem atividade", 
+                              className="text-muted text-center")
+                    ])
+                ], className="mb-4 shadow-sm")
+            ], md=3)
         ])
 
-        # Análise de Conversão por Rede
-        rede_stats = df.groupby('nome_rede').agg({
+        # Análise Temporal de Engajamento
+        if 'data_str' in df.columns:
+            df_temporal = df.groupby('data_str').agg({
+                'imei': 'count',
+                'nome_vendedor': 'nunique',
+                'valor_dispositivo': 'sum'
+            }).reset_index()
+            df_temporal.columns = ['Data', 'Total_Vouchers', 'Colaboradores_Ativos', 'Valor_Total']
+            
+            # Gráfico de evolução temporal
+            fig_temporal = go.Figure()
+            fig_temporal.add_trace(go.Scatter(
+                x=df_temporal['Data'],
+                y=df_temporal['Total_Vouchers'],
+                name='Vouchers',
+                line=dict(color='#3498db', width=2)
+            ))
+            fig_temporal.add_trace(go.Scatter(
+                x=df_temporal['Data'],
+                y=df_temporal['Colaboradores_Ativos'],
+                name='Colaboradores Ativos',
+                line=dict(color='#2ecc71', width=2)
+            ))
+            fig_temporal.update_layout(
+                title='Evolução Temporal do Engajamento',
+                xaxis_title='Data',
+                yaxis_title='Quantidade',
+                height=400,
+                plot_bgcolor='white',
+                paper_bgcolor='white',
+                xaxis=dict(showgrid=False),
+                yaxis=dict(showgrid=False)
+            )
+        
+        # Análise de Produtividade por Rede
+        prod_rede = df.groupby('nome_rede').agg({
             'imei': 'count',
-            'situacao_voucher': lambda x: (x.str.lower().str.contains('utilizado|usado|ativo', na=False)).sum()
+            'nome_vendedor': 'nunique',
+            'valor_dispositivo': 'sum'
         }).reset_index()
-        rede_stats.columns = ['Rede', 'Total_Vouchers', 'Vouchers_Utilizados']
-        rede_stats['Taxa_Conversao'] = (rede_stats['Vouchers_Utilizados'] / rede_stats['Total_Vouchers'] * 100).round(1)
-        rede_stats = rede_stats.sort_values('Taxa_Conversao', ascending=False)
-
-        # Gráfico de Taxa de Conversão por Rede (Top 10)
-        fig_conversion = go.Figure()
-        fig_conversion.add_trace(go.Bar(
-            x=rede_stats.head(10)['Rede'],
-            y=rede_stats.head(10)['Taxa_Conversao'],
+        prod_rede.columns = ['Rede', 'Total_Vouchers', 'Total_Colaboradores', 'Valor_Total']
+        prod_rede['Media_Vouchers_Colaborador'] = (prod_rede['Total_Vouchers'] / prod_rede['Total_Colaboradores']).round(2)
+        prod_rede['Media_Valor_Colaborador'] = (prod_rede['Valor_Total'] / prod_rede['Total_Colaboradores']).round(2)
+        
+        # Gráfico de produtividade
+        fig_produtividade = go.Figure()
+        fig_produtividade.add_trace(go.Bar(
+            x=prod_rede.head(10)['Rede'],
+            y=prod_rede.head(10)['Media_Vouchers_Colaborador'],
+            name='Média de Vouchers',
             marker_color='#3498db',
-            text=rede_stats.head(10)['Taxa_Conversao'].apply(lambda x: f'{x:.1f}%'),
+            text=prod_rede.head(10)['Media_Vouchers_Colaborador'].apply(lambda x: f'{x:.1f}'),
             textposition='outside'
         ))
-        fig_conversion.update_layout(
-            title='Taxa de Conversão por Rede (Top 10)',
+        fig_produtividade.update_layout(
+            title='Média de Vouchers por Colaborador (Top 10 Redes)',
             xaxis_title='Rede',
-            yaxis_title='Taxa de Conversão (%)',
+            yaxis_title='Média de Vouchers',
             height=400,
-            showlegend=False,
             plot_bgcolor='white',
             paper_bgcolor='white',
             xaxis=dict(showgrid=False),
             yaxis=dict(
                 showgrid=False,
-                range=[0, max(rede_stats['Taxa_Conversao']) * 1.15]
+                range=[0, max(prod_rede['Media_Vouchers_Colaborador']) * 1.15]
             )
         )
 
-        # Análise de Inatividade
-        if 'data_str' in df.columns:
-            df['data_str'] = pd.to_datetime(df['data_str'])
-            ultima_data = df['data_str'].max()
-            dias_inatividade = 30
-            data_corte = ultima_data - pd.Timedelta(days=dias_inatividade)
+        # Tabela Analítica
+        tabela_analitica = []
+        for rede in executive_summary['Nome da Rede'].unique():
+            rede_data = {
+                'Rede': rede,
+                'Quantidade_Lojas_Total': executive_summary[executive_summary['Nome da Rede'] == rede]['Total de Filiais'].iloc[0],
+                'Quantidade_Lojas_Com_Vouchers': len(df[df['nome_rede'] == rede]['nome_filial'].unique()),
+                'Total_Colaboradores_Ativos': executive_summary[executive_summary['Nome da Rede'] == rede]['Total de Colaboradores'].iloc[0],
+                'Total_Colaboradores_Com_Vouchers': len(df[df['nome_rede'] == rede]['nome_vendedor'].unique()),
+            }
             
-            # Redes inativas
-            redes_ativas_periodo = df[df['data_str'] > data_corte]['nome_rede'].unique()
-            redes_inativas = set(executive_summary['Nome da Rede']) - set(redes_ativas_periodo)
+            # Calcular campos derivados
+            rede_data['Quantidade_Lojas_Sem_Vouchers'] = rede_data['Quantidade_Lojas_Total'] - rede_data['Quantidade_Lojas_Com_Vouchers']
+            rede_data['Total_Colaboradores_Sem_Vouchers'] = rede_data['Total_Colaboradores_Ativos'] - rede_data['Total_Colaboradores_Com_Vouchers']
             
-            # Filiais inativas
-            filiais_ativas_periodo = df[df['data_str'] > data_corte]['nome_filial'].unique()
-            total_filiais_set = set()
-            for _, row in executive_summary.iterrows():
-                total_filiais_set.add(f"{row['Nome da Rede']} - {row['Total de Filiais']}")
-            filiais_inativas = len(total_filiais_set) - len(filiais_ativas_periodo)
+            # Calcular taxas
+            rede_data['Taxa_Ativacao_Rede'] = f"{(1 if rede_data['Quantidade_Lojas_Com_Vouchers'] > 0 else 0) * 100:.1f}%"
+            rede_data['Taxa_Ativacao_Filiais'] = f"{(rede_data['Quantidade_Lojas_Com_Vouchers'] / rede_data['Quantidade_Lojas_Total'] * 100 if rede_data['Quantidade_Lojas_Total'] > 0 else 0):.1f}%"
+            rede_data['Taxa_Ativacao_Colaboradores'] = f"{(rede_data['Total_Colaboradores_Com_Vouchers'] / rede_data['Total_Colaboradores_Ativos'] * 100 if rede_data['Total_Colaboradores_Ativos'] > 0 else 0):.1f}%"
+            rede_data['Taxa_Ausencia_Vouchers'] = f"{(rede_data['Total_Colaboradores_Sem_Vouchers'] / rede_data['Total_Colaboradores_Ativos'] * 100 if rede_data['Total_Colaboradores_Ativos'] > 0 else 0):.1f}%"
             
-            inactivity_stats = pd.DataFrame({
-                'Categoria': ['Redes', 'Filiais'],
-                'Total': [total_redes, total_filiais],
-                'Inativos': [len(redes_inativas), filiais_inativas],
-                'Percentual': [
-                    len(redes_inativas) / total_redes * 100 if total_redes > 0 else 0,
-                    filiais_inativas / total_filiais * 100 if total_filiais > 0 else 0
-                ]
-            })
-
-            # Gráfico de Inatividade
-            fig_inactivity = go.Figure()
-            fig_inactivity.add_trace(go.Bar(
-                x=inactivity_stats['Categoria'],
-                y=inactivity_stats['Percentual'],
-                marker_color='#e74c3c',
-                text=inactivity_stats['Percentual'].apply(lambda x: f'{x:.1f}%'),
-                textposition='outside'
-            ))
-            fig_inactivity.update_layout(
-                title=f'Percentual de Inatividade (Últimos {dias_inatividade} dias)',
-                xaxis_title='Categoria',
-                yaxis_title='% Inativo',
-                height=400,
-                showlegend=False,
-                plot_bgcolor='white',
-                paper_bgcolor='white',
-                xaxis=dict(showgrid=False),
-                yaxis=dict(
-                    showgrid=False,
-                    range=[0, 100]
-                )
-            )
+            tabela_analitica.append(rede_data)
 
         # Layout Final
         return html.Div([
@@ -1094,23 +1129,48 @@ def generate_engagement_content(df, network_db):
             
             # Gráficos
             dbc.Row([
-                dbc.Col([dcc.Graph(figure=fig_conversion)], md=6),
-                dbc.Col([dcc.Graph(figure=fig_inactivity)], md=6)
+                dbc.Col([dcc.Graph(figure=fig_temporal)], md=6),
+                dbc.Col([dcc.Graph(figure=fig_produtividade)], md=6)
             ], className="mb-4"),
             
-            # Tabela de Redes Inativas
-            html.H5("📋 Redes sem Atividade nos Últimos 30 Dias", className="mt-4 mb-3"),
+            # Tabela Analítica
+            html.H5("📋 Análise Detalhada por Rede", className="mt-4 mb-3"),
             dash_table.DataTable(
-                data=[{"Rede": rede} for rede in sorted(redes_inativas)],
-                columns=[{"name": "Rede", "id": "Rede"}],
+                data=tabela_analitica,
+                columns=[
+                    {"name": "Rede", "id": "Rede"},
+                    {"name": "Total de Lojas", "id": "Quantidade_Lojas_Total"},
+                    {"name": "Lojas com Vouchers", "id": "Quantidade_Lojas_Com_Vouchers"},
+                    {"name": "Lojas sem Vouchers", "id": "Quantidade_Lojas_Sem_Vouchers"},
+                    {"name": "Total Colaboradores", "id": "Total_Colaboradores_Ativos"},
+                    {"name": "Colaboradores com Vouchers", "id": "Total_Colaboradores_Com_Vouchers"},
+                    {"name": "Colaboradores sem Vouchers", "id": "Total_Colaboradores_Sem_Vouchers"},
+                    {"name": "Taxa Ativação Rede", "id": "Taxa_Ativacao_Rede"},
+                    {"name": "Taxa Ativação Filiais", "id": "Taxa_Ativacao_Filiais"},
+                    {"name": "Taxa Ativação Colaboradores", "id": "Taxa_Ativacao_Colaboradores"},
+                    {"name": "Taxa Ausência Vouchers", "id": "Taxa_Ausencia_Vouchers"}
+                ],
                 style_header={
-                    'backgroundColor': '#e74c3c',
+                    'backgroundColor': '#3498db',
                     'color': 'white',
-                    'fontWeight': 'bold'
+                    'fontWeight': 'bold',
+                    'textAlign': 'center'
                 },
-                style_cell={'textAlign': 'left'},
-                page_size=5
-            ) if redes_inativas else html.P("Não há redes inativas no período.", className="text-muted")
+                style_cell={
+                    'textAlign': 'center',
+                    'padding': '10px',
+                    'whiteSpace': 'normal',
+                    'height': 'auto',
+                },
+                style_data_conditional=[
+                    {
+                        'if': {'row_index': 'odd'},
+                        'backgroundColor': '#f9f9f9'
+                    }
+                ],
+                page_size=10,
+                sort_action='native'
+            )
         ])
         
     except Exception as e:
