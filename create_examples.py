@@ -7,6 +7,7 @@ os.makedirs('data', exist_ok=True)
 
 # Função auxiliar para formatar data
 def format_date(days_ago):
+    """Retorna data no formato YYYY-MM-DD"""
     return (datetime.now() - timedelta(days=days_ago)).strftime('%Y-%m-%d')
 
 # Criar DataFrame de redes e filiais com exemplos mais completos
@@ -15,11 +16,11 @@ redes_filiais = pd.DataFrame({
     'Nome da Filial': ['Filial Porto Alegre', 'Filial Florianópolis', 'Filial Manaus', 'Filial Belém', 'Filial Brasília'],
     'Ativa': ['ATIVO', 'ATIVO', 'ATIVO', 'ATIVO', 'ATIVO'],
     'Data de Início': [
-        format_date(365),
-        format_date(300),
-        format_date(180),
-        format_date(150),
-        format_date(90)
+        format_date(365),  # 1 ano atrás
+        format_date(300),  # 10 meses atrás
+        format_date(180),  # 6 meses atrás
+        format_date(150),  # 5 meses atrás
+        format_date(90)    # 3 meses atrás
     ]
 })
 
@@ -30,11 +31,11 @@ colaboradores = pd.DataFrame({
     'Rede': ['Rede Sul', 'Rede Sul', 'Rede Norte', 'Rede Norte', 'Rede Centro'],
     'Ativo': ['ATIVO', 'ATIVO', 'ATIVO', 'ATIVO', 'ATIVO'],
     'Data de Cadastro': [
-        format_date(300),
-        format_date(250),
-        format_date(150),
-        format_date(100),
-        format_date(50)
+        format_date(300),  # 10 meses atrás
+        format_date(250),  # 8 meses atrás
+        format_date(150),  # 5 meses atrás
+        format_date(100),  # 3 meses atrás
+        format_date(50)    # 1.5 meses atrás
     ]
 })
 

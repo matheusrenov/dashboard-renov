@@ -8,8 +8,13 @@ class NetworkDatabase:
         self.init_db()
 
     def init_db(self):
+        """Inicializa o banco de dados com as tabelas necessárias"""
         conn = sqlite3.connect(self.db_path)
         c = conn.cursor()
+
+        # Remover tabelas existentes para garantir estrutura atualizada
+        c.execute('DROP TABLE IF EXISTS employees')
+        c.execute('DROP TABLE IF EXISTS networks_branches')
 
         # Tabela de Redes e Filiais
         c.execute('''
@@ -19,7 +24,7 @@ class NetworkDatabase:
             nome_filial TEXT NOT NULL,
             ativo TEXT DEFAULT 'ATIVO',
             data_inicio TEXT,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            created_at TEXT DEFAULT (datetime('now', 'localtime')),
             updated_at TEXT,
             UNIQUE(nome_rede, nome_filial)
         )
@@ -34,7 +39,7 @@ class NetworkDatabase:
             rede TEXT NOT NULL,
             ativo TEXT DEFAULT 'ATIVO',
             data_cadastro TEXT,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            created_at TEXT DEFAULT (datetime('now', 'localtime')),
             updated_at TEXT,
             FOREIGN KEY (filial, rede) REFERENCES networks_branches(nome_filial, nome_rede)
         )
@@ -64,7 +69,7 @@ class NetworkDatabase:
                     found = True
                     break
             if not found:
-                missing_columns.append(possible_names[0])  # Mostra o nome exato da coluna esperada
+                missing_columns.append(possible_names[0])
         
         if missing_columns:
             raise ValueError(f"Colunas obrigatórias não encontradas: {', '.join(missing_columns)}")
@@ -93,7 +98,7 @@ class NetworkDatabase:
                     found = True
                     break
             if not found:
-                missing_columns.append(possible_names[0])  # Mostra o nome exato da coluna esperada
+                missing_columns.append(possible_names[0])
         
         if missing_columns:
             raise ValueError(f"Colunas obrigatórias não encontradas: {', '.join(missing_columns)}")
@@ -103,7 +108,6 @@ class NetworkDatabase:
     def update_networks_and_branches(self, df):
         """Atualiza a base de redes e filiais"""
         conn = sqlite3.connect(self.db_path)
-        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
         try:
             # Validar e preparar DataFrame
@@ -115,13 +119,12 @@ class NetworkDatabase:
                 INSERT OR REPLACE INTO networks_branches (
                     nome_rede, nome_filial, ativo, data_inicio, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, datetime('now', 'localtime'))
                 ''', (
                     row['nome_rede'],
                     row['nome_filial'],
                     row['ativo'],
-                    row['data_inicio'],
-                    now
+                    row['data_inicio']
                 ))
 
             conn.commit()
@@ -137,7 +140,6 @@ class NetworkDatabase:
     def update_employees(self, df):
         """Atualiza a base de colaboradores"""
         conn = sqlite3.connect(self.db_path)
-        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
         try:
             # Validar e preparar DataFrame
@@ -149,14 +151,13 @@ class NetworkDatabase:
                 INSERT OR REPLACE INTO employees (
                     colaborador, filial, rede, ativo, data_cadastro, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, datetime('now', 'localtime'))
                 ''', (
                     row['colaborador'],
                     row['filial'],
                     row['rede'],
                     row['ativo'],
-                    row['data_cadastro'],
-                    now
+                    row['data_cadastro']
                 ))
 
             conn.commit()
