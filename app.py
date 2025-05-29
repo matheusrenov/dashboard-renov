@@ -243,7 +243,8 @@ def create_dashboard_layout(is_super_admin=False):
                 dcc.Tab(label='Redes', value='networks'),
                 dcc.Tab(label='Rankings', value='rankings'),
                 dcc.Tab(label='Projeções', value='projections'),
-                dcc.Tab(label='Base de Redes e Colaboradores', value='network-base')
+                dcc.Tab(label='Base de Redes e Colaboradores', value='network-base'),
+                dcc.Tab(label='Engajamento', value='engagement')
             ], className="mb-4"),
             html.Div(id='tab-content-area')
         ])
@@ -934,6 +935,190 @@ def generate_network_base_content():
         traceback.print_exc()
         return dbc.Alert(f"Erro ao carregar estatísticas: {str(e)}", color="danger")
 
+def generate_engagement_content(df, network_db):
+    """Gera o conteúdo da aba de Engajamento"""
+    try:
+        if df.empty:
+            return dbc.Alert("Dados não disponíveis para análise de engajamento.", color="warning")
+
+        # Obter dados das bases de redes e colaboradores
+        executive_summary = network_db.get_executive_summary()
+        
+        # Calcular métricas de engajamento
+        total_redes = executive_summary['Nome da Rede'].nunique()
+        total_filiais = executive_summary['Total de Filiais'].sum()
+        total_colaboradores = executive_summary['Total de Colaboradores'].sum()
+        
+        redes_ativas = df['nome_rede'].nunique()
+        filiais_ativas = df['nome_filial'].nunique()
+        colaboradores_ativos = df['nome_vendedor'].nunique()
+        
+        # Calcular taxas de ativação
+        taxa_ativacao_redes = (redes_ativas / total_redes * 100) if total_redes > 0 else 0
+        taxa_ativacao_filiais = (filiais_ativas / total_filiais * 100) if total_filiais > 0 else 0
+        taxa_ativacao_colaboradores = (colaboradores_ativos / total_colaboradores * 100) if total_colaboradores > 0 else 0
+
+        # KPIs de Engajamento
+        kpi_cards = dbc.Row([
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H4("🎯 Taxa de Ativação de Redes", className="card-title text-center"),
+                        html.H2(f"{taxa_ativacao_redes:.1f}%", 
+                               className="text-primary text-center display-4"),
+                        html.P(f"{redes_ativas} de {total_redes} redes ativas", 
+                              className="text-muted text-center")
+                    ])
+                ], className="mb-4 shadow-sm")
+            ], md=4),
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H4("🏪 Taxa de Ativação de Filiais", className="card-title text-center"),
+                        html.H2(f"{taxa_ativacao_filiais:.1f}%", 
+                               className="text-success text-center display-4"),
+                        html.P(f"{filiais_ativas} de {total_filiais} filiais ativas", 
+                              className="text-muted text-center")
+                    ])
+                ], className="mb-4 shadow-sm")
+            ], md=4),
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H4("👥 Taxa de Ativação de Colaboradores", className="card-title text-center"),
+                        html.H2(f"{taxa_ativacao_colaboradores:.1f}%", 
+                               className="text-info text-center display-4"),
+                        html.P(f"{colaboradores_ativos} de {total_colaboradores} colaboradores ativos", 
+                              className="text-muted text-center")
+                    ])
+                ], className="mb-4 shadow-sm")
+            ], md=4)
+        ])
+
+        # Análise de Conversão por Rede
+        rede_stats = df.groupby('nome_rede').agg({
+            'imei': 'count',
+            'situacao_voucher': lambda x: (x.str.lower().str.contains('utilizado|usado|ativo', na=False)).sum()
+        }).reset_index()
+        rede_stats.columns = ['Rede', 'Total_Vouchers', 'Vouchers_Utilizados']
+        rede_stats['Taxa_Conversao'] = (rede_stats['Vouchers_Utilizados'] / rede_stats['Total_Vouchers'] * 100).round(1)
+        rede_stats = rede_stats.sort_values('Taxa_Conversao', ascending=False)
+
+        # Gráfico de Taxa de Conversão por Rede (Top 10)
+        fig_conversion = go.Figure()
+        fig_conversion.add_trace(go.Bar(
+            x=rede_stats.head(10)['Rede'],
+            y=rede_stats.head(10)['Taxa_Conversao'],
+            marker_color='#3498db',
+            text=rede_stats.head(10)['Taxa_Conversao'].apply(lambda x: f'{x:.1f}%'),
+            textposition='outside'
+        ))
+        fig_conversion.update_layout(
+            title='Taxa de Conversão por Rede (Top 10)',
+            xaxis_title='Rede',
+            yaxis_title='Taxa de Conversão (%)',
+            height=400,
+            showlegend=False,
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            xaxis=dict(showgrid=False),
+            yaxis=dict(
+                showgrid=False,
+                range=[0, max(rede_stats['Taxa_Conversao']) * 1.15]
+            )
+        )
+
+        # Análise de Inatividade
+        if 'data_str' in df.columns:
+            df['data_str'] = pd.to_datetime(df['data_str'])
+            ultima_data = df['data_str'].max()
+            dias_inatividade = 30
+            data_corte = ultima_data - pd.Timedelta(days=dias_inatividade)
+            
+            # Redes inativas
+            redes_ativas_periodo = df[df['data_str'] > data_corte]['nome_rede'].unique()
+            redes_inativas = set(executive_summary['Nome da Rede']) - set(redes_ativas_periodo)
+            
+            # Filiais inativas
+            filiais_ativas_periodo = df[df['data_str'] > data_corte]['nome_filial'].unique()
+            total_filiais_set = set()
+            for _, row in executive_summary.iterrows():
+                total_filiais_set.add(f"{row['Nome da Rede']} - {row['Total de Filiais']}")
+            filiais_inativas = len(total_filiais_set) - len(filiais_ativas_periodo)
+            
+            inactivity_stats = pd.DataFrame({
+                'Categoria': ['Redes', 'Filiais'],
+                'Total': [total_redes, total_filiais],
+                'Inativos': [len(redes_inativas), filiais_inativas],
+                'Percentual': [
+                    len(redes_inativas) / total_redes * 100 if total_redes > 0 else 0,
+                    filiais_inativas / total_filiais * 100 if total_filiais > 0 else 0
+                ]
+            })
+
+            # Gráfico de Inatividade
+            fig_inactivity = go.Figure()
+            fig_inactivity.add_trace(go.Bar(
+                x=inactivity_stats['Categoria'],
+                y=inactivity_stats['Percentual'],
+                marker_color='#e74c3c',
+                text=inactivity_stats['Percentual'].apply(lambda x: f'{x:.1f}%'),
+                textposition='outside'
+            ))
+            fig_inactivity.update_layout(
+                title=f'Percentual de Inatividade (Últimos {dias_inatividade} dias)',
+                xaxis_title='Categoria',
+                yaxis_title='% Inativo',
+                height=400,
+                showlegend=False,
+                plot_bgcolor='white',
+                paper_bgcolor='white',
+                xaxis=dict(showgrid=False),
+                yaxis=dict(
+                    showgrid=False,
+                    range=[0, 100]
+                )
+            )
+
+        # Layout Final
+        return html.Div([
+            # Título e Descrição
+            html.H4("📊 Análise de Engajamento", className="mb-4"),
+            html.P([
+                "Esta análise cruza dados das bases de redes, filiais e colaboradores para avaliar o nível de engajamento ",
+                "e identificar oportunidades de melhoria na ativação e conversão."
+            ], className="text-muted mb-4"),
+            
+            # KPIs principais
+            kpi_cards,
+            
+            # Gráficos
+            dbc.Row([
+                dbc.Col([dcc.Graph(figure=fig_conversion)], md=6),
+                dbc.Col([dcc.Graph(figure=fig_inactivity)], md=6)
+            ], className="mb-4"),
+            
+            # Tabela de Redes Inativas
+            html.H5("📋 Redes sem Atividade nos Últimos 30 Dias", className="mt-4 mb-3"),
+            dash_table.DataTable(
+                data=[{"Rede": rede} for rede in sorted(redes_inativas)],
+                columns=[{"name": "Rede", "id": "Rede"}],
+                style_header={
+                    'backgroundColor': '#e74c3c',
+                    'color': 'white',
+                    'fontWeight': 'bold'
+                },
+                style_cell={'textAlign': 'left'},
+                page_size=5
+            ) if redes_inativas else html.P("Não há redes inativas no período.", className="text-muted")
+        ])
+        
+    except Exception as e:
+        print(f"Erro na análise de engajamento: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return dbc.Alert(f"Erro ao gerar análise de engajamento: {str(e)}", color="danger")
+
 # ========================
 # 📥 Callbacks de Upload e Filtros
 # ========================
@@ -1159,6 +1344,8 @@ def update_tab_content(active_tab, filtered_data, original_data):
             return generate_rankings_content(df)
         elif active_tab == "projections":
             return generate_projections_content(original_df, df)
+        elif active_tab == "engagement":
+            return generate_engagement_content(df, network_db)
         else:
             return html.Div("Aba não encontrada")
     except Exception as e:
