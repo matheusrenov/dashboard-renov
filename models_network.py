@@ -1,12 +1,21 @@
 import sqlite3
 import pandas as pd
 from datetime import datetime
+import os
 
 class NetworkDatabase:
     def __init__(self):
-        self.db_path = 'network_data.db'
+        """Inicializa a conexão com o banco de dados"""
+        # Usar um caminho absoluto para o banco de dados para garantir persistência
+        self.db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'network_data.db')
+        
+        # Garantir que o diretório data existe
+        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+        
         print(f"\n=== Inicializando NetworkDatabase ===")
         print(f"Caminho do banco: {self.db_path}")
+        
+        # Criar as tabelas apenas se não existirem
         self.init_db()
 
     def init_db(self):
@@ -14,7 +23,7 @@ class NetworkDatabase:
         conn = sqlite3.connect(self.db_path)
         c = conn.cursor()
 
-        print("\n=== Inicializando banco de dados ===")
+        print("\n=== Verificando estrutura do banco de dados ===")
         try:
             # Verificar se as tabelas já existem
             existing_tables = c.execute('''
@@ -26,7 +35,7 @@ class NetworkDatabase:
             
             print(f"Tabelas existentes: {existing_tables}")
             
-            # Só criar as tabelas se não existirem
+            # Criar tabelas apenas se não existirem
             if 'networks_branches' not in existing_tables:
                 print("Criando tabela networks_branches...")
                 c.execute('''
@@ -41,8 +50,12 @@ class NetworkDatabase:
                     UNIQUE(nome_rede, nome_filial)
                 )
                 ''')
+                print("Tabela networks_branches criada com sucesso!")
             else:
                 print("Tabela networks_branches já existe")
+                # Verificar estrutura da tabela existente
+                cols = c.execute('PRAGMA table_info(networks_branches)').fetchall()
+                print("Colunas existentes:", [col[1] for col in cols])
 
             if 'employees' not in existing_tables:
                 print("Criando tabela employees...")
@@ -59,14 +72,21 @@ class NetworkDatabase:
                     FOREIGN KEY (filial, rede) REFERENCES networks_branches(nome_filial, nome_rede)
                 )
                 ''')
+                print("Tabela employees criada com sucesso!")
             else:
                 print("Tabela employees já existe")
+                # Verificar estrutura da tabela existente
+                cols = c.execute('PRAGMA table_info(employees)').fetchall()
+                print("Colunas existentes:", [col[1] for col in cols])
 
             conn.commit()
-            print("Banco de dados inicializado com sucesso!")
             
-            # Verificar estrutura criada
-            self.check_database_structure()
+            # Verificar dados existentes
+            networks_count = c.execute('SELECT COUNT(*) FROM networks_branches').fetchone()[0]
+            employees_count = c.execute('SELECT COUNT(*) FROM employees').fetchone()[0]
+            print(f"\nDados existentes:")
+            print(f"- Registros em networks_branches: {networks_count}")
+            print(f"- Registros em employees: {employees_count}")
             
         except Exception as e:
             print(f"Erro ao inicializar banco: {str(e)}")
@@ -193,7 +213,13 @@ class NetworkDatabase:
             # Validar e preparar DataFrame
             df = self.validate_networks_df(df)
             
-            # Limpar tabela antes de inserir
+            # Fazer backup dos dados existentes
+            print("Fazendo backup dos dados existentes...")
+            backup_count = conn.execute('SELECT COUNT(*) FROM networks_branches').fetchone()[0]
+            print(f"Registros no backup: {backup_count}")
+            
+            # Limpar tabela antes de inserir novos dados
+            print("Limpando tabela para nova importação...")
             conn.execute('DELETE FROM networks_branches')
             
             # Processar redes e filiais
@@ -241,19 +267,6 @@ class NetworkDatabase:
             
             print(f"Total de registros na tabela: {total}")
             print(f"Total de registros ativos: {ativos}")
-            
-            # Mostrar algumas redes inseridas
-            redes = conn.execute('''
-                SELECT DISTINCT nome_rede, COUNT(*) as total
-                FROM networks_branches
-                GROUP BY nome_rede
-                ORDER BY nome_rede
-                LIMIT 10
-            ''').fetchall()
-            
-            print("\nPrimeiras 10 redes inseridas:")
-            for rede in redes:
-                print(f"- {rede[0]}: {rede[1]} filiais")
             
             return True, f"Base de redes e filiais atualizada com sucesso! {registros_inseridos} registros inseridos."
         
