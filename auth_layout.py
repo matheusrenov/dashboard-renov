@@ -9,13 +9,14 @@ def create_login_layout():
                     dbc.CardBody([
                         html.Div([
                             html.Img(
-                                src="assets/logo-renov.png",
+                                src='./assets/logo-renov.png',
                                 style={
                                     "width": "150px",
-                                    "marginBottom": "20px"
+                                    "marginBottom": "20px",
+                                    "display": "inline-block"
                                 }
                             )
-                        ], className="text-center"),
+                        ], className="text-center mb-4"),
                         
                         dbc.Input(
                             id="login-username",
@@ -61,13 +62,14 @@ def create_register_layout():
                     dbc.CardBody([
                         html.Div([
                             html.Img(
-                                src="assets/logo-renov.png",
+                                src='./assets/logo-renov.png',
                                 style={
                                     "width": "150px",
-                                    "marginBottom": "20px"
+                                    "marginBottom": "20px",
+                                    "display": "inline-block"
                                 }
                             )
-                        ], className="text-center"),
+                        ], className="text-center mb-4"),
                         
                         dbc.Input(
                             id="register-username",
