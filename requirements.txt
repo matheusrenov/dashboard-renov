@@ -17,3 +17,5 @@ psutil==5.9.6
 Werkzeug==2.2.3
 whitenoise==6.6.0
 openpyxl==3.1.2
+flask-sqlalchemy==3.0.2
+flask-migrate==4.0.4

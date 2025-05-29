@@ -11,7 +11,7 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 from unidecode import unidecode
 import warnings
-from models import UserDatabase
+from models import UserDatabase, db
 from models_network import NetworkDatabase
 from auth_layout import create_login_layout, create_register_layout, create_admin_approval_layout
 from dash.exceptions import PreventUpdate
@@ -22,6 +22,7 @@ from flask import Flask
 import socket
 import psutil
 from typing import cast
+from flask_sqlalchemy import SQLAlchemy
 
 load_dotenv()  # carrega variáveis do .env se existir
 
@@ -108,6 +109,13 @@ server.config['PROXY_FIX_X_PROTO'] = 1
 server.config['PROXY_FIX_X_HOST'] = 1
 server.config['PROXY_FIX_X_PORT'] = 1
 server.config['PROXY_FIX_X_PREFIX'] = 1
+
+# Configuração do SQLAlchemy
+app.server.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///data/dashboard.db'
+app.server.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# Inicializa o SQLAlchemy com a instância Flask
+db.init_app(app.server)
 
 # Inicializa os bancos de dados
 db = UserDatabase()
@@ -313,7 +321,7 @@ def generate_kpi_cards(df):
                 dbc.CardBody([
                     html.H6("Lojas Ativas", className="card-title text-muted mb-2"),
                     html.H3(f"{active_stores}", className="text-dark fw-bold mb-1"),
-                    html.Small(f"{(active_stores/total_stores*100):.1f}% do total" if total_stores > 0 else "0% do total", className="text-muted")
+                    html.Small(f"{(active_stores/total_stores*100):.1f}% do total", className="text-muted")
                 ])
             ], className="h-100 shadow-sm border-0")
         ], md=2)
