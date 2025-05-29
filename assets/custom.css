@@ -138,15 +138,46 @@ body {
     transition: transform 0.2s ease-in-out;
 }
 
+.card:hover {
+    transform: translateY(-2px);
+}
+
 /* Botões */
 .btn {
     border-radius: 4px;
     font-weight: 500;
 }
 
+.btn-primary {
+    background-color: #3498db;
+    border-color: #3498db;
+}
+
+.btn-primary:hover {
+    background-color: #2980b9;
+    border-color: #2980b9;
+}
+
+/* Links */
+.btn-link {
+    color: #3498db;
+    text-decoration: none;
+}
+
+.btn-link:hover {
+    color: #2980b9;
+    text-decoration: underline;
+}
+
 /* Formulários */
 .form-control {
     border-radius: 4px;
+    padding: 10px;
+}
+
+.form-control:focus {
+    border-color: #3498db;
+    box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.25);
 }
 
 /* Tabs */

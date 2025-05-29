@@ -8,39 +8,34 @@ def create_login_layout():
                 dbc.Card([
                     dbc.CardBody([
                         html.Div([
-                            html.Div([
-                                html.Img(
-                                    src="assets/logo-renov.png",
-                                    style={
-                                        "maxWidth": "180px",
-                                        "width": "100%",
-                                        "height": "auto",
-                                        "marginBottom": "1rem"
-                                    },
-                                    className="logo-image"
-                                )
-                            ], className="logo-container"),
+                            html.Img(
+                                src="assets/logo-renov.png",
+                                style={
+                                    "width": "150px",
+                                    "marginBottom": "20px"
+                                }
+                            )
                         ], className="text-center"),
                         
                         dbc.Input(
                             id="login-username",
                             type="text",
                             placeholder="Usuário",
-                            className="mb-3 auth-input"
+                            className="mb-3"
                         ),
                         
                         dbc.Input(
                             id="login-password",
                             type="password",
                             placeholder="Senha",
-                            className="mb-4 auth-input"
+                            className="mb-3"
                         ),
                         
                         dbc.Button(
                             "Entrar",
                             id="login-button",
                             color="primary",
-                            className="w-100 mb-3 auth-button",
+                            className="w-100 mb-3",
                             n_clicks=0
                         ),
                         
@@ -49,14 +44,14 @@ def create_login_layout():
                                 "Criar nova conta",
                                 id="show-register",
                                 color="link",
-                                className="p-0 auth-link"
+                                className="p-0"
                             )
                         ], className="text-center")
                     ])
-                ], className="auth-card")
-            ], width=12, md=6, lg=4, className="mx-auto")
+                ], className="shadow", style={"maxWidth": "400px", "width": "100%"})
+            ], width=12, className="d-flex justify-content-center")
         ], className="min-vh-100 align-items-center")
-    ], fluid=True, className="auth-container")
+    ], fluid=True, className="bg-light")
 
 def create_register_layout():
     return dbc.Container([
@@ -65,53 +60,48 @@ def create_register_layout():
                 dbc.Card([
                     dbc.CardBody([
                         html.Div([
-                            html.Div([
-                                html.Img(
-                                    src="assets/logo-renov.png",
-                                    style={
-                                        "maxWidth": "180px",
-                                        "width": "100%",
-                                        "height": "auto",
-                                        "marginBottom": "1rem"
-                                    },
-                                    className="logo-image"
-                                )
-                            ], className="logo-container"),
+                            html.Img(
+                                src="assets/logo-renov.png",
+                                style={
+                                    "width": "150px",
+                                    "marginBottom": "20px"
+                                }
+                            )
                         ], className="text-center"),
                         
                         dbc.Input(
                             id="register-username",
                             type="text",
                             placeholder="Usuário",
-                            className="mb-3 auth-input"
+                            className="mb-3"
                         ),
                         
                         dbc.Input(
                             id="register-email",
                             type="email",
                             placeholder="Email",
-                            className="mb-3 auth-input"
+                            className="mb-3"
                         ),
                         
                         dbc.Input(
                             id="register-password",
                             type="password",
                             placeholder="Senha",
-                            className="mb-3 auth-input"
+                            className="mb-3"
                         ),
                         
                         dbc.Input(
                             id="register-confirm-password",
                             type="password",
                             placeholder="Confirmar Senha",
-                            className="mb-4 auth-input"
+                            className="mb-3"
                         ),
                         
                         dbc.Button(
                             "Registrar",
                             id="register-button",
                             color="success",
-                            className="w-100 mb-3 auth-button",
+                            className="w-100 mb-3",
                             n_clicks=0
                         ),
                         
@@ -120,14 +110,14 @@ def create_register_layout():
                                 "Voltar para login",
                                 id="show-login",
                                 color="link",
-                                className="p-0 auth-link"
+                                className="p-0"
                             )
                         ], className="text-center")
                     ])
-                ], className="auth-card")
-            ], width=12, md=6, lg=4, className="mx-auto")
+                ], className="shadow", style={"maxWidth": "400px", "width": "100%"})
+            ], width=12, className="d-flex justify-content-center")
         ], className="min-vh-100 align-items-center")
-    ], fluid=True, className="auth-container")
+    ], fluid=True, className="bg-light")
 
 def create_admin_approval_layout():
     return html.Div([
