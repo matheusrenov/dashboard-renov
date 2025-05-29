@@ -4,6 +4,26 @@ from dash import Input, Output, State
 import pandas as pd
 from models import ImportHistory
 from app import app
+from typing import Optional, Dict, Any, Union
+
+def get_safe_user_id(user_data: Optional[Dict[str, Any]]) -> int:
+    """
+    Extrai o ID do usuário de forma segura, retornando um valor padrão se não encontrado
+    
+    Args:
+        user_data: Dicionário com dados do usuário ou None
+        
+    Returns:
+        int: ID do usuário ou 1 (sistema) se não encontrado
+    """
+    try:
+        if user_data and isinstance(user_data, dict) and 'id' in user_data:
+            user_id = int(user_data['id'])
+            if user_id > 0:
+                return user_id
+    except (ValueError, TypeError):
+        pass
+    return 1  # ID padrão para sistema
 
 @app.callback(
     [Output("last-import-info", "children"),
@@ -14,7 +34,13 @@ from app import app
     [State('upload-data', 'filename'),
      State('current-user', 'data')]
 )
-def handle_imports(network_clicks, employee_clicks, contents, filename, current_user):
+def handle_imports(
+    network_clicks: Optional[int], 
+    employee_clicks: Optional[int], 
+    contents: Optional[str], 
+    filename: Optional[str], 
+    current_user: Optional[Dict[str, Any]]
+) -> tuple[str, str]:
     ctx = dash.callback_context
     if not ctx.triggered:
         # Recuperar última importação
@@ -29,6 +55,7 @@ def handle_imports(network_clicks, employee_clicks, contents, filename, current_
     
     try:
         import_history = ImportHistory()
+        user_id = get_safe_user_id(current_user)
         
         if button_id == "update-networks":
             # Lógica para processar o arquivo de redes
@@ -37,7 +64,7 @@ def handle_imports(network_clicks, employee_clicks, contents, filename, current_
             import_history.add_import(
                 import_type='redes_filiais',
                 filename='planilha_redes.xlsx',
-                imported_by=current_user['id'] if current_user else None,
+                imported_by=user_id,
                 row_count=len(df)
             )
             
@@ -48,7 +75,7 @@ def handle_imports(network_clicks, employee_clicks, contents, filename, current_
             import_history.add_import(
                 import_type='colaboradores',
                 filename='planilha_colaboradores.xlsx',
-                imported_by=current_user['id'] if current_user else None,
+                imported_by=user_id,
                 row_count=len(df)
             )
             

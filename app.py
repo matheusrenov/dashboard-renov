@@ -11,25 +11,31 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 from unidecode import unidecode
 import warnings
-from models import UserDatabase, db
+from models import UserDatabase
 from models_network import NetworkDatabase
 from auth_layout import create_login_layout, create_register_layout, create_admin_approval_layout
+from error_layout import create_error_layout
 from dash.exceptions import PreventUpdate
 from dotenv import load_dotenv
 import secrets
 from flask_cors import CORS
-from flask import Flask
+from flask import Flask, jsonify
 import socket
 import psutil
-from typing import cast
+from typing import cast, Union, Any, Dict
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import text
+from custom_types import PsutilValue, PercentageValue, SystemStatus
 
 load_dotenv()  # carrega variáveis do .env se existir
+
+# Inicializa o SQLAlchemy
+db = SQLAlchemy()
 
 # ========================
 # 🔧 Funções Utilitárias
 # ========================
-def check_port(port):
+def check_port(port: int) -> bool:
     """Verifica se uma porta está disponível"""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         try:
@@ -38,7 +44,7 @@ def check_port(port):
         except OSError:
             return False
 
-def get_available_port(start_port=8080):
+def get_available_port(start_port: int = 8080) -> int:
     """Encontra uma porta disponível"""
     port = start_port
     while not check_port(port):
@@ -46,6 +52,74 @@ def get_available_port(start_port=8080):
         if port > start_port + 100:  # Limite de tentativas
             raise RuntimeError("Não foi possível encontrar uma porta disponível")
     return port
+
+def check_system_health() -> SystemStatus:
+    """Verifica a saúde do sistema"""
+    try:
+        # Verifica uso de CPU
+        cpu_percent: PercentageValue = cast(float, psutil.cpu_percent(interval=1))
+        
+        # Verifica uso de memória
+        memory = psutil.virtual_memory()
+        memory_percent: PercentageValue = cast(float, memory.percent)
+        
+        # Verifica espaço em disco
+        disk = psutil.disk_usage('/')
+        disk_percent: PercentageValue = cast(float, disk.percent)
+        
+        # Verifica conexão com o banco de dados
+        db_status = True
+        try:
+            user_db = UserDatabase()
+            db_status = user_db.test_connection()
+        except Exception:
+            db_status = False
+        
+        # Define o status inicial
+        status = 'healthy'
+        cpu_status = 'ok'
+        memory_status = 'ok'
+        disk_status = 'ok'
+        
+        # Verifica CPU
+        if cpu_percent > 90:
+            status = 'unhealthy'
+            cpu_status = 'critical'
+        elif cpu_percent > 70:
+            cpu_status = 'warning'
+            
+        # Verifica Memória
+        if memory_percent > 90:
+            status = 'unhealthy'
+            memory_status = 'critical'
+        elif memory_percent > 70:
+            memory_status = 'warning'
+            
+        # Verifica Disco
+        if disk_percent > 90:
+            status = 'unhealthy'
+            disk_status = 'critical'
+        elif disk_percent > 70:
+            disk_status = 'warning'
+            
+        # Se o banco de dados estiver com erro, sistema está unhealthy
+        if not db_status:
+            status = 'unhealthy'
+        
+        # Constrói o dicionário de retorno
+        return {
+            'status': status,
+            'cpu': {'value': cpu_percent, 'status': cpu_status},
+            'memory': {'value': memory_percent, 'status': memory_status},
+            'disk': {'value': disk_percent, 'status': disk_status},
+            'database': {'status': 'ok' if db_status else 'error'}
+        }
+        
+    except Exception as e:
+        return {
+            'status': 'error',
+            'message': str(e)
+        }
 
 # ========================
 # 🚀 Inicialização do App
@@ -121,6 +195,18 @@ db.init_app(app.server)
 db = UserDatabase()
 network_db = NetworkDatabase()
 
+# Adiciona endpoint de healthcheck
+@server.route('/health')
+def health_check():
+    health_status = check_system_health()
+    
+    if health_status['status'] == 'error':
+        return jsonify(health_status), 500
+    elif health_status['status'] == 'unhealthy':
+        return jsonify(health_status), 503
+    else:
+        return jsonify(health_status), 200
+
 # ========================
 # 🔐 Layout Principal
 # ========================
@@ -128,7 +214,8 @@ def serve_layout():
     return html.Div([
         dcc.Location(id='url', refresh=False),
         dcc.Store(id='session-store', storage_type='session'),
-        html.Div(id='page-content', children=create_login_layout()),  # Layout inicial definido
+        dcc.Store(id='error-store', storage_type='session'),
+        html.Div(id='page-content', children=create_login_layout()),
         html.Div(id='auth-status'),
         dcc.Store(id='store-data'),
         dcc.Store(id='store-filtered-data')
@@ -1450,18 +1537,32 @@ app.clientside_callback(
 # ========================
 @app.callback(
     Output('page-content', 'children'),
-    [Input('url', 'pathname')],
-    prevent_initial_call=True  # Previne chamada inicial
+    [Input('url', 'pathname'),
+     Input('error-store', 'data')],
+    prevent_initial_call=True
 )
-def display_page(pathname):
-    print(f"Roteamento para: {pathname}")
+def display_page(pathname, error_data):
+    ctx = callback_context
+    if not ctx.triggered:
+        return create_login_layout()
     
-    if not pathname:  # Se não houver pathname, mostra login
+    trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    
+    if trigger_id == 'error-store' and error_data:
+        return create_error_layout(
+            error_type=error_data.get('type', 'deploy'),
+            error_message=error_data.get('message'),
+            error_details=error_data.get('details')
+        )
+    
+    if not pathname:
         return create_login_layout()
     elif pathname == '/dashboard':
         return create_dashboard_layout()
     elif pathname == '/register':
         return create_register_layout()
+    elif pathname == '/error':
+        return create_error_layout()
     else:
         return create_login_layout()
 
