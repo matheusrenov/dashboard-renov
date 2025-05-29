@@ -7,20 +7,20 @@ class NetworkDatabase:
     def __init__(self):
         """Inicializa a conexão com o banco de dados"""
         # Usar um caminho absoluto para o banco de dados para garantir persistência
-        self.db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'network_data.db')
+        self.db_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'network_data.db')
         
         # Garantir que o diretório data existe
-        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+        os.makedirs(os.path.dirname(self.db_file), exist_ok=True)
         
         print(f"\n=== Inicializando NetworkDatabase ===")
-        print(f"Caminho do banco: {self.db_path}")
+        print(f"Caminho do banco: {self.db_file}")
         
         # Criar as tabelas apenas se não existirem
         self.init_db()
 
     def init_db(self):
         """Inicializa o banco de dados com as tabelas necessárias"""
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_file)
         c = conn.cursor()
 
         print("\n=== Verificando estrutura do banco de dados ===")
@@ -204,7 +204,7 @@ class NetworkDatabase:
 
     def update_networks_and_branches(self, df):
         """Atualiza a base de redes e filiais"""
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_file)
         current_date = datetime.now().strftime('%Y-%m-%d')
 
         try:
@@ -282,7 +282,7 @@ class NetworkDatabase:
 
     def update_employees(self, df):
         """Atualiza a base de colaboradores"""
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_file)
         current_date = datetime.now().strftime('%Y-%m-%d')
 
         try:
@@ -362,7 +362,7 @@ class NetworkDatabase:
 
     def get_network_stats(self):
         """Retorna estatísticas das redes"""
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_file)
         try:
             print("\n=== Consultando estatísticas do banco de dados ===")
             
@@ -426,7 +426,7 @@ class NetworkDatabase:
 
     def debug_data(self):
         """Função auxiliar para debug dos dados"""
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_file)
         try:
             print("\n=== DEBUG: Conteúdo das Tabelas ===")
             
@@ -449,7 +449,7 @@ class NetworkDatabase:
 
     def check_database_structure(self):
         """Verifica a estrutura do banco de dados e retorna informações detalhadas"""
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_file)
         try:
             print("\n=== Verificando estrutura do banco de dados ===")
             
@@ -502,7 +502,7 @@ class NetworkDatabase:
 
     def get_executive_summary(self):
         """Retorna o resumo executivo com totais por rede"""
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_file)
         try:
             # Consulta para obter totais por rede
             query = '''
@@ -540,7 +540,7 @@ class NetworkDatabase:
 
     def get_evolution_data(self):
         """Retorna dados para os gráficos evolutivos mensais"""
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_file)
         try:
             # Consulta para evolução de redes
             networks_query = '''
@@ -642,4 +642,32 @@ class NetworkDatabase:
             traceback.print_exc()
             return pd.DataFrame()
         finally:
-            conn.close() 
+            conn.close()
+
+    def get_all_employees(self) -> pd.DataFrame:
+        """
+        Retorna todos os colaboradores cadastrados no banco de dados
+        
+        Returns:
+            DataFrame com as colunas: nome, filial, rede, status_ativo, data_cadastro
+        """
+        try:
+            conn = sqlite3.connect(self.db_file)
+            query = """
+            SELECT 
+                e.nome,
+                e.filial,
+                e.rede,
+                e.status_ativo,
+                e.data_cadastro
+            FROM employees e
+            JOIN branches b ON e.filial = b.nome_filial AND e.rede = b.nome_rede
+            WHERE e.status_ativo = 1
+            ORDER BY e.rede, e.filial, e.nome
+            """
+            df = pd.read_sql_query(query, conn)
+            conn.close()
+            return df
+        except Exception as e:
+            print(f"Erro ao obter colaboradores: {str(e)}")
+            return pd.DataFrame() 

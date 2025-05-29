@@ -1210,25 +1210,75 @@ def generate_engagement_content(df, network_db):
             
             tabela_analitica.append(rede_data)
 
-        # Layout Final
+        # Nova seção: Engajamento de Equipes
+        # Preparar dados para a análise de engajamento
+        colaboradores_ativos = set(df['nome_vendedor'].unique())
+        
+        # Obter todos os colaboradores do banco de dados
+        todos_colaboradores = network_db.get_all_employees()
+        if todos_colaboradores.empty:
+            return dbc.Alert("Dados de colaboradores não disponíveis.", color="warning")
+        
+        # Criar dropdown de redes
+        redes_options = [
+            {'label': 'Todas as Redes', 'value': 'todas'}
+        ] + [
+            {'label': rede, 'value': rede}
+            for rede in sorted(todos_colaboradores['rede'].unique())
+        ]
+        
+        # Criar dropdown de situação
+        situacao_options = [
+            {'label': 'Total', 'value': 'total'},
+            {'label': 'Utilizado', 'value': 'utilizado'},
+            {'label': 'Sem vouchers', 'value': 'sem_vouchers'}
+        ]
+        
+        # Seção de filtros
+        filtros_equipes = dbc.Card([
+            dbc.CardHeader(html.H5("🎯 Engajamento de Equipes", className="mb-0")),
+            dbc.CardBody([
+                dbc.Row([
+                    dbc.Col([
+                        html.Label("Rede:", className="mb-2"),
+                        dcc.Dropdown(
+                            id='filtro-rede-equipes',
+                            options=redes_options,
+                            value='todas',
+                            clearable=False,
+                            className="mb-3"
+                        )
+                    ], md=6),
+                    dbc.Col([
+                        html.Label("Situação:", className="mb-2"),
+                        dcc.Dropdown(
+                            id='filtro-situacao-equipes',
+                            options=situacao_options,
+                            value='total',
+                            clearable=False,
+                            className="mb-3"
+                        )
+                    ], md=6)
+                ]),
+                html.Div(id='tabela-equipes-container')
+            ])
+        ], className="mb-4")
+        
+        # Layout final
         return html.Div([
-            # Título e Descrição
-            html.H4("📊 Análise de Engajamento", className="mb-4"),
-            html.P([
-                "Esta análise cruza dados das bases de redes, filiais e colaboradores para avaliar o nível de engajamento ",
-                "e identificar oportunidades de melhoria na ativação e conversão."
-            ], className="text-muted mb-4"),
-            
-            # KPIs principais
+            # KPIs existentes
             kpi_cards,
             
-            # Gráficos
+            # Gráficos existentes
             dbc.Row([
                 dbc.Col([dcc.Graph(figure=fig_temporal)], md=6),
                 dbc.Col([dcc.Graph(figure=fig_produtividade)], md=6)
             ], className="mb-4"),
             
-            # Tabela Analítica
+            # Nova seção de Engajamento de Equipes
+            filtros_equipes,
+            
+            # Tabela Analítica existente
             html.H5("📋 Análise Detalhada por Rede", className="mt-4 mb-3"),
             dash_table.DataTable(
                 data=tabela_analitica,
@@ -1273,6 +1323,119 @@ def generate_engagement_content(df, network_db):
         import traceback
         traceback.print_exc()
         return dbc.Alert(f"Erro ao gerar análise de engajamento: {str(e)}", color="danger")
+
+@app.callback(
+    Output('tabela-equipes-container', 'children'),
+    [Input('filtro-rede-equipes', 'value'),
+     Input('filtro-situacao-equipes', 'value')],
+    [State('store-data', 'data')]
+)
+def update_tabela_equipes(rede_selecionada, situacao_selecionada, data):
+    """Atualiza a tabela de equipes baseada nos filtros selecionados"""
+    if not data:
+        return html.Div("Nenhum dado disponível.")
+    
+    try:
+        # Converter dados para DataFrame
+        df = pd.DataFrame(data)
+        
+        # Obter dados do banco de dados de redes
+        network_db = NetworkDatabase()
+        todos_colaboradores = network_db.get_all_employees()
+        
+        if todos_colaboradores.empty:
+            return html.Div("Dados de colaboradores não disponíveis.")
+        
+        # Filtrar por rede se necessário
+        if rede_selecionada != 'todas':
+            todos_colaboradores = todos_colaboradores[todos_colaboradores['rede'] == rede_selecionada]
+        
+        # Criar conjunto de colaboradores com vouchers utilizados
+        colaboradores_com_vouchers = set(df[
+            df['situacao_voucher'].str.lower().str.contains('utilizado|usado|ativo', na=False)
+        ]['nome_vendedor'].unique())
+        
+        # Filtrar colaboradores baseado na situação selecionada
+        if situacao_selecionada == 'utilizado':
+            colaboradores_filtrados = todos_colaboradores[
+                todos_colaboradores['nome'].isin(colaboradores_com_vouchers)
+            ]
+        elif situacao_selecionada == 'sem_vouchers':
+            colaboradores_filtrados = todos_colaboradores[
+                ~todos_colaboradores['nome'].isin(colaboradores_com_vouchers)
+            ]
+        else:  # total
+            colaboradores_filtrados = todos_colaboradores
+        
+        # Agrupar por filial
+        filiais_grupos = colaboradores_filtrados.groupby(['filial', 'rede'])
+        
+        # Criar lista de tabelas, uma para cada filial
+        tabelas_filiais = []
+        for (filial, rede), grupo in filiais_grupos:
+            # Cabeçalho da filial
+            header = dbc.Alert(
+                f"📍 {filial} - {rede}",
+                color="info",
+                className="mt-3 mb-2"
+            )
+            
+            # Tabela de colaboradores da filial
+            tabela = dash_table.DataTable(
+                data=grupo[['nome']].to_dict('records'),
+                columns=[
+                    {"name": "Colaborador", "id": "nome"}
+                ],
+                style_header={
+                    'backgroundColor': '#f8f9fa',
+                    'fontWeight': 'bold',
+                    'border': '1px solid #dee2e6'
+                },
+                style_cell={
+                    'textAlign': 'left',
+                    'padding': '10px',
+                    'border': '1px solid #dee2e6'
+                },
+                style_table={
+                    'border': '1px solid #dee2e6',
+                    'borderRadius': '5px',
+                    'overflow': 'hidden'
+                },
+                style_data_conditional=[
+                    {
+                        'if': {'row_index': 'odd'},
+                        'backgroundColor': '#f8f9fa'
+                    }
+                ],
+                page_size=5
+            )
+            
+            tabelas_filiais.extend([header, tabela])
+        
+        # Adicionar contador de resultados
+        total_filiais = len(filiais_grupos)
+        total_colaboradores = len(colaboradores_filtrados)
+        
+        resumo = dbc.Alert(
+            [
+                html.H6("📊 Resumo da consulta:", className="mb-2"),
+                html.P([
+                    f"Total de Filiais: {total_filiais}",
+                    html.Br(),
+                    f"Total de Colaboradores: {total_colaboradores}"
+                ], className="mb-0")
+            ],
+            color="success",
+            className="mb-3"
+        )
+        
+        return html.Div([resumo] + tabelas_filiais)
+        
+    except Exception as e:
+        print(f"Erro ao atualizar tabela de equipes: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return html.Div(f"Erro ao gerar tabela: {str(e)}")
 
 # ========================
 # 📥 Callbacks de Upload e Filtros
