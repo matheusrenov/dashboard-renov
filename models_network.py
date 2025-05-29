@@ -19,8 +19,8 @@ class NetworkDatabase:
             nome_filial TEXT NOT NULL,
             ativo TEXT DEFAULT 'ATIVO',
             data_inicio TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT,
             UNIQUE(nome_rede, nome_filial)
         )
         ''')
@@ -34,8 +34,8 @@ class NetworkDatabase:
             rede TEXT NOT NULL,
             ativo TEXT DEFAULT 'ATIVO',
             data_cadastro TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT,
             FOREIGN KEY (filial, rede) REFERENCES networks_branches(nome_filial, nome_rede)
         )
         ''')
@@ -103,7 +103,7 @@ class NetworkDatabase:
     def update_networks_and_branches(self, df):
         """Atualiza a base de redes e filiais"""
         conn = sqlite3.connect(self.db_path)
-        now = datetime.now()
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
         try:
             # Validar e preparar DataFrame
@@ -137,7 +137,7 @@ class NetworkDatabase:
     def update_employees(self, df):
         """Atualiza a base de colaboradores"""
         conn = sqlite3.connect(self.db_path)
-        now = datetime.now()
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
         try:
             # Validar e preparar DataFrame

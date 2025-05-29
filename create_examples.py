@@ -5,17 +5,21 @@ from datetime import datetime, timedelta
 # Criar diretório data se não existir
 os.makedirs('data', exist_ok=True)
 
+# Função auxiliar para formatar data
+def format_date(days_ago):
+    return (datetime.now() - timedelta(days=days_ago)).strftime('%Y-%m-%d')
+
 # Criar DataFrame de redes e filiais com exemplos mais completos
 redes_filiais = pd.DataFrame({
     'Nome da Rede': ['Rede Sul', 'Rede Sul', 'Rede Norte', 'Rede Norte', 'Rede Centro'],
     'Nome da Filial': ['Filial Porto Alegre', 'Filial Florianópolis', 'Filial Manaus', 'Filial Belém', 'Filial Brasília'],
     'Ativa': ['ATIVO', 'ATIVO', 'ATIVO', 'ATIVO', 'ATIVO'],
     'Data de Início': [
-        (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d'),
-        (datetime.now() - timedelta(days=300)).strftime('%Y-%m-%d'),
-        (datetime.now() - timedelta(days=180)).strftime('%Y-%m-%d'),
-        (datetime.now() - timedelta(days=150)).strftime('%Y-%m-%d'),
-        (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d')
+        format_date(365),
+        format_date(300),
+        format_date(180),
+        format_date(150),
+        format_date(90)
     ]
 })
 
@@ -26,11 +30,11 @@ colaboradores = pd.DataFrame({
     'Rede': ['Rede Sul', 'Rede Sul', 'Rede Norte', 'Rede Norte', 'Rede Centro'],
     'Ativo': ['ATIVO', 'ATIVO', 'ATIVO', 'ATIVO', 'ATIVO'],
     'Data de Cadastro': [
-        (datetime.now() - timedelta(days=300)).strftime('%Y-%m-%d'),
-        (datetime.now() - timedelta(days=250)).strftime('%Y-%m-%d'),
-        (datetime.now() - timedelta(days=150)).strftime('%Y-%m-%d'),
-        (datetime.now() - timedelta(days=100)).strftime('%Y-%m-%d'),
-        (datetime.now() - timedelta(days=50)).strftime('%Y-%m-%d')
+        format_date(300),
+        format_date(250),
+        format_date(150),
+        format_date(100),
+        format_date(50)
     ]
 })
 
