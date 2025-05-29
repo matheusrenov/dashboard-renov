@@ -735,7 +735,10 @@ def generate_projections_content(original_df, filtered_df):
 def generate_network_base_content():
     """Gera o conteúdo da aba de Base de Redes e Colaboradores"""
     try:
-        stats = network_db.get_network_stats()
+        db = NetworkDatabase()
+        stats = db.get_network_stats()
+        
+        print("DEBUG - Stats retornados:", stats)  # Debug
         
         if all(v == 0 for v in stats.values()):
             return dbc.Alert([
@@ -814,6 +817,7 @@ def generate_network_base_content():
             ])
         ])
     except Exception as e:
+        print(f"Erro ao gerar conteúdo da base: {str(e)}")  # Debug
         return dbc.Alert(f"Erro ao carregar estatísticas: {str(e)}", color="danger")
 
 # ========================
@@ -1289,10 +1293,15 @@ if __name__ == '__main__':
     prevent_initial_call=True
 )
 def update_network_base_tab(upload_status, current_tab):
+    """Atualiza a aba de base de redes quando há um novo upload"""
     if not upload_status or current_tab != 'network-base':
-        return no_update
+        raise PreventUpdate
         
+    # Se houve um upload bem sucedido, atualiza o conteúdo
     if isinstance(upload_status, dict) and upload_status.get('props', {}).get('color') == 'success':
+        # Debug: Imprimir estatísticas antes de gerar o conteúdo
+        db = NetworkDatabase()
+        db.debug_data()  # Imprime os dados das tabelas
         return generate_network_base_content()
     
     return no_update

@@ -230,26 +230,43 @@ class NetworkDatabase:
         """Retorna estatísticas das redes"""
         conn = sqlite3.connect(self.db_path)
         try:
-            # Total de redes ativas
+            # Total de redes ativas - usando DISTINCT e UPPER para normalização
             total_networks = conn.execute('''
                 SELECT COUNT(DISTINCT nome_rede) 
                 FROM networks_branches 
-                WHERE UPPER(ativo) = 'ATIVO'
+                WHERE UPPER(TRIM(ativo)) = 'ATIVO'
             ''').fetchone()[0]
 
-            # Total de filiais ativas
+            # Total de filiais ativas - usando DISTINCT e UPPER para normalização
             total_branches = conn.execute('''
-                SELECT COUNT(DISTINCT nome_filial) 
+                SELECT COUNT(*) 
                 FROM networks_branches 
-                WHERE UPPER(ativo) = 'ATIVO'
+                WHERE UPPER(TRIM(ativo)) = 'ATIVO'
             ''').fetchone()[0]
 
-            # Total de colaboradores ativos
+            # Total de colaboradores ativos - usando DISTINCT e UPPER para normalização
             total_employees = conn.execute('''
-                SELECT COUNT(DISTINCT colaborador) 
+                SELECT COUNT(*) 
                 FROM employees 
-                WHERE UPPER(ativo) = 'ATIVO'
+                WHERE UPPER(TRIM(ativo)) = 'ATIVO'
             ''').fetchone()[0]
+
+            # Debug: Imprimir os resultados para verificação
+            print(f"DEBUG - Estatísticas encontradas:")
+            print(f"Redes: {total_networks}")
+            print(f"Filiais: {total_branches}")
+            print(f"Colaboradores: {total_employees}")
+
+            # Verificar dados brutos
+            print("\nDEBUG - Dados brutos:")
+            networks = conn.execute('SELECT DISTINCT nome_rede FROM networks_branches').fetchall()
+            print(f"Redes encontradas: {[r[0] for r in networks]}")
+            
+            branches = conn.execute('SELECT nome_filial, ativo FROM networks_branches').fetchall()
+            print(f"Filiais encontradas: {len(branches)}")
+            
+            employees = conn.execute('SELECT COUNT(*) FROM employees').fetchone()
+            print(f"Total de registros de colaboradores: {employees[0]}")
 
             return {
                 'total_networks': total_networks or 0,
@@ -264,5 +281,28 @@ class NetworkDatabase:
                 'total_branches': 0,
                 'total_employees': 0
             }
+        finally:
+            conn.close()
+
+    def debug_data(self):
+        """Função auxiliar para debug dos dados"""
+        conn = sqlite3.connect(self.db_path)
+        try:
+            print("\n=== DEBUG: Conteúdo das Tabelas ===")
+            
+            print("\nRedes e Filiais:")
+            networks_data = pd.read_sql_query('''
+                SELECT * FROM networks_branches
+            ''', conn)
+            print(networks_data)
+            
+            print("\nColaboradores:")
+            employees_data = pd.read_sql_query('''
+                SELECT * FROM employees
+            ''', conn)
+            print(employees_data)
+            
+        except Exception as e:
+            print(f"Erro ao debugar dados: {str(e)}")
         finally:
             conn.close() 
