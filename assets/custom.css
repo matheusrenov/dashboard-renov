@@ -59,8 +59,14 @@
 }
 
 .auth-header img {
-    max-width: 150px;
+    max-width: 200px;
+    height: auto;
     margin-bottom: 1.5rem;
+    transition: transform 0.3s ease;
+}
+
+.auth-header img:hover {
+    transform: scale(1.05);
 }
 
 .auth-alert {
@@ -80,6 +86,24 @@
     }
 }
 
+/* Estilos específicos para o logo */
+.logo-container {
+    margin-bottom: 2rem;
+    text-align: center;
+}
+
+.logo-container img {
+    max-width: 200px;
+    width: 100%;
+    height: auto;
+    transition: transform 0.3s ease;
+}
+
+.logo-container img:hover {
+    transform: scale(1.05);
+}
+
+/* Resto dos estilos existentes */
 .pending-users-table {
     margin-top: 2rem;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);

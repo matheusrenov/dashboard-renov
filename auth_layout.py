@@ -8,8 +8,16 @@ def create_login_layout():
                 dbc.Card([
                     dbc.CardBody([
                         html.Div([
-                            html.Img(src="assets/logo-renov.png", style={"maxWidth": "200px"}),
-                            html.H3("Login", className="mt-3")
+                            html.Img(
+                                src="/assets/logo-renov.png",
+                                style={
+                                    "maxWidth": "200px",
+                                    "width": "100%",
+                                    "height": "auto",
+                                    "marginBottom": "2rem"
+                                }
+                            ),
+                            html.H3("Login", className="text-center")
                         ], className="text-center mb-4"),
                         
                         dbc.Input(
@@ -55,8 +63,16 @@ def create_register_layout():
                 dbc.Card([
                     dbc.CardBody([
                         html.Div([
-                            html.Img(src="assets/logo-renov.png", style={"maxWidth": "200px"}),
-                            html.H3("Registro", className="mt-3")
+                            html.Img(
+                                src="/assets/logo-renov.png",
+                                style={
+                                    "maxWidth": "200px",
+                                    "width": "100%",
+                                    "height": "auto",
+                                    "marginBottom": "2rem"
+                                }
+                            ),
+                            html.H3("Registro", className="text-center")
                         ], className="text-center mb-4"),
                         
                         dbc.Input(
