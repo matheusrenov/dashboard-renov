@@ -9,7 +9,7 @@ def create_login_layout():
                     dbc.CardBody([
                         html.Div([
                             html.Img(
-                                src='./assets/logo-renov.png',
+                                src='./assets/images/Logo Roxo.png',
                                 style={
                                     "width": "150px",
                                     "marginBottom": "20px",
@@ -62,7 +62,7 @@ def create_register_layout():
                     dbc.CardBody([
                         html.Div([
                             html.Img(
-                                src='./assets/logo-renov.png',
+                                src='./assets/images/Logo Roxo.png',
                                 style={
                                     "width": "150px",
                                     "marginBottom": "20px",
