@@ -16,41 +16,51 @@ class NetworkDatabase:
 
         print("\n=== Inicializando banco de dados ===")
         try:
-            # Remover tabelas existentes para garantir estrutura atualizada
-            print("Removendo tabelas existentes...")
-            c.execute('DROP TABLE IF EXISTS employees')
-            c.execute('DROP TABLE IF EXISTS networks_branches')
+            # Verificar se as tabelas já existem
+            existing_tables = c.execute('''
+                SELECT name FROM sqlite_master 
+                WHERE type='table' AND 
+                name IN ('networks_branches', 'employees')
+            ''').fetchall()
+            existing_tables = [t[0] for t in existing_tables]
+            
+            print(f"Tabelas existentes: {existing_tables}")
+            
+            # Só criar as tabelas se não existirem
+            if 'networks_branches' not in existing_tables:
+                print("Criando tabela networks_branches...")
+                c.execute('''
+                CREATE TABLE networks_branches (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    nome_rede TEXT NOT NULL,
+                    nome_filial TEXT NOT NULL,
+                    ativo TEXT NOT NULL DEFAULT 'ATIVO',
+                    data_inicio TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE(nome_rede, nome_filial)
+                )
+                ''')
+            else:
+                print("Tabela networks_branches já existe")
 
-            # Tabela de Redes e Filiais
-            print("Criando tabela networks_branches...")
-            c.execute('''
-            CREATE TABLE IF NOT EXISTS networks_branches (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                nome_rede TEXT NOT NULL,
-                nome_filial TEXT NOT NULL,
-                ativo TEXT NOT NULL DEFAULT 'ATIVO',
-                data_inicio TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                UNIQUE(nome_rede, nome_filial)
-            )
-            ''')
-
-            # Tabela de Colaboradores
-            print("Criando tabela employees...")
-            c.execute('''
-            CREATE TABLE IF NOT EXISTS employees (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                colaborador TEXT NOT NULL,
-                filial TEXT NOT NULL,
-                rede TEXT NOT NULL,
-                ativo TEXT NOT NULL DEFAULT 'ATIVO',
-                data_cadastro TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                FOREIGN KEY (filial, rede) REFERENCES networks_branches(nome_filial, nome_rede)
-            )
-            ''')
+            if 'employees' not in existing_tables:
+                print("Criando tabela employees...")
+                c.execute('''
+                CREATE TABLE employees (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    colaborador TEXT NOT NULL,
+                    filial TEXT NOT NULL,
+                    rede TEXT NOT NULL,
+                    ativo TEXT NOT NULL DEFAULT 'ATIVO',
+                    data_cadastro TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY (filial, rede) REFERENCES networks_branches(nome_filial, nome_rede)
+                )
+                ''')
+            else:
+                print("Tabela employees já existe")
 
             conn.commit()
             print("Banco de dados inicializado com sucesso!")
@@ -161,34 +171,60 @@ class NetworkDatabase:
         current_date = datetime.now().strftime('%Y-%m-%d')
 
         try:
+            print("\n=== Atualizando redes e filiais ===")
+            print("DataFrame original:")
+            print(df.head())
+            print(f"Total de registros: {len(df)}")
+            
             # Validar e preparar DataFrame
             df = self.validate_networks_df(df)
             
+            print("\nDataFrame após validação:")
+            print(df.head())
+            print(f"Total de registros após validação: {len(df)}")
+            
             # Processar redes e filiais
+            registros_inseridos = 0
             for _, row in df.iterrows():
-                # Verificar se todos os campos obrigatórios estão preenchidos
-                if any(pd.isna(row[col]) for col in ['nome_rede', 'nome_filial', 'ativo', 'data_inicio']):
-                    continue  # Pula registros com campos obrigatórios nulos
-                
-                conn.execute('''
-                INSERT OR REPLACE INTO networks_branches (
-                    nome_rede, nome_filial, ativo, data_inicio, created_at, updated_at
-                )
-                VALUES (?, ?, ?, ?, ?, ?)
-                ''', (
-                    row['nome_rede'],
-                    row['nome_filial'],
-                    row['ativo'],
-                    row['data_inicio'],
-                    current_date,
-                    current_date
-                ))
+                try:
+                    # Verificar se todos os campos obrigatórios estão preenchidos
+                    if any(pd.isna(row[col]) for col in ['nome_rede', 'nome_filial', 'ativo', 'data_inicio']):
+                        print(f"Pulando registro com campos nulos: {row.to_dict()}")
+                        continue
+                    
+                    conn.execute('''
+                    INSERT OR REPLACE INTO networks_branches (
+                        nome_rede, nome_filial, ativo, data_inicio, created_at, updated_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    ''', (
+                        row['nome_rede'],
+                        row['nome_filial'],
+                        row['ativo'],
+                        row['data_inicio'],
+                        current_date,
+                        current_date
+                    ))
+                    registros_inseridos += 1
+                except Exception as e:
+                    print(f"Erro ao inserir registro: {row.to_dict()}")
+                    print(f"Erro: {str(e)}")
+                    continue
 
             conn.commit()
-            return True, "Base de redes e filiais atualizada com sucesso!"
+            print(f"\nTotal de registros inseridos: {registros_inseridos}")
+            
+            # Verificar dados após inserção
+            total = conn.execute('SELECT COUNT(*) FROM networks_branches').fetchone()[0]
+            print(f"Total de registros na tabela: {total}")
+            
+            return True, f"Base de redes e filiais atualizada com sucesso! {registros_inseridos} registros inseridos."
         
         except Exception as e:
             conn.rollback()
+            print(f"Erro ao atualizar base: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return False, f"Erro ao atualizar base: {str(e)}"
         
         finally:
@@ -200,45 +236,75 @@ class NetworkDatabase:
         current_date = datetime.now().strftime('%Y-%m-%d')
 
         try:
+            print("\n=== Atualizando colaboradores ===")
+            print("DataFrame original:")
+            print(df.head())
+            print(f"Total de registros: {len(df)}")
+            
             # Validar e preparar DataFrame
             df = self.validate_employees_df(df)
+            
+            print("\nDataFrame após validação:")
+            print(df.head())
+            print(f"Total de registros após validação: {len(df)}")
             
             # Primeiro, vamos verificar se todas as combinações de filial/rede existem
             existing_branches = pd.read_sql_query('''
                 SELECT nome_filial, nome_rede FROM networks_branches
             ''', conn)
             
+            print(f"\nFiliais existentes: {len(existing_branches)}")
+            
             # Processar colaboradores
+            registros_inseridos = 0
             for _, row in df.iterrows():
-                # Verificar se todos os campos obrigatórios estão preenchidos
-                if any(pd.isna(row[col]) for col in ['colaborador', 'filial', 'rede', 'ativo', 'data_cadastro']):
-                    continue  # Pula registros com campos obrigatórios nulos
-                
-                # Verificar se a combinação filial/rede existe
-                if not existing_branches[
-                    (existing_branches['nome_filial'] == row['filial']) & 
-                    (existing_branches['nome_rede'] == row['rede'])
-                ].empty:
-                    conn.execute('''
-                    INSERT OR REPLACE INTO employees (
-                        colaborador, filial, rede, ativo, data_cadastro, created_at, updated_at
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                    ''', (
-                        row['colaborador'],
-                        row['filial'],
-                        row['rede'],
-                        row['ativo'],
-                        row['data_cadastro'],
-                        current_date,
-                        current_date
-                    ))
+                try:
+                    # Verificar se todos os campos obrigatórios estão preenchidos
+                    if any(pd.isna(row[col]) for col in ['colaborador', 'filial', 'rede', 'ativo', 'data_cadastro']):
+                        print(f"Pulando registro com campos nulos: {row.to_dict()}")
+                        continue
+                    
+                    # Verificar se a combinação filial/rede existe
+                    if not existing_branches[
+                        (existing_branches['nome_filial'] == row['filial']) & 
+                        (existing_branches['nome_rede'] == row['rede'])
+                    ].empty:
+                        conn.execute('''
+                        INSERT OR REPLACE INTO employees (
+                            colaborador, filial, rede, ativo, data_cadastro, created_at, updated_at
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        ''', (
+                            row['colaborador'],
+                            row['filial'],
+                            row['rede'],
+                            row['ativo'],
+                            row['data_cadastro'],
+                            current_date,
+                            current_date
+                        ))
+                        registros_inseridos += 1
+                    else:
+                        print(f"Filial/rede não encontrada: {row['filial']} / {row['rede']}")
+                except Exception as e:
+                    print(f"Erro ao inserir registro: {row.to_dict()}")
+                    print(f"Erro: {str(e)}")
+                    continue
 
             conn.commit()
-            return True, "Base de colaboradores atualizada com sucesso!"
+            print(f"\nTotal de registros inseridos: {registros_inseridos}")
+            
+            # Verificar dados após inserção
+            total = conn.execute('SELECT COUNT(*) FROM employees').fetchone()[0]
+            print(f"Total de registros na tabela: {total}")
+            
+            return True, f"Base de colaboradores atualizada com sucesso! {registros_inseridos} registros inseridos."
         
         except Exception as e:
             conn.rollback()
+            print(f"Erro ao atualizar base: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return False, f"Erro ao atualizar base: {str(e)}"
         
         finally:
