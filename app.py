@@ -22,6 +22,7 @@ from flask_cors import CORS
 from flask import Flask, jsonify
 import socket
 import psutil
+import traceback
 from typing import cast, Union, Any, Dict
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import text
@@ -1985,12 +1986,22 @@ def handle_upload(contents, filename):
             return no_data_message(), None, {'display': 'block'}, {'display': 'none'}, [], [], []
         
         print(f"Dados carregados com sucesso. Registros: {len(df)}")
-        print(f"Colunas: {df.columns.tolist()}")
         
-        # Preparar opções para os filtros
-        month_options = [{'label': m, 'value': m} for m in sorted(df['Mês'].unique())]
-        network_options = [{'label': n, 'value': n} for n in sorted(df['Rede'].unique())]
-        status_options = [{'label': s, 'value': s} for s in sorted(df['Status'].unique())]
+        # Preparar opções para os filtros (garantindo que são strings)
+        try:
+            month_options = [{'label': str(m), 'value': str(m)} for m in sorted(df['Mês'].unique()) if pd.notna(m)]
+            network_options = [{'label': str(n), 'value': str(n)} for n in sorted(df['Rede'].unique()) if pd.notna(n)]
+            status_options = [{'label': str(s), 'value': str(s)} for s in sorted(df['Status'].unique()) if pd.notna(s)]
+            
+            print("\nOpções de filtros geradas:")
+            print("Meses:", len(month_options))
+            print("Redes:", len(network_options))
+            print("Status:", len(status_options))
+            
+        except Exception as e:
+            print(f"Erro ao gerar opções de filtros: {str(e)}")
+            traceback.print_exc()
+            month_options, network_options, status_options = [], [], []
         
         # Mostrar mensagem de sucesso
         success_message = dbc.Alert(
@@ -2112,11 +2123,27 @@ def update_tab_content(active_tab, filtered_data, original_data):
     try:
         # Usar dados filtrados se disponíveis, senão usar dados originais
         data_to_use = filtered_data if filtered_data is not None else original_data
+        
+        print(f"Quantidade de registros a processar: {len(data_to_use)}")
+        
         df = pd.DataFrame(data_to_use)
         df_original = pd.DataFrame(original_data) if original_data is not None else df
         
-        print(f"Quantidade de registros: {len(df)}")
-        print(f"Colunas disponíveis: {df.columns.tolist()}")
+        # Garantir que as colunas numéricas estão no formato correto
+        numeric_columns = ['Valor Voucher', 'Valor Dispositivo']
+        for col in numeric_columns:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+                df_original[col] = pd.to_numeric(df_original[col], errors='coerce').fillna(0)
+        
+        # Garantir que as colunas de texto não têm valores nulos
+        text_columns = ['Rede', 'Filial', 'Status', 'Vendedor']
+        for col in text_columns:
+            if col in df.columns:
+                df[col] = df[col].fillna('Não informado').astype(str)
+                df_original[col] = df_original[col].fillna('Não informado').astype(str)
+        
+        print("Colunas disponíveis:", df.columns.tolist())
         
         if active_tab == "overview":
             return generate_overview_content(df)
@@ -2136,8 +2163,7 @@ def update_tab_content(active_tab, filtered_data, original_data):
         return html.Div("Selecione uma aba para visualizar os dados")
             
     except Exception as e:
-        print(f"Erro ao atualizar conteúdo: {str(e)}")
-        import traceback
+        print(f"Erro ao atualizar conteúdo da aba {active_tab}: {str(e)}")
         traceback.print_exc()
         return error_message(f"Erro ao carregar dados: {str(e)}")
 
@@ -2622,15 +2648,30 @@ def parse_upload_content(contents, filename):
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
         
+        # Tratar valores nulos nas colunas de texto
+        text_columns = ['nome_rede', 'nome_filial', 'situacao_voucher', 'nome_vendedor']
+        for col in text_columns:
+            if col in df.columns:
+                df[col] = df[col].fillna('Não informado').astype(str)
+        
         # Renomear colunas para exibição
         display_columns = {
             'nome_rede': 'Rede',
             'nome_filial': 'Filial',
             'situacao_voucher': 'Status',
             'valor_voucher': 'Valor Voucher',
-            'valor_dispositivo': 'Valor Dispositivo'
+            'valor_dispositivo': 'Valor Dispositivo',
+            'nome_vendedor': 'Vendedor'
         }
         df = df.rename(columns=display_columns)
+        
+        print("\nDados processados com sucesso:")
+        print(f"Registros: {len(df)}")
+        print("Colunas:", df.columns.tolist())
+        print("\nAmostra de valores únicos por coluna:")
+        for col in ['Rede', 'Status', 'Mês']:
+            if col in df.columns:
+                print(f"{col}:", df[col].unique()[:5].tolist())
         
         return df
         
