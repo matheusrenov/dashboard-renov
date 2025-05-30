@@ -215,4 +215,22 @@ body {
 
 .approve-button:hover {
     background-color: #27ae60;
+}
+
+/* Logo e título */
+.dashboard-header {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.dashboard-logo {
+    height: 40px;
+    width: auto;
+}
+
+.dashboard-title {
+    margin: 0;
+    color: #2c3e50;
+    font-weight: bold;
 } 

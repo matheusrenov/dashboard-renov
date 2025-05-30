@@ -231,9 +231,16 @@ def create_dashboard_layout(is_super_admin=False):
         # Header
         dbc.Row([
             dbc.Col([
-                html.H1("📊 Dashboard de Performance Renov", 
-                       className="text-center mb-4", 
-                       style={'color': '#2c3e50', 'fontWeight': 'bold'}),
+                html.Div([
+                    html.Img(
+                        src='/assets/logo.png',
+                        className="dashboard-logo"
+                    ),
+                    html.H1(
+                        "Dashboard de Performance",
+                        className="dashboard-title"
+                    )
+                ], className="dashboard-header")
             ], width=10),
             dbc.Col([
                 dbc.Button("Sair", id="logout-button", color="danger")
@@ -2108,8 +2115,14 @@ def handle_network_upload(networks_contents, employees_contents, networks_filena
                 print(df.columns.tolist())
                 
                 # Normalizar nomes das colunas
-                df.columns = [unidecode(str(col)).strip().lower().replace(' ', '_').replace('base_de_cadastro', 'data_cadastro') for col in df.columns]
-                print("\nColunas após normalização:")
+                df.columns = [unidecode(str(col)).strip().lower().replace(' ', '_') for col in df.columns]
+                print("\nColunas após normalização inicial:")
+                print(df.columns.tolist())
+                
+                # Ajustar especificamente a coluna de data_cadastro
+                df.columns = [col.replace('data_de_cadastro', 'data_cadastro').replace('base_de_cadastro', 'data_cadastro') for col in df.columns]
+                
+                print("\nColunas após ajuste específico:")
                 print(df.columns.tolist())
                 
                 # Mapear colunas esperadas com mais variações possíveis
@@ -2118,7 +2131,7 @@ def handle_network_upload(networks_contents, employees_contents, networks_filena
                     'filial': ['filial', 'nome_filial', 'loja', 'nome_da_filial'],
                     'rede': ['rede', 'nome_rede', 'network', 'nome_da_rede'],
                     'ativo': ['ativo', 'status', 'situacao', 'status_ativo'],
-                    'data_cadastro': ['data_cadastro', 'data_registro', 'cadastro', 'base_cadastro', 'base_de_cadastro', 'data_base']
+                    'data_cadastro': ['data_cadastro', 'data_registro', 'cadastro', 'base_cadastro', 'base_de_cadastro', 'data_base', 'data_de_cadastro']
                 }
                 
                 # Verificar e mapear colunas
@@ -2128,12 +2141,16 @@ def handle_network_upload(networks_contents, employees_contents, networks_filena
                 for target_col, possible_names in expected_columns.items():
                     found = False
                     for possible_name in possible_names:
-                        if possible_name in df.columns:
-                            column_mapping[possible_name] = target_col
+                        matches = [col for col in df.columns if possible_name in col]
+                        if matches:
+                            column_mapping[matches[0]] = target_col
                             found = True
                             break
                     if not found:
                         missing_columns.append(target_col)
+                
+                print("\nMapeamento de colunas encontrado:")
+                print(column_mapping)
                 
                 if missing_columns:
                     error_msg = f"Colunas obrigatórias não encontradas: {', '.join(missing_columns)}"
