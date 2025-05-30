@@ -2108,17 +2108,17 @@ def handle_network_upload(networks_contents, employees_contents, networks_filena
                 print(df.columns.tolist())
                 
                 # Normalizar nomes das colunas
-                df.columns = [unidecode(str(col)).strip().lower().replace(' ', '_') for col in df.columns]
+                df.columns = [unidecode(str(col)).strip().lower().replace(' ', '_').replace('base_de_cadastro', 'data_cadastro') for col in df.columns]
                 print("\nColunas após normalização:")
                 print(df.columns.tolist())
                 
-                # Mapear colunas esperadas
+                # Mapear colunas esperadas com mais variações possíveis
                 expected_columns = {
-                    'colaborador': ['colaborador', 'nome', 'nome_colaborador', 'funcionario'],
-                    'filial': ['filial', 'nome_filial', 'loja'],
-                    'rede': ['rede', 'nome_rede', 'network'],
-                    'ativo': ['ativo', 'status', 'situacao'],
-                    'data_cadastro': ['data_cadastro', 'data_registro', 'cadastro']
+                    'colaborador': ['colaborador', 'nome', 'nome_colaborador', 'funcionario', 'vendedor'],
+                    'filial': ['filial', 'nome_filial', 'loja', 'nome_da_filial'],
+                    'rede': ['rede', 'nome_rede', 'network', 'nome_da_rede'],
+                    'ativo': ['ativo', 'status', 'situacao', 'status_ativo'],
+                    'data_cadastro': ['data_cadastro', 'data_registro', 'cadastro', 'base_cadastro', 'base_de_cadastro', 'data_base']
                 }
                 
                 # Verificar e mapear colunas
@@ -2138,8 +2138,9 @@ def handle_network_upload(networks_contents, employees_contents, networks_filena
                 if missing_columns:
                     error_msg = f"Colunas obrigatórias não encontradas: {', '.join(missing_columns)}"
                     print(f"Erro: {error_msg}")
+                    print("Colunas disponíveis:", df.columns.tolist())
                     return dbc.Alert(
-                        f"❌ {error_msg}",
+                        f"❌ {error_msg}. Colunas disponíveis: {', '.join(df.columns.tolist())}",
                         color="danger",
                         dismissable=True
                     )

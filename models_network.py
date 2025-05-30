@@ -2,6 +2,7 @@ import sqlite3
 import pandas as pd
 from datetime import datetime
 import os
+from unidecode import unidecode
 
 class NetworkDatabase:
     def __init__(self):
@@ -167,26 +168,35 @@ class NetworkDatabase:
         print("\n=== Validando DataFrame de colaboradores ===")
         print("Colunas originais:", df.columns.tolist())
         
-        # Mapear colunas
+        # Mapear colunas com mais variações possíveis
         column_mapping = {
-            'Colaborador': 'colaborador',
-            'Filial': 'filial',
-            'Rede': 'rede',
-            'Ativo': 'ativo',
-            'Data de Cadastro': 'data_cadastro'
+            'colaborador': ['colaborador', 'nome', 'nome_colaborador', 'funcionario', 'vendedor'],
+            'filial': ['filial', 'nome_filial', 'loja', 'nome_da_filial'],
+            'rede': ['rede', 'nome_rede', 'network', 'nome_da_rede'],
+            'ativo': ['ativo', 'status', 'situacao', 'status_ativo'],
+            'data_cadastro': ['data_cadastro', 'data_registro', 'cadastro', 'base_cadastro', 'base_de_cadastro', 'data_base']
         }
         
-        # Verificar colunas obrigatórias
+        # Verificar e mapear colunas
+        final_mapping = {}
         missing_columns = []
-        for original, _ in column_mapping.items():
-            if original not in df.columns:
-                missing_columns.append(original)
+        
+        for target_col, possible_names in column_mapping.items():
+            found = False
+            for col in df.columns:
+                col_normalized = unidecode(str(col)).strip().lower().replace(' ', '_')
+                if col_normalized in possible_names:
+                    final_mapping[col] = target_col
+                    found = True
+                    break
+            if not found:
+                missing_columns.append(target_col)
         
         if missing_columns:
             raise ValueError(f"Colunas obrigatórias não encontradas: {', '.join(missing_columns)}")
         
         # Renomear colunas
-        df = df.rename(columns=column_mapping)
+        df = df.rename(columns=final_mapping)
         print("Colunas após mapeamento:", df.columns.tolist())
         
         # Limpar e validar dados
@@ -194,7 +204,18 @@ class NetworkDatabase:
         df['filial'] = df['filial'].apply(self.clean_text)
         df['rede'] = df['rede'].apply(self.clean_text)
         df['ativo'] = df['ativo'].apply(lambda x: 'ATIVO' if str(x).upper().strip() in ['SIM', 'S', 'TRUE', '1', 'ATIVO'] else 'INATIVO')
-        df['data_cadastro'] = df['data_cadastro'].apply(self.format_date)
+        
+        # Tratamento especial para data_cadastro
+        print("\nProcessando datas de cadastro...")
+        try:
+            df['data_cadastro'] = pd.to_datetime(df['data_cadastro'], errors='coerce')
+            print("Exemplo de datas antes da formatação:", df['data_cadastro'].head())
+            df['data_cadastro'] = df['data_cadastro'].dt.strftime('%Y-%m-%d')
+            print("Exemplo de datas após formatação:", df['data_cadastro'].head())
+        except Exception as e:
+            print(f"Erro ao processar datas: {str(e)}")
+            # Usar data atual como fallback
+            df['data_cadastro'] = datetime.now().strftime('%Y-%m-%d')
         
         print("\nAmostra após limpeza:")
         print(df.head())
