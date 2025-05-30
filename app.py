@@ -332,43 +332,41 @@ def create_dashboard_layout(is_super_admin=False):
                     html.H5("🔍 Filtros", className="mb-3"),
                     dbc.Row([
                         dbc.Col([
-                            html.Label("Período:"),
+                            html.Label("Período:", className="mb-2"),
                             dbc.Row([
                                 dbc.Col([
-                                    html.Label("Início:", className="small"),
                                     dcc.DatePickerSingle(
                                         id='filter-start-date',
-                                        placeholder="Selecione a data inicial",
+                                        placeholder="Data Inicial",
                                         display_format='DD/MM/YYYY',
                                         className="w-100"
                                     )
-                                ], md=6),
+                                ], md=6, className="pe-1"),
                                 dbc.Col([
-                                    html.Label("Fim:", className="small"),
                                     dcc.DatePickerSingle(
                                         id='filter-end-date',
-                                        placeholder="Selecione a data final",
+                                        placeholder="Data Final",
                                         display_format='DD/MM/YYYY',
                                         className="w-100"
                                     )
-                                ], md=6)
+                                ], md=6, className="ps-1")
                             ])
-                        ], md=4),
+                        ], md=3),
                         dbc.Col([
-                            html.Label("Mês:"),
+                            html.Label("Mês:", className="mb-2"),
                             dcc.Dropdown(id='filter-month', multi=True, placeholder="Selecione o(s) mês(es)")
                         ], md=3),
                         dbc.Col([
-                            html.Label("Rede:"),
+                            html.Label("Rede:", className="mb-2"),
                             dcc.Dropdown(id='filter-network', multi=True, placeholder="Selecione a(s) rede(s)")
                         ], md=3),
                         dbc.Col([
-                            html.Label("Situação:"),
+                            html.Label("Situação:", className="mb-2"),
                             dcc.Dropdown(id='filter-status', multi=True, placeholder="Selecione o(s) status")
-                        ], md=2)
+                        ], md=3)
                     ]),
                     dbc.Button("Limpar Filtros", id="clear-filters", 
-                             color="secondary", size="sm", className="mt-2")
+                             color="secondary", size="sm", className="mt-3")
                 ])
             ], className="mb-4")
         ]),
@@ -1188,7 +1186,7 @@ def generate_engagement_content(df, network_db):
                 x=df_temporal['Data'],
                 y=df_temporal['Vouchers_Gerados'],
                 name='Vouchers Gerados',
-                marker_color='#3498db'
+                marker_color='rgba(52, 152, 219, 0.7)'  # Azul com transparência
             ))
             
             # Adicionar barras para vouchers utilizados (sobreposto)
@@ -1196,16 +1194,16 @@ def generate_engagement_content(df, network_db):
                 x=df_temporal['Data'],
                 y=df_temporal['Vouchers_Utilizados'],
                 name='Vouchers Utilizados',
-                marker_color='#2ecc71'
+                marker_color='rgba(46, 204, 113, 0.85)'  # Verde com transparência
             ))
             
             fig_temporal.update_layout(
                 title='Evolução Diária de Vouchers',
                 xaxis_title='Data',
                 yaxis_title='Quantidade',
-                barmode='overlay',
+                barmode='overlay',  # Modo overlay para sobreposição
                 bargap=0.1,
-                height=600,  # Aumentado de 400 para 600
+                height=600,
                 plot_bgcolor='white',
                 paper_bgcolor='white',
                 xaxis=dict(
@@ -1222,11 +1220,14 @@ def generate_engagement_content(df, network_db):
                     x=1.02,
                     orientation="v"
                 ),
-                margin=dict(r=150)  # Adicionado margem à direita para a legenda
+                margin=dict(r=150)  # Margem à direita para a legenda
             )
             
-            # Ajustar opacidade para visualizar as barras sobrepostas
-            fig_temporal.update_traces(opacity=0.7)
+            # Ajustar opacidade e largura das barras
+            fig_temporal.update_traces(
+                opacity=1,
+                width=0.8  # Ajusta a largura das barras
+            )
         
         # Análise de Produtividade por Rede
         prod_rede = df.groupby('nome_rede').agg({
@@ -1252,14 +1253,19 @@ def generate_engagement_content(df, network_db):
             title='Média de Vouchers por Colaborador (Top 10 Redes)',
             xaxis_title='Rede',
             yaxis_title='Média de Vouchers',
-            height=400,
+            height=600,  # Ajustado para ficar igual ao gráfico ao lado
             plot_bgcolor='white',
             paper_bgcolor='white',
-            xaxis=dict(showgrid=False),
+            xaxis=dict(
+                showgrid=False,
+                tickangle=45,  # Inclina os rótulos para melhor legibilidade
+                title_standoff=25  # Espaço adicional para os rótulos inclinados
+            ),
             yaxis=dict(
                 showgrid=False,
                 range=[0, max(prod_rede['Media_Vouchers_Colaborador']) * 1.15]
-            )
+            ),
+            margin=dict(b=100)  # Margem inferior para acomodar os rótulos
         )
 
         # Tabela Analítica
