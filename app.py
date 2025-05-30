@@ -2072,7 +2072,6 @@ def handle_network_upload(networks_contents, employees_contents, networks_filena
         
         if trigger_id == 'upload-networks-branches-file' and networks_contents:
             print("\n=== Processando upload de Redes e Filiais ===")
-            # Processar arquivo de redes e filiais
             content_type, content_string = networks_contents.split(',')
             decoded = base64.b64decode(content_string)
             df = pd.read_excel(io.BytesIO(decoded))
@@ -2084,7 +2083,6 @@ def handle_network_upload(networks_contents, employees_contents, networks_filena
             success, message = db.update_networks_and_branches(df)
             
             if success:
-                # Verificar dados após inserção
                 db.debug_data()
                 return dbc.Alert(
                     f"✅ Base de redes e filiais atualizada! Arquivo: {networks_filename}",
@@ -2101,29 +2099,95 @@ def handle_network_upload(networks_contents, employees_contents, networks_filena
                 
         elif trigger_id == 'upload-employees-file' and employees_contents:
             print("\n=== Processando upload de Colaboradores ===")
-            # Processar arquivo de colaboradores
-            content_type, content_string = employees_contents.split(',')
-            decoded = base64.b64decode(content_string)
-            df = pd.read_excel(io.BytesIO(decoded))
-            
-            print(f"Dados lidos do arquivo:")
-            print(df.head())
-            print(f"Total de registros: {len(df)}")
-            
-            success, message = db.update_employees(df)
-            
-            if success:
-                # Verificar dados após inserção
-                db.debug_data()
+            try:
+                content_type, content_string = employees_contents.split(',')
+                decoded = base64.b64decode(content_string)
+                df = pd.read_excel(io.BytesIO(decoded))
+                
+                print("Colunas encontradas no arquivo:")
+                print(df.columns.tolist())
+                
+                # Normalizar nomes das colunas
+                df.columns = [unidecode(str(col)).strip().lower().replace(' ', '_') for col in df.columns]
+                print("\nColunas após normalização:")
+                print(df.columns.tolist())
+                
+                # Mapear colunas esperadas
+                expected_columns = {
+                    'colaborador': ['colaborador', 'nome', 'nome_colaborador', 'funcionario'],
+                    'filial': ['filial', 'nome_filial', 'loja'],
+                    'rede': ['rede', 'nome_rede', 'network'],
+                    'ativo': ['ativo', 'status', 'situacao'],
+                    'data_cadastro': ['data_cadastro', 'data_registro', 'cadastro']
+                }
+                
+                # Verificar e mapear colunas
+                column_mapping = {}
+                missing_columns = []
+                
+                for target_col, possible_names in expected_columns.items():
+                    found = False
+                    for possible_name in possible_names:
+                        if possible_name in df.columns:
+                            column_mapping[possible_name] = target_col
+                            found = True
+                            break
+                    if not found:
+                        missing_columns.append(target_col)
+                
+                if missing_columns:
+                    error_msg = f"Colunas obrigatórias não encontradas: {', '.join(missing_columns)}"
+                    print(f"Erro: {error_msg}")
+                    return dbc.Alert(
+                        f"❌ {error_msg}",
+                        color="danger",
+                        dismissable=True
+                    )
+                
+                # Renomear colunas
+                df = df.rename(columns=column_mapping)
+                
+                print("\nPrimeiras linhas após mapeamento:")
+                print(df.head())
+                print(f"Total de registros: {len(df)}")
+                
+                # Processar dados antes de enviar para o banco
+                if 'data_cadastro' in df.columns:
+                    df['data_cadastro'] = pd.to_datetime(df['data_cadastro'], errors='coerce')
+                    df['data_cadastro'] = df['data_cadastro'].dt.strftime('%Y-%m-%d')
+                
+                if 'ativo' in df.columns:
+                    df['ativo'] = df['ativo'].astype(str).str.upper()
+                
+                # Remover linhas com valores nulos em colunas críticas
+                df = df.dropna(subset=['colaborador', 'filial', 'rede'])
+                
+                print("\nDados processados:")
+                print(f"Registros após limpeza: {len(df)}")
+                
+                success, message = db.update_employees(df)
+                
+                if success:
+                    db.debug_data()
+                    return dbc.Alert(
+                        f"✅ Base de colaboradores atualizada! Arquivo: {employees_filename}",
+                        color="success",
+                        dismissable=True,
+                        duration=4000
+                    )
+                else:
+                    print(f"Erro ao atualizar base: {message}")
+                    return dbc.Alert(
+                        f"❌ Erro ao atualizar base de colaboradores: {message}",
+                        color="danger",
+                        dismissable=True
+                    )
+            except Exception as e:
+                print(f"Erro ao processar arquivo de colaboradores: {str(e)}")
+                import traceback
+                traceback.print_exc()
                 return dbc.Alert(
-                    f"✅ Base de colaboradores atualizada! Arquivo: {employees_filename}",
-                    color="success",
-                    dismissable=True,
-                    duration=4000
-                )
-            else:
-                return dbc.Alert(
-                    f"❌ Erro ao atualizar base de colaboradores: {message}",
+                    f"❌ Erro ao processar arquivo de colaboradores: {str(e)}",
                     color="danger",
                     dismissable=True
                 )

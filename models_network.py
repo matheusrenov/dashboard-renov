@@ -282,83 +282,114 @@ class NetworkDatabase:
 
     def update_employees(self, df):
         """Atualiza a base de colaboradores"""
-        conn = sqlite3.connect(self.db_file)
-        current_date = datetime.now().strftime('%Y-%m-%d')
-
+        print("\n=== Atualizando base de colaboradores ===")
         try:
-            print("\n=== Atualizando colaboradores ===")
-            print("DataFrame original:")
+            # Verificar se o DataFrame está vazio
+            if df.empty:
+                return False, "DataFrame vazio"
+            
+            print("Colunas recebidas:", df.columns.tolist())
+            print("Amostra dos dados recebidos:")
+            print(df.head())
+            
+            # Garantir que todas as colunas necessárias existem
+            required_columns = ['colaborador', 'filial', 'rede', 'ativo', 'data_cadastro']
+            missing_columns = [col for col in required_columns if col not in df.columns]
+            if missing_columns:
+                error_msg = f"Colunas obrigatórias não encontradas: {', '.join(missing_columns)}"
+                print(f"Erro: {error_msg}")
+                return False, error_msg
+            
+            # Limpar e validar dados
+            df['colaborador'] = df['colaborador'].apply(self.clean_text)
+            df['filial'] = df['filial'].apply(self.clean_text)
+            df['rede'] = df['rede'].apply(self.clean_text)
+            df['ativo'] = df['ativo'].apply(lambda x: 'ATIVO' if str(x).upper().strip() in ['SIM', 'S', 'TRUE', '1', 'ATIVO'] else 'INATIVO')
+            df['data_cadastro'] = df['data_cadastro'].apply(self.format_date)
+            
+            print("\nDados após limpeza:")
             print(df.head())
             print(f"Total de registros: {len(df)}")
             
-            # Validar e preparar DataFrame
-            df = self.validate_employees_df(df)
+            # Verificar se as filiais existem na tabela networks_branches
+            conn = sqlite3.connect(self.db_file)
+            existing_branches = pd.read_sql_query(
+                "SELECT nome_filial, nome_rede FROM networks_branches",
+                conn
+            )
             
-            print("\nDataFrame após validação:")
-            print(df.head())
-            print(f"Total de registros após validação: {len(df)}")
+            # Criar um conjunto de tuplas (filial, rede) existentes
+            existing_pairs = set(zip(existing_branches['nome_filial'], existing_branches['nome_rede']))
             
-            # Primeiro, vamos verificar se todas as combinações de filial/rede existem
-            existing_branches = pd.read_sql_query('''
-                SELECT nome_filial, nome_rede FROM networks_branches
-            ''', conn)
+            # Verificar pares filial-rede não existentes
+            df_pairs = set(zip(df['filial'], df['rede']))
+            missing_pairs = df_pairs - existing_pairs
             
-            print(f"\nFiliais existentes: {len(existing_branches)}")
+            if missing_pairs:
+                print("\nAlerta: Algumas filiais não encontradas na base:")
+                for filial, rede in list(missing_pairs)[:5]:  # Mostrar apenas os 5 primeiros
+                    print(f"- Filial: {filial}, Rede: {rede}")
+                
+                # Adicionar filiais faltantes automaticamente
+                new_branches = pd.DataFrame({
+                    'nome_filial': [p[0] for p in missing_pairs],
+                    'nome_rede': [p[1] for p in missing_pairs],
+                    'ativo': ['ATIVO'] * len(missing_pairs),
+                    'data_inicio': [datetime.now().strftime('%Y-%m-%d')] * len(missing_pairs)
+                })
+                
+                print(f"\nAdicionando {len(missing_pairs)} novas filiais à base...")
+                self.update_networks_and_branches(new_branches)
             
-            # Processar colaboradores
-            registros_inseridos = 0
+            # Timestamp para created_at e updated_at
+            current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            
+            # Inserir ou atualizar colaboradores
+            cursor = conn.cursor()
+            
+            # Primeiro, desativar todos os colaboradores existentes
+            cursor.execute("UPDATE employees SET ativo = 'INATIVO', updated_at = ?", (current_time,))
+            
+            # Depois, inserir ou atualizar os novos registros
             for _, row in df.iterrows():
-                try:
-                    # Verificar se todos os campos obrigatórios estão preenchidos
-                    if any(pd.isna(row[col]) for col in ['colaborador', 'filial', 'rede', 'ativo', 'data_cadastro']):
-                        print(f"Pulando registro com campos nulos: {row.to_dict()}")
-                        continue
-                    
-                    # Verificar se a combinação filial/rede existe
-                    if not existing_branches[
-                        (existing_branches['nome_filial'] == row['filial']) & 
-                        (existing_branches['nome_rede'] == row['rede'])
-                    ].empty:
-                        conn.execute('''
-                        INSERT OR REPLACE INTO employees (
-                            colaborador, filial, rede, ativo, data_cadastro, created_at, updated_at
-                        )
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                        ''', (
-                            row['colaborador'],
-                            row['filial'],
-                            row['rede'],
-                            row['ativo'],
-                            row['data_cadastro'],
-                            current_date,
-                            current_date
-                        ))
-                        registros_inseridos += 1
-                    else:
-                        print(f"Filial/rede não encontrada: {row['filial']} / {row['rede']}")
-                except Exception as e:
-                    print(f"Erro ao inserir registro: {row.to_dict()}")
-                    print(f"Erro: {str(e)}")
-                    continue
-
+                cursor.execute("""
+                    INSERT INTO employees (
+                        colaborador, filial, rede, ativo, data_cadastro, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(colaborador, filial, rede) DO UPDATE SET
+                        ativo = excluded.ativo,
+                        updated_at = excluded.updated_at
+                """, (
+                    row['colaborador'],
+                    row['filial'],
+                    row['rede'],
+                    row['ativo'],
+                    row['data_cadastro'],
+                    current_time,
+                    current_time
+                ))
+            
             conn.commit()
-            print(f"\nTotal de registros inseridos: {registros_inseridos}")
             
-            # Verificar dados após inserção
-            total = conn.execute('SELECT COUNT(*) FROM employees').fetchone()[0]
-            print(f"Total de registros na tabela: {total}")
+            # Verificar resultados
+            total_employees = cursor.execute("SELECT COUNT(*) FROM employees").fetchone()[0]
+            active_employees = cursor.execute("SELECT COUNT(*) FROM employees WHERE ativo = 'ATIVO'").fetchone()[0]
             
-            return True, f"Base de colaboradores atualizada com sucesso! {registros_inseridos} registros inseridos."
-        
+            print("\nResultados da atualização:")
+            print(f"Total de colaboradores na base: {total_employees}")
+            print(f"Colaboradores ativos: {active_employees}")
+            
+            conn.close()
+            return True, "Base de colaboradores atualizada com sucesso!"
+            
         except Exception as e:
-            conn.rollback()
-            print(f"Erro ao atualizar base: {str(e)}")
+            print(f"Erro ao atualizar colaboradores: {str(e)}")
             import traceback
             traceback.print_exc()
-            return False, f"Erro ao atualizar base: {str(e)}"
-        
-        finally:
-            conn.close()
+            if 'conn' in locals():
+                conn.rollback()
+                conn.close()
+            return False, str(e)
 
     def get_network_stats(self):
         """Retorna estatísticas das redes"""
