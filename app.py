@@ -1039,12 +1039,12 @@ def generate_engagement_content(df, network_db):
         # Obter dados das bases de redes e colaboradores
         executive_summary = network_db.get_executive_summary()
         
-        # Calcular métricas de engajamento
+        # Calcular métricas de engajamento considerando apenas os dados filtrados
         total_redes = executive_summary['Nome da Rede'].nunique()
         total_filiais = executive_summary['Total de Filiais'].sum()
         total_colaboradores = executive_summary['Total de Colaboradores'].sum()
         
-        # Calcular métricas de vouchers utilizados
+        # Calcular métricas de vouchers utilizados com base nos dados filtrados
         vouchers_utilizados = df[df['situacao_voucher'].str.lower().str.contains('utilizado|usado|ativo', na=False)]
         
         redes_ativas = df['nome_rede'].nunique()
@@ -1052,7 +1052,7 @@ def generate_engagement_content(df, network_db):
         colaboradores_ativos = df['nome_vendedor'].nunique()
         colaboradores_com_vouchers_utilizados = vouchers_utilizados['nome_vendedor'].nunique()
         
-        # Análise de inatividade nos últimos 30 dias
+        # Análise de inatividade considerando os dados filtrados
         if 'data_str' in df.columns:
             df['data_str'] = pd.to_datetime(df['data_str'])
             ultima_data = df['data_str'].max()
@@ -1065,7 +1065,7 @@ def generate_engagement_content(df, network_db):
         else:
             taxa_ausencia_vouchers = 0
         
-        # Calcular taxas de ativação
+        # Calcular taxas de ativação com base nos dados filtrados
         taxa_ativacao_redes = (redes_ativas / total_redes * 100) if total_redes > 0 else 0
         taxa_ativacao_filiais = (filiais_ativas / total_filiais * 100) if total_filiais > 0 else 0
         taxa_ativacao_colaboradores = (colaboradores_ativos / total_colaboradores * 100) if total_colaboradores > 0 else 0
@@ -1119,39 +1119,67 @@ def generate_engagement_content(df, network_db):
             ], md=3)
         ])
 
-        # Análise Temporal de Engajamento
+        # Análise Temporal de Engajamento com novo gráfico de colunas empilhadas
         if 'data_str' in df.columns:
             df_temporal = df.groupby('data_str').agg({
-                'imei': 'count',
-                'nome_vendedor': 'nunique',
-                'valor_dispositivo': 'sum'
+                'imei': 'count',  # Total de vouchers gerados
+                'nome_vendedor': 'nunique'
             }).reset_index()
-            df_temporal.columns = ['Data', 'Total_Vouchers', 'Colaboradores_Ativos', 'Valor_Total']
             
-            # Gráfico de evolução temporal
+            # Adicionar contagem de vouchers utilizados
+            df_temporal['vouchers_utilizados'] = df[
+                df['situacao_voucher'].str.lower().str.contains('utilizado|usado|ativo', na=False)
+            ].groupby('data_str').size().reindex(df_temporal['data_str']).fillna(0)
+            
+            df_temporal.columns = ['Data', 'Vouchers_Gerados', 'Colaboradores_Ativos', 'Vouchers_Utilizados']
+            df_temporal['Data'] = pd.to_datetime(df_temporal['Data'])
+            df_temporal = df_temporal.sort_values('Data')
+            
+            # Criar gráfico de colunas empilhadas
             fig_temporal = go.Figure()
-            fig_temporal.add_trace(go.Scatter(
+            
+            # Adicionar barras para vouchers gerados (total)
+            fig_temporal.add_trace(go.Bar(
                 x=df_temporal['Data'],
-                y=df_temporal['Total_Vouchers'],
-                name='Vouchers',
-                line=dict(color='#3498db', width=2)
+                y=df_temporal['Vouchers_Gerados'],
+                name='Vouchers Gerados',
+                marker_color='#3498db'
             ))
-            fig_temporal.add_trace(go.Scatter(
+            
+            # Adicionar barras para vouchers utilizados (sobreposto)
+            fig_temporal.add_trace(go.Bar(
                 x=df_temporal['Data'],
-                y=df_temporal['Colaboradores_Ativos'],
-                name='Colaboradores Ativos',
-                line=dict(color='#2ecc71', width=2)
+                y=df_temporal['Vouchers_Utilizados'],
+                name='Vouchers Utilizados',
+                marker_color='#2ecc71'
             ))
+            
             fig_temporal.update_layout(
-                title='Evolução Temporal do Engajamento',
+                title='Evolução Diária de Vouchers',
                 xaxis_title='Data',
                 yaxis_title='Quantidade',
+                barmode='overlay',
+                bargap=0.1,
                 height=400,
                 plot_bgcolor='white',
                 paper_bgcolor='white',
-                xaxis=dict(showgrid=False),
-                yaxis=dict(showgrid=False)
+                xaxis=dict(
+                    showgrid=False,
+                    type='date',
+                    tickformat='%d/%m'
+                ),
+                yaxis=dict(showgrid=False),
+                showlegend=True,
+                legend=dict(
+                    yanchor="top",
+                    y=0.99,
+                    xanchor="right",
+                    x=0.99
+                )
             )
+            
+            # Ajustar opacidade para visualizar as barras sobrepostas
+            fig_temporal.update_traces(opacity=0.7)
         
         # Análise de Produtividade por Rede
         prod_rede = df.groupby('nome_rede').agg({
