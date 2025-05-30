@@ -233,14 +233,29 @@ def create_dashboard_layout(is_super_admin=False):
             dbc.Col([
                 html.Div([
                     html.Img(
-                        src='/assets/logo.png',
-                        className="dashboard-logo"
+                        src='/assets/logo.svg',
+                        className="dashboard-logo",
+                        style={
+                            'height': '40px',
+                            'marginRight': '15px',
+                            'marginTop': '5px'
+                        }
                     ),
                     html.H1(
                         "Dashboard de Performance",
-                        className="dashboard-title"
+                        className="dashboard-title",
+                        style={
+                            'display': 'inline-block',
+                            'verticalAlign': 'middle',
+                            'margin': '0',
+                            'color': '#2c3e50'
+                        }
                     )
-                ], className="dashboard-header")
+                ], className="dashboard-header", style={
+                    'display': 'flex',
+                    'alignItems': 'center',
+                    'padding': '10px 0'
+                })
             ], width=10),
             dbc.Col([
                 dbc.Button("Sair", id="logout-button", color="danger")
@@ -317,17 +332,40 @@ def create_dashboard_layout(is_super_admin=False):
                     html.H5("🔍 Filtros", className="mb-3"),
                     dbc.Row([
                         dbc.Col([
+                            html.Label("Período:"),
+                            dbc.Row([
+                                dbc.Col([
+                                    html.Label("Início:", className="small"),
+                                    dcc.DatePickerSingle(
+                                        id='filter-start-date',
+                                        placeholder="Selecione a data inicial",
+                                        display_format='DD/MM/YYYY',
+                                        className="w-100"
+                                    )
+                                ], md=6),
+                                dbc.Col([
+                                    html.Label("Fim:", className="small"),
+                                    dcc.DatePickerSingle(
+                                        id='filter-end-date',
+                                        placeholder="Selecione a data final",
+                                        display_format='DD/MM/YYYY',
+                                        className="w-100"
+                                    )
+                                ], md=6)
+                            ])
+                        ], md=4),
+                        dbc.Col([
                             html.Label("Mês:"),
                             dcc.Dropdown(id='filter-month', multi=True, placeholder="Selecione o(s) mês(es)")
-                        ], md=4),
+                        ], md=3),
                         dbc.Col([
                             html.Label("Rede:"),
                             dcc.Dropdown(id='filter-network', multi=True, placeholder="Selecione a(s) rede(s)")
-                        ], md=4),
+                        ], md=3),
                         dbc.Col([
                             html.Label("Situação:"),
                             dcc.Dropdown(id='filter-status', multi=True, placeholder="Selecione o(s) status")
-                        ], md=4)
+                        ], md=2)
                     ]),
                     dbc.Button("Limpar Filtros", id="clear-filters", 
                              color="secondary", size="sm", className="mt-2")
@@ -1167,7 +1205,7 @@ def generate_engagement_content(df, network_db):
                 yaxis_title='Quantidade',
                 barmode='overlay',
                 bargap=0.1,
-                height=400,
+                height=600,  # Aumentado de 400 para 600
                 plot_bgcolor='white',
                 paper_bgcolor='white',
                 xaxis=dict(
@@ -1180,9 +1218,11 @@ def generate_engagement_content(df, network_db):
                 legend=dict(
                     yanchor="top",
                     y=0.99,
-                    xanchor="right",
-                    x=0.99
-                )
+                    xanchor="left",
+                    x=1.02,
+                    orientation="v"
+                ),
+                margin=dict(r=150)  # Adicionado margem à direita para a legenda
             )
             
             # Ajustar opacidade para visualizar as barras sobrepostas
@@ -1836,11 +1876,13 @@ def handle_upload(contents, filename):
     [Input('filter-month', 'value'),
      Input('filter-network', 'value'),
      Input('filter-status', 'value'),
+     Input('filter-start-date', 'date'),
+     Input('filter-end-date', 'date'),
      Input('clear-filters', 'n_clicks')],
     [State('store-data', 'data')],
     prevent_initial_call=True
 )
-def apply_filters(months, networks, statuses, clear_clicks, original_data):
+def apply_filters(months, networks, statuses, start_date, end_date, clear_clicks, original_data):
     if not original_data:
         return no_update, no_update
     
@@ -1851,6 +1893,15 @@ def apply_filters(months, networks, statuses, clear_clicks, original_data):
             return original_data, dbc.Alert("Filtros limpos com sucesso!", color="info", duration=2000)
         
         df = pd.DataFrame(original_data)
+        
+        # Filtro por período
+        if start_date or end_date:
+            df['data_str'] = pd.to_datetime(df['data_str'])
+            if start_date:
+                df = df[df['data_str'] >= start_date]
+            if end_date:
+                df = df[df['data_str'] <= end_date]
+            df['data_str'] = df['data_str'].dt.strftime('%Y-%m-%d')
         
         if months and 'mes' in df.columns and 'ano' in df.columns:
             month_year_filters = [f"{row['mes']}_{row['ano']}" for _, row in df.iterrows()]
@@ -2254,6 +2305,20 @@ def update_network_base_tab(upload_status, current_tab):
             f"Erro ao atualizar conteúdo: {str(e)}",
             color="danger"
         )
+
+@app.callback(
+    [Output('filter-month', 'value'),
+     Output('filter-network', 'value'),
+     Output('filter-status', 'value'),
+     Output('filter-start-date', 'date'),
+     Output('filter-end-date', 'date')],
+    [Input('clear-filters', 'n_clicks')],
+    prevent_initial_call=True
+)
+def clear_filters(n_clicks):
+    if n_clicks:
+        return None, None, None, None, None
+    raise PreventUpdate
 
 # ========================
 # 🔚 Execução e Documentação
