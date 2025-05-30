@@ -649,25 +649,27 @@ class NetworkDatabase:
         Retorna todos os colaboradores cadastrados no banco de dados
         
         Returns:
-            DataFrame com as colunas: nome, filial, rede, status_ativo, data_cadastro
+            DataFrame com as colunas: nome, filial, rede, ativo, data_cadastro
         """
         try:
             conn = sqlite3.connect(self.db_file)
             query = """
             SELECT 
-                e.nome,
+                e.colaborador as nome,
                 e.filial,
                 e.rede,
-                e.status_ativo,
+                e.ativo,
                 e.data_cadastro
             FROM employees e
-            JOIN branches b ON e.filial = b.nome_filial AND e.rede = b.nome_rede
-            WHERE e.status_ativo = 1
-            ORDER BY e.rede, e.filial, e.nome
+            JOIN networks_branches nb ON e.filial = nb.nome_filial AND e.rede = nb.nome_rede
+            WHERE UPPER(TRIM(e.ativo)) = 'ATIVO'
+            ORDER BY e.rede, e.filial, e.colaborador
             """
             df = pd.read_sql_query(query, conn)
             conn.close()
             return df
         except Exception as e:
             print(f"Erro ao obter colaboradores: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return pd.DataFrame() 
