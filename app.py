@@ -287,9 +287,15 @@ def create_dashboard_layout(is_super_admin=False):
                         }),
                         dbc.Row([
                             dbc.Col([
+                                html.Label("De", className="me-2", style={
+                                    'fontSize': '14px',
+                                    'fontWeight': '500',
+                                    'color': '#2c3e50',
+                                    'marginTop': '8px'
+                                }),
                                 dcc.DatePickerSingle(
                                     id='filter-start-date',
-                                    placeholder="Selecione a data inicial",
+                                    placeholder="",
                                     display_format='DD/MM/YYYY',
                                     className="date-picker-filter",
                                     style={
@@ -299,11 +305,17 @@ def create_dashboard_layout(is_super_admin=False):
                                         'border': '1px solid #cccccc'
                                     }
                                 )
-                            ], width=6, className="pe-1"),
+                            ], width=6, className="pe-1 d-flex"),
                             dbc.Col([
+                                html.Label("Até", className="me-2", style={
+                                    'fontSize': '14px',
+                                    'fontWeight': '500',
+                                    'color': '#2c3e50',
+                                    'marginTop': '8px'
+                                }),
                                 dcc.DatePickerSingle(
                                     id='filter-end-date',
-                                    placeholder="Selecione a data final",
+                                    placeholder="",
                                     display_format='DD/MM/YYYY',
                                     className="date-picker-filter",
                                     style={
@@ -313,7 +325,7 @@ def create_dashboard_layout(is_super_admin=False):
                                         'border': '1px solid #cccccc'
                                     }
                                 )
-                            ], width=6, className="ps-1")
+                            ], width=6, className="ps-1 d-flex")
                         ])
                     ], md=3),
                     dbc.Col([
@@ -480,33 +492,45 @@ def create_dashboard_layout(is_super_admin=False):
                             }),
                             dbc.Row([
                                 dbc.Col([
+                                    html.Label("De", className="me-2", style={
+                                        'fontSize': '14px',
+                                        'fontWeight': '500',
+                                        'color': '#2c3e50',
+                                        'marginTop': '8px'
+                                    }),
                                     dcc.DatePickerSingle(
                                         id='filter-start-date',
-                                        placeholder="Data Inicial",
+                                        placeholder="",
                                         display_format='DD/MM/YYYY',
-                                        className='filter-date',
+                                        className="date-picker-filter",
                                         style={
                                             'width': '100%',
-                                            'border': '1px solid #ddd',
+                                            'height': '38px',
                                             'borderRadius': '4px',
-                                            'backgroundColor': 'white'
+                                            'border': '1px solid #cccccc'
                                         }
                                     )
-                                ], width=6, className='pe-1'),
+                                ], width=6, className="pe-1 d-flex"),
                                 dbc.Col([
+                                    html.Label("Até", className="me-2", style={
+                                        'fontSize': '14px',
+                                        'fontWeight': '500',
+                                        'color': '#2c3e50',
+                                        'marginTop': '8px'
+                                    }),
                                     dcc.DatePickerSingle(
                                         id='filter-end-date',
-                                        placeholder="Data Final",
+                                        placeholder="",
                                         display_format='DD/MM/YYYY',
-                                        className='filter-date',
+                                        className="date-picker-filter",
                                         style={
                                             'width': '100%',
-                                            'border': '1px solid #ddd',
+                                            'height': '38px',
                                             'borderRadius': '4px',
-                                            'backgroundColor': 'white'
+                                            'border': '1px solid #cccccc'
                                         }
                                     )
-                                ], width=6, className='ps-1')
+                                ], width=6, className="ps-1 d-flex")
                             ])
                         ], md=4)
                     ], className="mb-4")
@@ -522,10 +546,11 @@ def create_dashboard_layout(is_super_admin=False):
             dcc.Tabs(id='main-tabs', value='overview', children=[
                 dcc.Tab(label='Visão Geral', value='overview'),
                 dcc.Tab(label='Redes', value='networks'),
+                dcc.Tab(label='Tim', value='tim'),
                 dcc.Tab(label='Rankings', value='rankings'),
                 dcc.Tab(label='Projeções', value='projections'),
-                dcc.Tab(label='Base de Redes e Colaboradores', value='network-base'),
-                dcc.Tab(label='Engajamento', value='engagement')
+                dcc.Tab(label='Engajamento', value='engagement'),
+                dcc.Tab(label='Base de Redes', value='network-base', style={'display': 'none'})
             ], className="mb-4"),
             html.Div(id='tab-content-area')
         ])
@@ -748,46 +773,51 @@ def generate_overview_content(df):
         return dbc.Alert(f"Erro na visão geral: {str(e)}", color="danger")
 
 def generate_networks_content(df):
-    """Gera o conteúdo da aba de redes"""
+    if df is None or df.empty:
+        return no_data_message()
+
     try:
-        if df.empty or 'nome_rede' not in df.columns:
-            return dbc.Alert("Dados de redes não disponíveis.", color="warning")
+        # Resumo detalhado por rede
+        detailed_summary = generate_detailed_network_summary(df)
         
-        network_analysis = df.groupby('nome_rede').agg({
-            'imei': 'count',
-            'valor_dispositivo': 'sum',
-            'nome_filial': 'nunique'
-        }).round(2)
-        network_analysis.columns = ['Total_Vouchers', 'Valor_Total', 'Num_Lojas']
-        network_analysis = network_analysis.reset_index()
-        
-        fig_scatter = px.scatter(
-            network_analysis,
-            x='Total_Vouchers',
-            y='Valor_Total',
-            size='Num_Lojas',
-            hover_name='nome_rede',
-            title="💰 Performance das Redes",
-            labels={
-                'Total_Vouchers': 'Total de Vouchers',
-                'Valor_Total': 'Valor Total (R$)',
-                'Num_Lojas': 'Número de Lojas'
-            },
-            color='Total_Vouchers',
-            color_continuous_scale='viridis'
-        )
-        fig_scatter.update_layout(
-            height=500,
-            xaxis_title="Total de Vouchers",
-            yaxis_title="Valor Total (R$)",
-            legend_title="Número de Lojas"
-        )
-        
-        return dbc.Row([
-            dbc.Col([dcc.Graph(figure=fig_scatter)], md=12)
+        return html.Div([
+            dbc.Row([
+                dbc.Col([
+                    html.H4("Resumo por Rede", className="mb-4"),
+                    detailed_summary
+                ])
+            ])
         ])
     except Exception as e:
-        return dbc.Alert(f"Erro na análise de redes: {str(e)}", color="danger")
+        print(f"Erro ao gerar conteúdo de redes: {str(e)}")
+        return error_message()
+
+def generate_tim_content(df):
+    if df is None or df.empty:
+        return no_data_message()
+    
+    try:
+        # Filtrar apenas dados da TIM
+        df_tim = df[df['Rede'].str.upper() == 'TIM']
+        
+        if df_tim.empty:
+            return html.Div([
+                html.H4("Dados TIM", className="mb-4"),
+                html.P("Nenhum dado encontrado para a rede TIM no período selecionado.")
+            ])
+        
+        return html.Div([
+            html.H4("Dashboard TIM", className="mb-4"),
+            dbc.Row([
+                dbc.Col([
+                    # Aqui você pode adicionar os componentes específicos para a TIM
+                    html.P("Conteúdo específico da TIM será implementado aqui.")
+                ])
+            ])
+        ])
+    except Exception as e:
+        print(f"Erro ao gerar conteúdo TIM: {str(e)}")
+        return error_message()
 
 def generate_rankings_content(df):
     """Gera o conteúdo da aba de rankings"""
@@ -2131,31 +2161,35 @@ def update_kpis(original_data, filtered_data):
     prevent_initial_call=True
 )
 def update_tab_content(active_tab, filtered_data, original_data):
+    print(f"\n=== Atualizando conteúdo da aba: {active_tab} ===")
+    
+    if not filtered_data or not original_data:
+        return no_data_message()
+    
     try:
-        if active_tab == "network-base":
-            return generate_network_base_content()
-            
-        data_to_use = filtered_data if filtered_data else original_data
-        if not data_to_use:
-            return dbc.Alert("Nenhum dado disponível.", color="warning")
-        
-        df = pd.DataFrame(data_to_use)
-        original_df = pd.DataFrame(original_data) if original_data else df
+        df_filtered = pd.DataFrame(filtered_data)
+        df_original = pd.DataFrame(original_data)
         
         if active_tab == "overview":
-            return generate_overview_content(df)
+            return generate_overview_content(df_filtered)
         elif active_tab == "networks":
-            return generate_networks_content(df)
+            return generate_networks_content(df_filtered)
+        elif active_tab == "tim":
+            return generate_tim_content(df_filtered)
         elif active_tab == "rankings":
-            return generate_rankings_content(df)
+            return generate_rankings_content(df_filtered)
         elif active_tab == "projections":
-            return generate_projections_content(original_df, df)
+            return generate_projections_content(df_original, df_filtered)
         elif active_tab == "engagement":
-            return generate_engagement_content(df, network_db)
-        else:
-            return html.Div("Aba não encontrada")
+            return generate_engagement_content(df_filtered, NetworkDatabase())
+        elif active_tab == "network-base":
+            return generate_network_base_content()
+            
     except Exception as e:
-        return dbc.Alert(f"Erro: {str(e)}", color="danger")
+        print(f"Erro ao atualizar conteúdo: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return error_message()
 
 # ========================
 # JavaScript para exportação PDF
@@ -2457,31 +2491,9 @@ def handle_network_upload(networks_contents, employees_contents, networks_filena
     prevent_initial_call=True
 )
 def update_network_base_tab(upload_status, current_tab):
-    """Atualiza a aba de base de redes quando há um novo upload"""
-    print("\n=== Atualizando conteúdo da aba de base ===")
-    print(f"Tab atual: {current_tab}")
-    print(f"Status do upload: {upload_status}")
-    
-    if not upload_status or current_tab != 'network-base':
-        return no_update
-    
-    try:
-        db = NetworkDatabase()
-        stats = db.get_network_stats()
-        print("\nEstatísticas atuais:")
-        print(f"Redes: {stats['total_networks']}")
-        print(f"Filiais: {stats['total_branches']}")
-        print(f"Colaboradores: {stats['total_employees']}")
-        
+    if current_tab == 'network-base':
         return generate_network_base_content()
-    except Exception as e:
-        print(f"Erro ao atualizar aba: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return dbc.Alert(
-            f"Erro ao atualizar conteúdo: {str(e)}",
-            color="danger"
-        )
+    raise PreventUpdate
 
 @app.callback(
     [Output('filter-month', 'value'),
@@ -2525,6 +2537,75 @@ Instruções de Execução:
    - Configurado para performance em produção
    - Recomendado para deploy no GitHub ou serviços similares
 """
+
+# Funções auxiliares
+def no_data_message():
+    return dbc.Alert(
+        "Nenhum dado disponível. Por favor, faça o upload de um arquivo.",
+        color="warning",
+        className="mb-3"
+    )
+
+def error_message(message="Ocorreu um erro ao processar os dados."):
+    return dbc.Alert(
+        message,
+        color="danger",
+        className="mb-3"
+    )
+
+def generate_detailed_network_summary(df):
+    if df.empty:
+        return no_data_message()
+    
+    try:
+        # Agrupar dados por rede
+        network_summary = df.groupby('Rede').agg({
+            'Voucher': 'count',
+            'Vouchers_Utilizados': 'sum',
+            'Colaborador': 'nunique'
+        }).round(2)
+        
+        network_summary.columns = ['Total Vouchers', 'Vouchers Utilizados', 'Total Colaboradores']
+        network_summary = network_summary.reset_index()
+        
+        # Calcular taxa de utilização
+        network_summary['Taxa de Utilização'] = (network_summary['Vouchers Utilizados'] / 
+                                               network_summary['Total Vouchers'] * 100).round(2)
+        
+        # Criar tabela com os dados
+        table = dash_table.DataTable(
+            id='network-summary-table',
+            columns=[
+                {"name": "Rede", "id": "Rede"},
+                {"name": "Total de Vouchers", "id": "Total Vouchers"},
+                {"name": "Vouchers Utilizados", "id": "Vouchers Utilizados"},
+                {"name": "Total de Colaboradores", "id": "Total Colaboradores"},
+                {"name": "Taxa de Utilização (%)", "id": "Taxa de Utilização"}
+            ],
+            data=network_summary.to_dict('records'),
+            style_table={'overflowX': 'auto'},
+            style_header={
+                'backgroundColor': 'rgb(230, 230, 230)',
+                'fontWeight': 'bold',
+                'textAlign': 'center'
+            },
+            style_cell={
+                'textAlign': 'center',
+                'padding': '10px',
+                'minWidth': '100px'
+            },
+            style_data_conditional=[
+                {
+                    'if': {'row_index': 'odd'},
+                    'backgroundColor': 'rgb(248, 248, 248)'
+                }
+            ]
+        )
+        
+        return table
+    except Exception as e:
+        print(f"Erro ao gerar resumo detalhado: {str(e)}")
+        return error_message()
 
 if __name__ == '__main__':
     try:
