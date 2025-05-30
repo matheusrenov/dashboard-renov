@@ -70,7 +70,8 @@ class NetworkDatabase:
                     data_cadastro TEXT NOT NULL,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
-                    FOREIGN KEY (filial, rede) REFERENCES networks_branches(nome_filial, nome_rede)
+                    FOREIGN KEY (filial, rede) REFERENCES networks_branches(nome_filial, nome_rede),
+                    UNIQUE(colaborador, filial, rede)
                 )
                 ''')
                 print("Tabela employees criada com sucesso!")
