@@ -233,7 +233,7 @@ def create_dashboard_layout(is_super_admin=False):
             dbc.Col([
                 html.Div([
                     html.Img(
-                        src='/assets/logo.svg',
+                        src='/assets/images/Logo Roxo.png',
                         className="dashboard-logo",
                         style={
                             'height': '50px',
@@ -289,7 +289,7 @@ def create_dashboard_layout(is_super_admin=False):
                             dbc.Col([
                                 dcc.DatePickerSingle(
                                     id='filter-start-date',
-                                    placeholder="Data Inicial",
+                                    placeholder="Selecione a data inicial",
                                     display_format='DD/MM/YYYY',
                                     className="date-picker-filter",
                                     style={
@@ -303,7 +303,7 @@ def create_dashboard_layout(is_super_admin=False):
                             dbc.Col([
                                 dcc.DatePickerSingle(
                                     id='filter-end-date',
-                                    placeholder="Data Final",
+                                    placeholder="Selecione a data final",
                                     display_format='DD/MM/YYYY',
                                     className="date-picker-filter",
                                     style={
