@@ -816,24 +816,57 @@ def generate_projections_content(original_df, filtered_df):
         daily_data['data'] = pd.to_datetime(daily_data['data'])
         daily_data = daily_data.sort_values('data')
         
-        # Criar gráfico de tendência
-        fig_trend = go.Figure()
-        fig_trend.add_trace(go.Scatter(
-            x=daily_data['data'], 
+        # Criar gráfico de barras empilhadas
+        fig_temporal = go.Figure()
+        
+        # Calcular vouchers não utilizados (diferença entre gerados e utilizados)
+        daily_data['Vouchers_Nao_Utilizados'] = daily_data['vouchers'] - daily_data['vouchers_utilizados']
+        
+        # Adicionar barras para vouchers utilizados (base)
+        fig_temporal.add_trace(go.Bar(
+            x=daily_data['data'],
             y=daily_data['vouchers'],
-            mode='lines+markers',
-            name='Vouchers',
-            line=dict(color='#3498db', width=2),
-            marker=dict(size=6)
+            name='Vouchers Gerados',
+            marker_color='#2ecc71'  # Verde
         ))
         
-        fig_trend.update_layout(
-            title='📈 Tendência de Vouchers por Dia',
+        # Adicionar barras para vouchers não utilizados (topo)
+        fig_temporal.add_trace(go.Bar(
+            x=daily_data['data'],
+            y=daily_data['Vouchers_Nao_Utilizados'],
+            name='Vouchers Não Utilizados',
+            marker_color='#3498db'  # Azul
+        ))
+        
+        fig_temporal.update_layout(
+            title='Evolução Diária de Vouchers',
             xaxis_title='Data',
-            yaxis_title='Quantidade de Vouchers',
-            height=400,
-            hovermode='x unified',
-            template='plotly_white'
+            yaxis_title='Quantidade',
+            barmode='stack',  # Modo empilhado
+            bargap=0.1,
+            height=600,
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            xaxis=dict(
+                showgrid=False,
+                type='date',
+                tickformat='%d/%m'
+            ),
+            yaxis=dict(showgrid=False),
+            showlegend=True,
+            legend=dict(
+                yanchor="top",
+                y=0.99,
+                xanchor="left",
+                x=1.02,
+                orientation="v"
+            ),
+            margin=dict(r=150)  # Margem à direita para a legenda
+        )
+        
+        # Ajustar largura das barras
+        fig_temporal.update_traces(
+            width=0.8  # Ajusta a largura das barras
         )
         
         return html.Div([
@@ -842,7 +875,7 @@ def generate_projections_content(original_df, filtered_df):
                    className="text-muted mb-4"),
             metrics_cards,
             dbc.Row([
-                dbc.Col([dcc.Graph(figure=fig_trend)], md=12)
+                dbc.Col([dcc.Graph(figure=fig_temporal)], md=12)
             ], className="mb-4"),
             dbc.Row([
                 dbc.Col([
@@ -1201,7 +1234,7 @@ def generate_engagement_content(df, network_db):
                 title='Evolução Diária de Vouchers',
                 xaxis_title='Data',
                 yaxis_title='Quantidade',
-                barmode='overlay',  # Modo overlay para sobreposição
+                barmode='stack',  # Modo empilhado
                 bargap=0.1,
                 height=600,
                 plot_bgcolor='white',
@@ -1223,9 +1256,8 @@ def generate_engagement_content(df, network_db):
                 margin=dict(r=150)  # Margem à direita para a legenda
             )
             
-            # Ajustar opacidade e largura das barras
+            # Ajustar largura das barras
             fig_temporal.update_traces(
-                opacity=1,
                 width=0.8  # Ajusta a largura das barras
             )
         
