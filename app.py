@@ -575,84 +575,83 @@ def create_dashboard_layout(is_super_admin=False):
 # ========================
 def generate_kpi_cards(df):
     """Gera cards com KPIs principais"""
-    total_vouchers = len(df)
-    used_vouchers = df[df['situacao_voucher'].str.lower().str.contains('utilizado|usado|ativo', na=False)]
-    total_used = len(used_vouchers)
-    
-    total_value = used_vouchers['valor_dispositivo'].sum()
-    avg_ticket = total_value / total_used if total_used > 0 else 0
-    conversion_rate = (total_used / total_vouchers * 100) if total_vouchers > 0 else 0
-    
-    total_stores = df['nome_filial'].nunique()
-    active_stores = used_vouchers['nome_filial'].nunique() if not used_vouchers.empty else 0
-    
-    return dbc.Row([
-        dbc.Col([
-            dbc.Card([
-                dbc.CardBody([
-                    html.H6("Vouchers Totais", className="card-title text-muted mb-2"),
-                    html.H3(f"{total_vouchers:,}", className="text-info fw-bold mb-1")
-                ])
-            ], className="h-100 shadow-sm border-0")
-        ], md=2),
-        dbc.Col([
-            dbc.Card([
-                dbc.CardBody([
-                    html.H6("Vouchers Utilizados", className="card-title text-muted mb-2"),
-                    html.H3(f"{total_used:,}", className="text-success fw-bold mb-1"),
-                    html.Small(f"{conversion_rate:.1f}% conversão", className="text-muted")
-                ])
-            ], className="h-100 shadow-sm border-0")
-        ], md=2),
-        dbc.Col([
-            dbc.Card([
-                dbc.CardBody([
-                    html.H6("Valor Total", className="card-title text-muted mb-2"),
-                    html.H3(f"R$ {total_value:,.2f}", className="text-warning fw-bold mb-1")
-                ])
-            ], className="h-100 shadow-sm border-0")
-        ], md=2),
-        dbc.Col([
-            dbc.Card([
-                dbc.CardBody([
-                    html.H6("Ticket Médio", className="card-title text-muted mb-2"),
-                    html.H3(f"R$ {avg_ticket:,.2f}", className="text-primary fw-bold mb-1")
-                ])
-            ], className="h-100 shadow-sm border-0")
-        ], md=2),
-        dbc.Col([
-            dbc.Card([
-                dbc.CardBody([
-                    html.H6("Lojas Totais", className="card-title text-muted mb-2"),
-                    html.H3(f"{total_stores}", className="text-danger fw-bold mb-1")
-                ])
-            ], className="h-100 shadow-sm border-0")
-        ], md=2),
-        dbc.Col([
-            dbc.Card([
-                dbc.CardBody([
-                    html.H6("Lojas Ativas", className="card-title text-muted mb-2"),
-                    html.H3(f"{active_stores}", className="text-dark fw-bold mb-1"),
-                    html.Small(f"{(active_stores/total_stores*100):.1f}% do total", className="text-muted")
-                ])
-            ], className="h-100 shadow-sm border-0")
-        ], md=2)
-    ], className="g-2 mb-4")
+    try:
+        total_vouchers = len(df)
+        used_vouchers = df[df['situacao_voucher'].str.lower().str.contains('utilizado|usado|ativo', na=False)]
+        total_used = len(used_vouchers)
+        
+        total_value = used_vouchers['valor_dispositivo'].sum()
+        avg_ticket = total_value / total_used if total_used > 0 else 0
+        conversion_rate = (total_used / total_vouchers * 100) if total_vouchers > 0 else 0
+        
+        total_stores = df['nome_filial'].nunique()
+        active_stores = used_vouchers['nome_filial'].nunique() if not used_vouchers.empty else 0
+        
+        return dbc.Row([
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H6("Vouchers Totais", className="card-title text-muted mb-2"),
+                        html.H3(f"{total_vouchers:,}", className="text-info fw-bold mb-1")
+                    ])
+                ], className="h-100 shadow-sm border-0")
+            ], md=2),
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H6("Vouchers Utilizados", className="card-title text-muted mb-2"),
+                        html.H3(f"{total_used:,}", className="text-success fw-bold mb-1"),
+                        html.Small(f"{conversion_rate:.1f}% conversão", className="text-muted")
+                    ])
+                ], className="h-100 shadow-sm border-0")
+            ], md=2),
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H6("Valor Total", className="card-title text-muted mb-2"),
+                        html.H3(f"R$ {total_value:,.2f}", className="text-warning fw-bold mb-1")
+                    ])
+                ], className="h-100 shadow-sm border-0")
+            ], md=2),
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H6("Ticket Médio", className="card-title text-muted mb-2"),
+                        html.H3(f"R$ {avg_ticket:,.2f}", className="text-primary fw-bold mb-1")
+                    ])
+                ], className="h-100 shadow-sm border-0")
+            ], md=2),
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H6("Lojas Totais", className="card-title text-muted mb-2"),
+                        html.H3(f"{total_stores}", className="text-danger fw-bold mb-1")
+                    ])
+                ], className="h-100 shadow-sm border-0")
+            ], md=2),
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H6("Lojas Ativas", className="card-title text-muted mb-2"),
+                        html.H3(f"{active_stores}", className="text-dark fw-bold mb-1"),
+                        html.Small(f"{(active_stores/total_stores*100):.1f}% do total", className="text-muted")
+                    ])
+                ], className="h-100 shadow-sm border-0")
+            ], md=2)
+        ], className="g-2 mb-4")
+    except Exception as e:
+        print(f"Erro ao gerar KPIs: {str(e)}")
+        traceback.print_exc()
+        return html.Div()
 
 def generate_overview_content(df):
     """Gera o conteúdo da aba de visão geral"""
     try:
-        # Verificar se as colunas necessárias existem
-        required_columns = ['Status', 'Rede', 'Valor Dispositivo', 'Vendedor', 'Filial']
-        missing_columns = [col for col in required_columns if col not in df.columns]
-        
-        if missing_columns:
-            raise ValueError(f"Colunas necessárias não encontradas: {', '.join(missing_columns)}")
-            
-        print("\nGerando visão geral com as seguintes colunas:", df.columns.tolist())
+        # Gerar KPIs
+        kpi_section = generate_kpi_cards(df)
         
         # Gráfico de pizza - distribuição por situação
-        status_counts = df['Status'].value_counts()
+        status_counts = df['situacao_voucher'].value_counts()
         fig_pie = px.pie(
             values=status_counts.values, 
             names=status_counts.index,
@@ -662,7 +661,7 @@ def generate_overview_content(df):
         fig_pie.update_layout(height=400)
         
         # Gráfico de barras - top redes (total)
-        network_counts = df['Rede'].value_counts().head(10)
+        network_counts = df['nome_rede'].value_counts().head(10)
         fig_bar_total = px.bar(
             x=network_counts.values,
             y=network_counts.index,
@@ -674,8 +673,8 @@ def generate_overview_content(df):
         fig_bar_total.update_layout(yaxis={'categoryorder': 'total ascending'}, height=400)
         
         # Gráfico de barras - top redes (apenas utilizados)
-        used_vouchers = df[df['Status'].str.lower().str.contains('utilizado|usado|ativo', na=False)]
-        network_used_counts = used_vouchers['Rede'].value_counts().head(10)
+        used_vouchers = df[df['situacao_voucher'].str.lower().str.contains('utilizado|usado|ativo', na=False)]
+        network_used_counts = used_vouchers['nome_rede'].value_counts().head(10)
         fig_bar_used = px.bar(
             x=network_used_counts.values,
             y=network_used_counts.index,
@@ -710,6 +709,9 @@ def generate_overview_content(df):
             fig_line.update_layout(height=350, title="Evolução Diária")
         
         return html.Div([
+            # KPIs
+            kpi_section,
+            
             # Primeira linha: Vouchers utilizados + Gráfico total
             dbc.Row([
                 dbc.Col([dcc.Graph(figure=fig_bar_used)], md=6),
@@ -733,19 +735,67 @@ def generate_networks_content(df):
         return no_data_message()
 
     try:
-        # Resumo detalhado por rede
-        detailed_summary = generate_detailed_network_summary(df)
+        # Agrupar dados por rede
+        network_summary = df.groupby('nome_rede').agg({
+            'imei': 'count',
+            'valor_dispositivo': 'sum',
+            'nome_vendedor': 'nunique'
+        }).round(2)
+        
+        network_summary.columns = ['Total Vouchers', 'Valor Total', 'Total Colaboradores']
+        network_summary = network_summary.reset_index()
+        
+        # Calcular vouchers utilizados
+        used_vouchers = df[df['situacao_voucher'].str.lower().str.contains('utilizado|usado|ativo', na=False)]
+        used_by_network = used_vouchers.groupby('nome_rede').size().reset_index(name='Vouchers Utilizados')
+        
+        # Juntar com o resumo
+        network_summary = network_summary.merge(used_by_network, on='nome_rede', how='left')
+        network_summary['Vouchers Utilizados'] = network_summary['Vouchers Utilizados'].fillna(0)
+        
+        # Calcular taxa de utilização
+        network_summary['Taxa de Utilização'] = (network_summary['Vouchers Utilizados'] / 
+                                               network_summary['Total Vouchers'] * 100).round(2)
+        
+        # Criar tabela com os dados
+        table = dash_table.DataTable(
+            id='network-summary-table',
+            columns=[
+                {"name": "Rede", "id": "nome_rede"},
+                {"name": "Total de Vouchers", "id": "Total Vouchers", "type": "numeric", "format": {"specifier": ","}},
+                {"name": "Vouchers Utilizados", "id": "Vouchers Utilizados", "type": "numeric", "format": {"specifier": ","}},
+                {"name": "Valor Total", "id": "Valor Total", "type": "numeric", "format": {"specifier": ",.2f", "prefix": "R$ "}},
+                {"name": "Total de Colaboradores", "id": "Total Colaboradores", "type": "numeric", "format": {"specifier": ","}},
+                {"name": "Taxa de Utilização (%)", "id": "Taxa de Utilização", "type": "numeric", "format": {"specifier": ".2f"}}
+            ],
+            data=network_summary.to_dict('records'),
+            style_table={'overflowX': 'auto'},
+            style_header={
+                'backgroundColor': 'rgb(230, 230, 230)',
+                'fontWeight': 'bold',
+                'textAlign': 'center'
+            },
+            style_cell={
+                'textAlign': 'center',
+                'padding': '10px',
+                'minWidth': '100px'
+            },
+            style_data_conditional=[
+                {
+                    'if': {'row_index': 'odd'},
+                    'backgroundColor': 'rgb(248, 248, 248)'
+                }
+            ],
+            sort_action='native',
+            sort_mode='multi'
+        )
         
         return html.Div([
-            dbc.Row([
-                dbc.Col([
-                    html.H4("Resumo por Rede", className="mb-4"),
-                    detailed_summary
-                ])
-            ])
+            html.H4("📊 Resumo por Rede", className="mb-4"),
+            table
         ])
     except Exception as e:
-        print(f"Erro ao gerar conteúdo de redes: {str(e)}")
+        print(f"Erro ao gerar resumo detalhado: {str(e)}")
         return error_message()
 
 def generate_tim_content(df):
@@ -754,7 +804,7 @@ def generate_tim_content(df):
     
     try:
         # Filtrar apenas dados da TIM
-        df_tim = df[df['Rede'].str.upper() == 'TIM']
+        df_tim = df[df['nome_rede'].str.upper() == 'TIM']
         
         if df_tim.empty:
             return html.Div([
@@ -762,14 +812,122 @@ def generate_tim_content(df):
                 html.P("Nenhum dado encontrado para a rede TIM no período selecionado.")
             ])
         
+        # Calcular KPIs da TIM
+        total_vouchers = len(df_tim)
+        used_vouchers = df_tim[df_tim['situacao_voucher'].str.lower().str.contains('utilizado|usado|ativo', na=False)]
+        total_used = len(used_vouchers)
+        
+        total_value = used_vouchers['valor_dispositivo'].sum()
+        avg_ticket = total_value / total_used if total_used > 0 else 0
+        conversion_rate = (total_used / total_vouchers * 100) if total_vouchers > 0 else 0
+        
+        total_stores = df_tim['nome_filial'].nunique()
+        active_stores = used_vouchers['nome_filial'].nunique() if not used_vouchers.empty else 0
+        
+        # KPI Cards
+        kpi_cards = dbc.Row([
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H6("Vouchers Totais", className="card-title text-muted mb-2"),
+                        html.H3(f"{total_vouchers:,}", className="text-info fw-bold mb-1")
+                    ])
+                ], className="h-100 shadow-sm border-0")
+            ], md=2),
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H6("Vouchers Utilizados", className="card-title text-muted mb-2"),
+                        html.H3(f"{total_used:,}", className="text-success fw-bold mb-1"),
+                        html.Small(f"{conversion_rate:.1f}% conversão", className="text-muted")
+                    ])
+                ], className="h-100 shadow-sm border-0")
+            ], md=2),
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H6("Valor Total", className="card-title text-muted mb-2"),
+                        html.H3(f"R$ {total_value:,.2f}", className="text-warning fw-bold mb-1")
+                    ])
+                ], className="h-100 shadow-sm border-0")
+            ], md=2),
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H6("Ticket Médio", className="card-title text-muted mb-2"),
+                        html.H3(f"R$ {avg_ticket:,.2f}", className="text-primary fw-bold mb-1")
+                    ])
+                ], className="h-100 shadow-sm border-0")
+            ], md=2),
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H6("Lojas Totais", className="card-title text-muted mb-2"),
+                        html.H3(f"{total_stores}", className="text-danger fw-bold mb-1")
+                    ])
+                ], className="h-100 shadow-sm border-0")
+            ], md=2),
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H6("Lojas Ativas", className="card-title text-muted mb-2"),
+                        html.H3(f"{active_stores}", className="text-dark fw-bold mb-1"),
+                        html.Small(f"{(active_stores/total_stores*100):.1f}% do total", className="text-muted")
+                    ])
+                ], className="h-100 shadow-sm border-0")
+            ], md=2)
+        ], className="g-2 mb-4")
+        
+        # Gráfico de evolução diária
+        if 'data_str' in df_tim.columns:
+            daily_series = df_tim.groupby('data_str').size().reset_index(name='count')
+            daily_series['data_str'] = pd.to_datetime(daily_series['data_str'])
+            
+            fig_line = px.line(
+                daily_series, 
+                x='data_str', 
+                y='count',
+                title="📅 Evolução Diária de Vouchers TIM",
+                labels={'data_str': 'Data', 'count': 'Quantidade de Vouchers'}
+            )
+            fig_line.update_traces(line_color='#3498db', line_width=3)
+            fig_line.update_layout(height=350)
+        else:
+            fig_line = go.Figure()
+            fig_line.add_annotation(
+                text="Dados temporais não disponíveis",
+                x=0.5, y=0.5, xref="paper", yref="paper",
+                showarrow=False, font_size=16
+            )
+            fig_line.update_layout(height=350, title="Evolução Diária TIM")
+        
+        # Ranking de lojas TIM
+        store_stats = df_tim.groupby('nome_filial').agg({
+            'imei': 'count',
+            'valor_dispositivo': 'sum'
+        }).round(2)
+        store_stats.columns = ['Total_Vouchers', 'Valor_Total']
+        store_stats = store_stats.reset_index().sort_values('Total_Vouchers', ascending=False).head(10)
+        
         return html.Div([
             html.H4("Dashboard TIM", className="mb-4"),
+            kpi_cards,
             dbc.Row([
-                dbc.Col([
-                    # Aqui você pode adicionar os componentes específicos para a TIM
-                    html.P("Conteúdo específico da TIM será implementado aqui.")
-                ])
-            ])
+                dbc.Col([dcc.Graph(figure=fig_line)], md=12)
+            ], className="mb-4"),
+            html.H5("🏪 Top 10 Lojas TIM", className="mb-3"),
+            dash_table.DataTable(
+                data=store_stats.to_dict('records'),
+                columns=[
+                    {"name": "Loja", "id": "nome_filial"},
+                    {"name": "Total Vouchers", "id": "Total_Vouchers", "type": "numeric", "format": {"specifier": ","}},
+                    {"name": "Valor Total", "id": "Valor_Total", "type": "numeric", "format": {"specifier": ",.2f", "prefix": "R$ "}}
+                ],
+                style_cell={"textAlign": "left"},
+                style_header={"backgroundColor": "#e74c3c", "color": "white", "fontWeight": "bold"},
+                page_size=10,
+                sort_action="native"
+            )
         ])
     except Exception as e:
         print(f"Erro ao gerar conteúdo TIM: {str(e)}")
@@ -950,7 +1108,7 @@ def generate_projections_content(original_df, filtered_df):
         
         # Adicionar barras para vouchers gerados
         fig_temporal.add_trace(go.Bar(
-            x=daily_data['data'],
+            x=daily_data['data'], 
             y=daily_data['vouchers'],
             name='Vouchers Gerados',
             marker_color='#3498db',  # Azul
@@ -1929,11 +2087,11 @@ def handle_upload(contents, filename):
         
         print(f"Dados carregados com sucesso. Registros: {len(df)}")
         
-        # Preparar opções para os filtros (garantindo que são strings)
+        # Preparar opções para os filtros
         try:
-            month_options = [{'label': str(m), 'value': str(m)} for m in sorted(df['Mês'].unique()) if pd.notna(m)]
-            network_options = [{'label': str(n), 'value': str(n)} for n in sorted(df['Rede'].unique()) if pd.notna(n)]
-            status_options = [{'label': str(s), 'value': str(s)} for s in sorted(df['Status'].unique()) if pd.notna(s)]
+            month_options = [{'label': str(m), 'value': str(m)} for m in sorted(df['mes'].unique()) if pd.notna(m)]
+            network_options = [{'label': str(n), 'value': str(n)} for n in sorted(df['nome_rede'].unique()) if pd.notna(n)]
+            status_options = [{'label': str(s), 'value': str(s)} for s in sorted(df['situacao_voucher'].unique()) if pd.notna(s)]
             
             print("\nOpções de filtros geradas:")
             print("Meses:", len(month_options))
@@ -1951,7 +2109,7 @@ def handle_upload(contents, filename):
             color="success",
             duration=4000
         )
-        
+
         return (
             success_message,           # upload-status
             df.to_dict('records'),     # store-data
@@ -1961,7 +2119,7 @@ def handle_upload(contents, filename):
             network_options,           # filter-network options
             status_options            # filter-status options
         )
-        
+
     except Exception as e:
         print(f"Erro no upload: {str(e)}")
         traceback.print_exc()
@@ -2065,14 +2223,14 @@ def update_tab_content(active_tab, filtered_data, original_data):
     try:
         # Usar dados filtrados se disponíveis, senão usar dados originais
         data_to_use = filtered_data if filtered_data is not None else original_data
-        
+            
         print(f"Quantidade de registros a processar: {len(data_to_use)}")
         
         df = pd.DataFrame(data_to_use)
         df_original = pd.DataFrame(original_data) if original_data is not None else df
         
         # Verificar se as colunas necessárias existem
-        required_columns = ['Status', 'Rede', 'Valor Dispositivo', 'Vendedor', 'Filial']
+        required_columns = ['situacao_voucher', 'nome_rede', 'valor_dispositivo', 'nome_vendedor', 'nome_filial']
         missing_columns = [col for col in required_columns if col not in df.columns]
         
         if missing_columns:
@@ -2081,14 +2239,14 @@ def update_tab_content(active_tab, filtered_data, original_data):
             raise ValueError(f"Colunas necessárias não encontradas: {', '.join(missing_columns)}")
         
         # Garantir que as colunas numéricas estão no formato correto
-        numeric_columns = ['Valor Voucher', 'Valor Dispositivo']
+        numeric_columns = ['valor_voucher', 'valor_dispositivo']
         for col in numeric_columns:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
                 df_original[col] = pd.to_numeric(df_original[col], errors='coerce').fillna(0)
         
         # Garantir que as colunas de texto não têm valores nulos
-        text_columns = ['Rede', 'Filial', 'Status', 'Vendedor']
+        text_columns = ['nome_rede', 'nome_filial', 'situacao_voucher', 'nome_vendedor']
         for col in text_columns:
             if col in df.columns:
                 df[col] = df[col].fillna('Não informado').astype(str)
@@ -2096,7 +2254,7 @@ def update_tab_content(active_tab, filtered_data, original_data):
         
         print("\nColunas disponíveis após processamento:", df.columns.tolist())
         print("\nAmostra de valores por coluna:")
-        for col in ['Rede', 'Status', 'Mês']:
+        for col in ['nome_rede', 'situacao_voucher', 'mes']:
             if col in df.columns:
                 print(f"{col}:", df[col].unique()[:5].tolist())
         
@@ -2553,53 +2711,45 @@ def parse_upload_content(contents, filename):
             raise ValueError("O arquivo está vazio!")
 
         print("\nColunas originais:", df.columns.tolist())
-        
+
         # Normalizar nomes das colunas
         df.columns = [unidecode(str(col)).strip().lower().replace(' ', '_').replace('ç', 'c') for col in df.columns]
         
-        print("\nColunas após normalização:", df.columns.tolist())
-        
-        # Mapeamento de colunas com mais variações possíveis
-        column_mapping = {
-            'imei': 'imei',
-            'imei2': 'imei2',
-            'descricao': 'descricao',
-            'nome_do_vendedor': 'nome_vendedor',
-            'nome_vendedor': 'nome_vendedor',
-            'vendedor': 'nome_vendedor',
-            'nome_da_filial': 'nome_filial',
-            'nome_filial': 'nome_filial',
-            'filial': 'nome_filial',
-            'nome_da_rede': 'nome_rede',
-            'nome_rede': 'nome_rede',
-            'rede': 'nome_rede',
-            'criado_em': 'criado_em',
-            'data_criacao': 'criado_em',
-            'data_de_uso': 'data_de_uso',
-            'contigenciado': 'contigenciado',
-            'valor_do_voucher': 'valor_voucher',
-            'valor_voucher': 'valor_voucher',
-            'situacao_do_voucher': 'situacao_voucher',
-            'situacao_voucher': 'situacao_voucher',
-            'status': 'situacao_voucher',
-            'codigo_do_voucher': 'codigo_voucher',
-            'cpf_do_cliente': 'cpf_cliente',
-            'nome_do_cliente': 'nome_cliente',
-            'valor_do_dispositivo': 'valor_dispositivo',
-            'valor_dispositivo': 'valor_dispositivo'
+        # Validar colunas obrigatórias
+        required_columns = {
+            'imei': ['imei', 'device_id', 'dispositivo'],
+            'criado_em': ['criado_em', 'data_criacao', 'data', 'created_at'],
+            'valor_voucher': ['valor_do_voucher', 'valor_voucher', 'voucher_value'],
+            'valor_dispositivo': ['valor_do_dispositivo', 'valor_dispositivo', 'device_value'],
+            'situacao_voucher': ['situacao_do_voucher', 'situacao_voucher', 'status_voucher', 'status'],
+            'nome_vendedor': ['nome_do_vendedor', 'vendedor', 'seller_name'],
+            'nome_filial': ['nome_da_filial', 'filial', 'branch_name'],
+            'nome_rede': ['nome_da_rede', 'rede', 'network_name']
         }
 
-        # Renomear colunas existentes
-        rename_dict = {col: column_mapping[col] for col in df.columns if col in column_mapping}
-        df = df.rename(columns=rename_dict)
-        
-        print("\nColunas após mapeamento:", df.columns.tolist())
+        column_mapping = {}
+        missing_columns = []
+        for standard_name, possible_names in required_columns.items():
+            found = False
+            for possible_name in possible_names:
+                if possible_name in df.columns:
+                    column_mapping[possible_name] = standard_name
+                    found = True
+                    break
+            if not found:
+                missing_columns.append(standard_name)
+
+        if missing_columns:
+            raise ValueError(f"Colunas obrigatórias não encontradas: {', '.join(missing_columns)}")
+
+        # Renomear e processar colunas
+        df = df.rename(columns=column_mapping)
 
         # Processar datas
         if 'criado_em' in df.columns:
             df['criado_em'] = pd.to_datetime(df['criado_em'], errors='coerce')
             df = df.dropna(subset=['criado_em'])
-            df['Mês'] = df['criado_em'].dt.strftime('%b/%Y')
+            df['mes'] = df['criado_em'].dt.strftime('%b')
             df['mes_num'] = df['criado_em'].dt.month
             df['dia'] = df['criado_em'].dt.day
             df['ano'] = df['criado_em'].dt.year
@@ -2609,34 +2759,12 @@ def parse_upload_content(contents, filename):
             raise ValueError("Nenhuma data válida encontrada após processamento!")
 
         # Limpar e converter valores numéricos
-        numeric_columns = ['valor_voucher', 'valor_dispositivo']
-        for col in numeric_columns:
+        for col in ['valor_voucher', 'valor_dispositivo']:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
         
-        # Tratar valores nulos nas colunas de texto
-        text_columns = ['nome_rede', 'nome_filial', 'situacao_voucher', 'nome_vendedor']
-        for col in text_columns:
-            if col in df.columns:
-                df[col] = df[col].fillna('Não informado').astype(str)
-        
-        # Renomear colunas para exibição
-        display_columns = {
-            'nome_rede': 'Rede',
-            'nome_filial': 'Filial',
-            'situacao_voucher': 'Status',
-            'valor_voucher': 'Valor Voucher',
-            'valor_dispositivo': 'Valor Dispositivo',
-            'nome_vendedor': 'Vendedor'
-        }
-        df = df.rename(columns=display_columns)
-        
-        print("\nColunas finais:", df.columns.tolist())
-        print(f"Total de registros: {len(df)}")
-        print("\nAmostra de valores por coluna:")
-        for col in ['Rede', 'Status', 'Mês']:
-            if col in df.columns:
-                print(f"{col}:", df[col].unique()[:5].tolist())
+        print(f"\nDados processados com sucesso. Total de registros: {len(df)}")
+        print("Colunas finais:", df.columns.tolist())
         
         return df
         
