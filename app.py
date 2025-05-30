@@ -642,8 +642,17 @@ def generate_kpi_cards(df):
 def generate_overview_content(df):
     """Gera o conteúdo da aba de visão geral"""
     try:
+        # Verificar se as colunas necessárias existem
+        required_columns = ['Status', 'Rede', 'Valor Dispositivo', 'Vendedor', 'Filial']
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        
+        if missing_columns:
+            raise ValueError(f"Colunas necessárias não encontradas: {', '.join(missing_columns)}")
+            
+        print("\nGerando visão geral com as seguintes colunas:", df.columns.tolist())
+        
         # Gráfico de pizza - distribuição por situação
-        status_counts = df['situacao_voucher'].value_counts()
+        status_counts = df['Status'].value_counts()
         fig_pie = px.pie(
             values=status_counts.values, 
             names=status_counts.index,
@@ -653,7 +662,7 @@ def generate_overview_content(df):
         fig_pie.update_layout(height=400)
         
         # Gráfico de barras - top redes (total)
-        network_counts = df['nome_rede'].value_counts().head(10)
+        network_counts = df['Rede'].value_counts().head(10)
         fig_bar_total = px.bar(
             x=network_counts.values,
             y=network_counts.index,
@@ -665,8 +674,8 @@ def generate_overview_content(df):
         fig_bar_total.update_layout(yaxis={'categoryorder': 'total ascending'}, height=400)
         
         # Gráfico de barras - top redes (apenas utilizados)
-        used_vouchers = df[df['situacao_voucher'].str.lower().str.contains('utilizado|usado|ativo', na=False)]
-        network_used_counts = used_vouchers['nome_rede'].value_counts().head(10)
+        used_vouchers = df[df['Status'].str.lower().str.contains('utilizado|usado|ativo', na=False)]
+        network_used_counts = used_vouchers['Rede'].value_counts().head(10)
         fig_bar_used = px.bar(
             x=network_used_counts.values,
             y=network_used_counts.index,
@@ -700,69 +709,6 @@ def generate_overview_content(df):
             )
             fig_line.update_layout(height=350, title="Evolução Diária")
         
-        # Análise por rede para tabela
-        unique_days = df['data_str'].nunique() if 'data_str' in df.columns else 1
-        
-        network_summary = []
-        for rede in df['nome_rede'].unique():
-            rede_data = df[df['nome_rede'] == rede]
-            rede_used = used_vouchers[used_vouchers['nome_rede'] == rede]
-            
-            vouchers_totais = len(rede_data)
-            vouchers_utilizados = len(rede_used)
-            valor_total = rede_used['valor_dispositivo'].sum()
-            ticket_medio = valor_total / vouchers_utilizados if vouchers_utilizados > 0 else 0
-            lojas_totais = rede_data['nome_filial'].nunique()
-            lojas_ativas = rede_used['nome_filial'].nunique() if not rede_used.empty else 0
-            
-            media_diaria_utilizados = vouchers_utilizados / unique_days if unique_days > 0 else 0
-            projecao_mensal_utilizados = media_diaria_utilizados * 30
-            projecao_valor_total = (valor_total / unique_days * 30) if unique_days > 0 else 0
-            
-            network_summary.append({
-                'Nome_da_Rede': rede,
-                'Vouchers_Totais': int(vouchers_totais),
-                'Vouchers_Utilizados': int(vouchers_utilizados),
-                'Valor_Total': f"R$ {valor_total:,.0f}",
-                'Ticket_Medio': f"R$ {ticket_medio:,.0f}",
-                'Lojas_Totais': int(lojas_totais),
-                'Lojas_Ativas': int(lojas_ativas),
-                'Media_Diaria_Utilizados': round(media_diaria_utilizados, 0),
-                'Projecao_Mensal_Utilizados': int(projecao_mensal_utilizados),
-                'Projecao_Valor_Total': f"R$ {projecao_valor_total:,.0f}"
-            })
-        
-        # Ordenar por vouchers utilizados
-        network_summary = sorted(network_summary, key=lambda x: int(x['Vouchers_Utilizados']), reverse=True)
-        
-        # Tabela com formatação
-        network_table = dash_table.DataTable(
-            data=network_summary,
-            columns=[
-                {"name": "Rede", "id": "Nome_da_Rede"},
-                {"name": "Vouchers Totais", "id": "Vouchers_Totais", "type": "numeric"},
-                {"name": "Vouchers Utilizados", "id": "Vouchers_Utilizados", "type": "numeric"},
-                {"name": "Valor Total", "id": "Valor_Total"},
-                {"name": "Ticket Médio", "id": "Ticket_Medio"},
-                {"name": "Lojas Totais", "id": "Lojas_Totais", "type": "numeric"},
-                {"name": "Lojas Ativas", "id": "Lojas_Ativas", "type": "numeric"},
-                {"name": "Média Diária Utilizados", "id": "Media_Diaria_Utilizados", "type": "numeric"},
-                {"name": "Projeção Mensal Utilizados", "id": "Projecao_Mensal_Utilizados", "type": "numeric"},
-                {"name": "Projeção Valor Total", "id": "Projecao_Valor_Total"}
-            ],
-            style_cell={"textAlign": "left", "fontSize": "11px", "padding": "8px"},
-            style_header={"backgroundColor": "#3498db", "color": "white", "fontWeight": "bold"},
-            style_data_conditional=[
-                {
-                    "if": {"row_index": 0},
-                    "backgroundColor": "#e8f5e8",
-                    "color": "black"
-                }
-            ],
-            sort_action="native",
-            page_size=15
-        )
-        
         return html.Div([
             # Primeira linha: Vouchers utilizados + Gráfico total
             dbc.Row([
@@ -774,16 +720,12 @@ def generate_overview_content(df):
             dbc.Row([
                 dbc.Col([dcc.Graph(figure=fig_pie)], md=6),
                 dbc.Col([dcc.Graph(figure=fig_line)], md=6)
-            ], className="mb-4"),
-            
-            # Tabela resumo das redes
-            html.Hr(),
-            html.H5("📋 Resumo Detalhado por Rede", className="mb-3"),
-            html.P(f"Análise baseada em {unique_days} dias de dados", className="text-muted mb-3"),
-            network_table
+            ], className="mb-4")
         ])
         
     except Exception as e:
+        print(f"Erro na visão geral: {str(e)}")
+        traceback.print_exc()
         return dbc.Alert(f"Erro na visão geral: {str(e)}", color="danger")
 
 def generate_networks_content(df):
@@ -2129,6 +2071,15 @@ def update_tab_content(active_tab, filtered_data, original_data):
         df = pd.DataFrame(data_to_use)
         df_original = pd.DataFrame(original_data) if original_data is not None else df
         
+        # Verificar se as colunas necessárias existem
+        required_columns = ['Status', 'Rede', 'Valor Dispositivo', 'Vendedor', 'Filial']
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        
+        if missing_columns:
+            print(f"Colunas faltando: {missing_columns}")
+            print("Colunas disponíveis:", df.columns.tolist())
+            raise ValueError(f"Colunas necessárias não encontradas: {', '.join(missing_columns)}")
+        
         # Garantir que as colunas numéricas estão no formato correto
         numeric_columns = ['Valor Voucher', 'Valor Dispositivo']
         for col in numeric_columns:
@@ -2143,7 +2094,11 @@ def update_tab_content(active_tab, filtered_data, original_data):
                 df[col] = df[col].fillna('Não informado').astype(str)
                 df_original[col] = df_original[col].fillna('Não informado').astype(str)
         
-        print("Colunas disponíveis:", df.columns.tolist())
+        print("\nColunas disponíveis após processamento:", df.columns.tolist())
+        print("\nAmostra de valores por coluna:")
+        for col in ['Rede', 'Status', 'Mês']:
+            if col in df.columns:
+                print(f"{col}:", df[col].unique()[:5].tolist())
         
         if active_tab == "overview":
             return generate_overview_content(df)
@@ -2597,38 +2552,48 @@ def parse_upload_content(contents, filename):
         if df.empty:
             raise ValueError("O arquivo está vazio!")
 
+        print("\nColunas originais:", df.columns.tolist())
+        
         # Normalizar nomes das colunas
         df.columns = [unidecode(str(col)).strip().lower().replace(' ', '_').replace('ç', 'c') for col in df.columns]
         
-        # Validar colunas obrigatórias
-        required_columns = {
-            'imei': ['imei', 'device_id', 'dispositivo'],
-            'criado_em': ['criado_em', 'data_criacao', 'data', 'created_at'],
-            'valor_voucher': ['valor_do_voucher', 'valor_voucher', 'voucher_value'],
-            'valor_dispositivo': ['valor_do_dispositivo', 'valor_dispositivo', 'device_value'],
-            'situacao_voucher': ['situacao_do_voucher', 'situacao_voucher', 'status_voucher', 'status'],
-            'nome_vendedor': ['nome_do_vendedor', 'vendedor', 'seller_name'],
-            'nome_filial': ['nome_da_filial', 'filial', 'branch_name'],
-            'nome_rede': ['nome_da_rede', 'rede', 'network_name']
+        print("\nColunas após normalização:", df.columns.tolist())
+        
+        # Mapeamento de colunas com mais variações possíveis
+        column_mapping = {
+            'imei': 'imei',
+            'imei2': 'imei2',
+            'descricao': 'descricao',
+            'nome_do_vendedor': 'nome_vendedor',
+            'nome_vendedor': 'nome_vendedor',
+            'vendedor': 'nome_vendedor',
+            'nome_da_filial': 'nome_filial',
+            'nome_filial': 'nome_filial',
+            'filial': 'nome_filial',
+            'nome_da_rede': 'nome_rede',
+            'nome_rede': 'nome_rede',
+            'rede': 'nome_rede',
+            'criado_em': 'criado_em',
+            'data_criacao': 'criado_em',
+            'data_de_uso': 'data_de_uso',
+            'contigenciado': 'contigenciado',
+            'valor_do_voucher': 'valor_voucher',
+            'valor_voucher': 'valor_voucher',
+            'situacao_do_voucher': 'situacao_voucher',
+            'situacao_voucher': 'situacao_voucher',
+            'status': 'situacao_voucher',
+            'codigo_do_voucher': 'codigo_voucher',
+            'cpf_do_cliente': 'cpf_cliente',
+            'nome_do_cliente': 'nome_cliente',
+            'valor_do_dispositivo': 'valor_dispositivo',
+            'valor_dispositivo': 'valor_dispositivo'
         }
 
-        column_mapping = {}
-        missing_columns = []
-        for standard_name, possible_names in required_columns.items():
-            found = False
-            for possible_name in possible_names:
-                if possible_name in df.columns:
-                    column_mapping[possible_name] = standard_name
-                    found = True
-                    break
-            if not found:
-                missing_columns.append(standard_name)
-
-        if missing_columns:
-            raise ValueError(f"Colunas obrigatórias não encontradas: {', '.join(missing_columns)}")
-
-        # Renomear e processar colunas
-        df = df.rename(columns=column_mapping)
+        # Renomear colunas existentes
+        rename_dict = {col: column_mapping[col] for col in df.columns if col in column_mapping}
+        df = df.rename(columns=rename_dict)
+        
+        print("\nColunas após mapeamento:", df.columns.tolist())
 
         # Processar datas
         if 'criado_em' in df.columns:
@@ -2644,7 +2609,8 @@ def parse_upload_content(contents, filename):
             raise ValueError("Nenhuma data válida encontrada após processamento!")
 
         # Limpar e converter valores numéricos
-        for col in ['valor_voucher', 'valor_dispositivo']:
+        numeric_columns = ['valor_voucher', 'valor_dispositivo']
+        for col in numeric_columns:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
         
@@ -2665,10 +2631,9 @@ def parse_upload_content(contents, filename):
         }
         df = df.rename(columns=display_columns)
         
-        print("\nDados processados com sucesso:")
-        print(f"Registros: {len(df)}")
-        print("Colunas:", df.columns.tolist())
-        print("\nAmostra de valores únicos por coluna:")
+        print("\nColunas finais:", df.columns.tolist())
+        print(f"Total de registros: {len(df)}")
+        print("\nAmostra de valores por coluna:")
         for col in ['Rede', 'Status', 'Mês']:
             if col in df.columns:
                 print(f"{col}:", df[col].unique()[:5].tolist())
