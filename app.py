@@ -233,45 +233,31 @@ def create_dashboard_layout(is_super_admin=False):
             dbc.Col([
                 html.Div([
                     html.Img(
-                        src='/assets/logo.svg',
-                        className="dashboard-logo",
+                        src='/assets/logo-login.png',  # Usando a mesma imagem do login
                         style={
-                            'height': '50px',  # Aumentado para 50px
-                            'marginRight': '20px',
-                            'marginTop': '0px',
-                            'marginBottom': '0px',
+                            'height': '45px',
+                            'marginRight': '15px',
+                            'display': 'inline-block',
                             'verticalAlign': 'middle'
                         }
                     ),
                     html.H1(
                         "Dashboard de Performance",
-                        className="dashboard-title",
                         style={
                             'display': 'inline-block',
                             'verticalAlign': 'middle',
                             'margin': '0',
                             'color': '#2c3e50',
-                            'fontSize': '28px',  # Ajustado tamanho da fonte
-                            'fontWeight': '600',
-                            'lineHeight': '50px'  # Alinhado com a altura do logo
+                            'fontSize': '24px',
+                            'fontWeight': '600'
                         }
                     )
-                ], className="dashboard-header", style={
+                ], style={
                     'display': 'flex',
                     'alignItems': 'center',
-                    'padding': '15px 0',
-                    'backgroundColor': '#ffffff',
-                    'borderBottom': '2px solid #e0e0e0'
+                    'padding': '10px 0'
                 })
-            ], width=10),
-            dbc.Col([
-                dbc.Button(
-                    "Sair",
-                    id="logout-button",
-                    color="danger",
-                    style={'marginTop': '10px'}
-                )
-            ], width=2),
+            ], width=True)
         ], className="mb-4"),
         
         # Upload Section with Network Buttons
@@ -343,10 +329,41 @@ def create_dashboard_layout(is_super_admin=False):
                     html.H5("🔍 Filtros", className="mb-3"),
                     dbc.Row([
                         dbc.Col([
-                            html.Label("Período:", className="filter-label mb-2", style={
+                            html.Label("Mês:", className="filter-label", style={
                                 'fontSize': '14px',
                                 'fontWeight': '500',
-                                'color': '#2c3e50'
+                                'color': '#2c3e50',
+                                'marginBottom': '8px'
+                            }),
+                            dcc.Dropdown(
+                                id='filter-month',
+                                placeholder='Selecione o(s) mês(es)',
+                                multi=True,
+                                className='filter-dropdown',
+                                style={'width': '100%'}
+                            )
+                        ], md=4),
+                        dbc.Col([
+                            html.Label("Rede:", className="filter-label", style={
+                                'fontSize': '14px',
+                                'fontWeight': '500',
+                                'color': '#2c3e50',
+                                'marginBottom': '8px'
+                            }),
+                            dcc.Dropdown(
+                                id='filter-network',
+                                placeholder='Selecione a(s) rede(s)',
+                                multi=True,
+                                className='filter-dropdown',
+                                style={'width': '100%'}
+                            )
+                        ], md=4),
+                        dbc.Col([
+                            html.Label("Período:", className="filter-label", style={
+                                'fontSize': '14px',
+                                'fontWeight': '500',
+                                'color': '#2c3e50',
+                                'marginBottom': '8px'
                             }),
                             dbc.Row([
                                 dbc.Col([
@@ -354,85 +371,32 @@ def create_dashboard_layout(is_super_admin=False):
                                         id='filter-start-date',
                                         placeholder="Data Inicial",
                                         display_format='DD/MM/YYYY',
-                                        className="date-picker-filter",
+                                        className='filter-date',
                                         style={
                                             'width': '100%',
-                                            'height': '38px',  # Mesma altura dos dropdowns
+                                            'border': '1px solid #ddd',
                                             'borderRadius': '4px',
-                                            'border': '1px solid #cccccc'
+                                            'backgroundColor': 'white'
                                         }
                                     )
-                                ], width=6, className="pe-1"),
+                                ], width=6, className='pe-1'),
                                 dbc.Col([
                                     dcc.DatePickerSingle(
                                         id='filter-end-date',
                                         placeholder="Data Final",
                                         display_format='DD/MM/YYYY',
-                                        className="date-picker-filter",
+                                        className='filter-date',
                                         style={
                                             'width': '100%',
-                                            'height': '38px',  # Mesma altura dos dropdowns
+                                            'border': '1px solid #ddd',
                                             'borderRadius': '4px',
-                                            'border': '1px solid #cccccc'
+                                            'backgroundColor': 'white'
                                         }
                                     )
-                                ], width=6, className="ps-1")
+                                ], width=6, className='ps-1')
                             ])
-                        ], md=3),
-                        dbc.Col([
-                            html.Label("Mês:", className="filter-label mb-2", style={
-                                'fontSize': '14px',
-                                'fontWeight': '500',
-                                'color': '#2c3e50'
-                            }),
-                            dcc.Dropdown(
-                                id='filter-month',
-                                multi=True,
-                                placeholder="Selecione o(s) mês(es)",
-                                className="filter-dropdown",
-                                style={'height': '38px'}
-                            )
-                        ], md=3),
-                        dbc.Col([
-                            html.Label("Rede:", className="filter-label mb-2", style={
-                                'fontSize': '14px',
-                                'fontWeight': '500',
-                                'color': '#2c3e50'
-                            }),
-                            dcc.Dropdown(
-                                id='filter-network',
-                                multi=True,
-                                placeholder="Selecione a(s) rede(s)",
-                                className="filter-dropdown",
-                                style={'height': '38px'}
-                            )
-                        ], md=3),
-                        dbc.Col([
-                            html.Label("Situação:", className="filter-label mb-2", style={
-                                'fontSize': '14px',
-                                'fontWeight': '500',
-                                'color': '#2c3e50'
-                            }),
-                            dcc.Dropdown(
-                                id='filter-status',
-                                multi=True,
-                                placeholder="Selecione o(s) status",
-                                className="filter-dropdown",
-                                style={'height': '38px'}
-                            )
-                        ], md=3)
-                    ]),
-                    dbc.Button(
-                        "Limpar Filtros",
-                        id="clear-filters",
-                        color="secondary",
-                        size="sm",
-                        className="mt-3",
-                        style={
-                            'fontSize': '12px',
-                            'padding': '5px 10px'
-                        }
-                    )
+                        ], md=4)
+                    ], className="mb-4")
                 ])
             ], className="mb-4")
         ]),
@@ -882,40 +846,35 @@ def generate_projections_content(original_df, filtered_df):
         daily_data['data'] = pd.to_datetime(daily_data['data'])
         daily_data = daily_data.sort_values('data')
         
-        # Criar gráfico de barras empilhadas
+        # Criar gráfico de barras
         fig_temporal = go.Figure()
         
-        # Adicionar barras para vouchers utilizados (base)
+        # Adicionar barras para vouchers gerados
         fig_temporal.add_trace(go.Bar(
             x=daily_data['data'],
             y=daily_data['vouchers'],
             name='Vouchers Gerados',
-            marker_color='#2ecc71'  # Verde
+            marker_color='#3498db',  # Azul
+            width=0.5  # Largura da barra
         ))
         
-        # Adicionar barras para vouchers não utilizados (topo)
+        # Adicionar barras para vouchers utilizados
         fig_temporal.add_trace(go.Bar(
             x=daily_data['data'],
             y=daily_data['vouchers_utilizados'],
-            name='Vouchers Não Utilizados',
-            marker_color='#3498db'  # Azul
+            name='Vouchers Utilizados',
+            marker_color='#2ecc71',  # Verde
+            width=0.5  # Largura da barra
         ))
         
+        # Configurar layout
         fig_temporal.update_layout(
             title='Evolução Diária de Vouchers',
-            xaxis_title='Data',
-            yaxis_title='Quantidade',
-            barmode='stack',  # Modo empilhado
-            bargap=0.1,
+            barmode='overlay',  # Sobrepor as barras
+            bargap=0,  # Remover espaço entre grupos de barras
             height=600,
             plot_bgcolor='white',
             paper_bgcolor='white',
-            xaxis=dict(
-                showgrid=False,
-                type='date',
-                tickformat='%d/%m'
-            ),
-            yaxis=dict(showgrid=False),
             showlegend=True,
             legend=dict(
                 yanchor="top",
@@ -924,12 +883,18 @@ def generate_projections_content(original_df, filtered_df):
                 x=1.02,
                 orientation="v"
             ),
-            margin=dict(r=150)  # Margem à direita para a legenda
-        )
-        
-        # Ajustar largura das barras
-        fig_temporal.update_traces(
-            width=0.8  # Ajusta a largura das barras
+            margin=dict(r=150),
+            xaxis=dict(
+                showgrid=False,
+                type='date',
+                tickformat='%d/%m',
+                dtick='D1',  # Mostrar todos os dias
+                tickangle=45
+            ),
+            yaxis=dict(
+                showgrid=False,
+                zeroline=False
+            )
         )
         
         return html.Div([
