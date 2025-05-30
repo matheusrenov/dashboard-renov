@@ -1357,7 +1357,7 @@ def update_tabela_equipes(rede_selecionada, situacao_selecionada, data):
             return html.Div("Dados de colaboradores não disponíveis.")
         
         # Filtrar por rede se necessário
-        if rede_selecionada != 'todas':
+        if rede_selecionada and rede_selecionada != 'todas':
             todos_colaboradores = todos_colaboradores[todos_colaboradores['rede'] == rede_selecionada]
         
         # Criar conjunto de colaboradores com vouchers utilizados
@@ -1389,6 +1389,9 @@ def update_tabela_equipes(rede_selecionada, situacao_selecionada, data):
             
             # Preparar dados da tabela
             dados_tabela = []
+            total_gerados = 0
+            total_utilizados = 0
+            
             for _, row in grupo.iterrows():
                 vouchers_gerados = len(df[df['nome_vendedor'] == row['nome']])
                 vouchers_utilizados = len(df[
@@ -1396,11 +1399,21 @@ def update_tabela_equipes(rede_selecionada, situacao_selecionada, data):
                     (df['situacao_voucher'].str.lower().str.contains('utilizado|usado|ativo', na=False))
                 ])
                 
+                total_gerados += vouchers_gerados
+                total_utilizados += vouchers_utilizados
+                
                 dados_tabela.append({
                     'Colaborador': row['nome'],
                     'Vouchers Gerados': vouchers_gerados,
                     'Vouchers Utilizados': vouchers_utilizados
                 })
+            
+            # Adicionar linha de total
+            dados_tabela.append({
+                'Colaborador': 'Total',
+                'Vouchers Gerados': total_gerados,
+                'Vouchers Utilizados': total_utilizados
+            })
             
             # Tabela de colaboradores da filial
             tabela = dash_table.DataTable(
@@ -1429,9 +1442,14 @@ def update_tabela_equipes(rede_selecionada, situacao_selecionada, data):
                     {
                         'if': {'row_index': 'odd'},
                         'backgroundColor': '#f8f9fa'
+                    },
+                    {
+                        'if': {'filter_query': '{Colaborador} = "Total"'},
+                        'fontWeight': 'bold',
+                        'backgroundColor': '#f8f9fa'
                     }
                 ],
-                page_size=5
+                page_size=10
             )
             
             tabelas_filiais.extend([header, tabela])
@@ -1512,9 +1530,12 @@ def export_excel(n_clicks, rede_selecionada, situacao_selecionada, data):
             excel_data.append({
                 'Filial/Colaborador': f'📍 {filial} - {rede}',
                 'Vouchers Gerados': '',
-                'Vouchers Utilizados': '',
-                'Rede': rede
+                'Vouchers Utilizados': ''
             })
+            
+            # Inicializar totais da filial
+            total_gerados_filial = 0
+            total_utilizados_filial = 0
             
             # Adicionar colaboradores
             for _, row in grupo.iterrows():
@@ -1525,12 +1546,29 @@ def export_excel(n_clicks, rede_selecionada, situacao_selecionada, data):
                     (df['situacao_voucher'].str.lower().str.contains('utilizado|usado|ativo', na=False))
                 ])
                 
+                # Acumular totais
+                total_gerados_filial += vouchers_gerados
+                total_utilizados_filial += vouchers_utilizados
+                
                 excel_data.append({
                     'Filial/Colaborador': row['nome'],
                     'Vouchers Gerados': vouchers_gerados,
-                    'Vouchers Utilizados': vouchers_utilizados,
-                    'Rede': rede
+                    'Vouchers Utilizados': vouchers_utilizados
                 })
+            
+            # Adicionar linha de total da filial
+            excel_data.append({
+                'Filial/Colaborador': 'Total',
+                'Vouchers Gerados': total_gerados_filial,
+                'Vouchers Utilizados': total_utilizados_filial
+            })
+            
+            # Adicionar linha em branco após cada filial
+            excel_data.append({
+                'Filial/Colaborador': '',
+                'Vouchers Gerados': '',
+                'Vouchers Utilizados': ''
+            })
         
         # Converter para DataFrame
         df_excel = pd.DataFrame(excel_data)
@@ -1552,37 +1590,61 @@ def export_excel(n_clicks, rede_selecionada, situacao_selecionada, data):
                 'bold': True,
                 'bg_color': '#3498db',
                 'font_color': 'white',
-                'border': 1
+                'border': 1,
+                'font_size': 12
             })
             
             filial_format = workbook.add_format({  # type: ignore
                 'bg_color': '#f8f9fa',
                 'bold': True,
-                'text_wrap': True
+                'text_wrap': True,
+                'font_size': 12
             })
             
             number_format = workbook.add_format({  # type: ignore
-                'num_format': '0'
+                'num_format': '0',
+                'font_size': 12
+            })
+            
+            total_format = workbook.add_format({  # type: ignore
+                'bold': True,
+                'num_format': '0',
+                'font_size': 12,
+                'bottom': 1
+            })
+            
+            regular_format = workbook.add_format({  # type: ignore
+                'font_size': 12
             })
             
             # Aplicar formatos
             for col_num, value in enumerate(df_excel.columns.values):
                 worksheet.write(0, col_num, value, header_format)
             
-            # Ajustar largura das colunas
-            worksheet.set_column('A:A', 40)  # Filial/Colaborador
-            worksheet.set_column('B:C', 15)  # Vouchers
-            worksheet.set_column('D:D', 30)  # Rede
+            # Ajustar largura das colunas (aumentadas em 30%)
+            worksheet.set_column('A:A', 52)  # Filial/Colaborador (40 * 1.3)
+            worksheet.set_column('B:C', 20)  # Vouchers (15 * 1.3)
             
             # Aplicar formatos para cada linha
             for row_num in range(1, len(df_excel) + 1):
-                if df_excel.iloc[row_num-1]['Filial/Colaborador'].startswith('📍'):
+                row_data = df_excel.iloc[row_num-1]
+                
+                if row_data['Filial/Colaborador'].startswith('📍'):
                     # Linha de filial
                     worksheet.set_row(row_num, None, filial_format)
+                elif row_data['Filial/Colaborador'] == 'Total':
+                    # Linha de total
+                    worksheet.write(row_num, 0, row_data['Filial/Colaborador'], total_format)
+                    worksheet.write(row_num, 1, row_data['Vouchers Gerados'], total_format)
+                    worksheet.write(row_num, 2, row_data['Vouchers Utilizados'], total_format)
+                elif row_data['Filial/Colaborador'] == '':
+                    # Linha em branco
+                    worksheet.set_row(row_num, None, regular_format)
                 else:
-                    # Linha de colaborador - aplicar formato numérico
-                    worksheet.write(row_num, 1, df_excel.iloc[row_num-1]['Vouchers Gerados'], number_format)
-                    worksheet.write(row_num, 2, df_excel.iloc[row_num-1]['Vouchers Utilizados'], number_format)
+                    # Linha de colaborador
+                    worksheet.write(row_num, 0, row_data['Filial/Colaborador'], regular_format)
+                    worksheet.write(row_num, 1, row_data['Vouchers Gerados'], number_format)
+                    worksheet.write(row_num, 2, row_data['Vouchers Utilizados'], number_format)
         
         # Preparar arquivo para download
         output.seek(0)
@@ -1749,7 +1811,8 @@ def apply_filters(months, networks, statuses, clear_clicks, original_data):
     
     try:
         ctx = callback_context
-        if ctx.triggered and 'clear-filters' in ctx.triggered[0]['prop_id']:
+        triggered = getattr(ctx, 'triggered', [])
+        if triggered and 'clear-filters' in triggered[0].get('prop_id', ''):
             return original_data, dbc.Alert("Filtros limpos com sucesso!", color="info", duration=2000)
         
         df = pd.DataFrame(original_data)
@@ -1871,7 +1934,11 @@ def display_page(pathname, error_data):
     if not ctx.triggered:
         return create_login_layout()
     
-    trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    triggered = getattr(ctx, 'triggered', [])
+    if not triggered:
+        return create_login_layout()
+    
+    trigger_id = triggered[0].get('prop_id', '').split('.')[0]
     
     if trigger_id == 'error-store' and error_data:
         return create_error_layout(
@@ -1968,7 +2035,11 @@ def handle_network_upload(networks_contents, employees_contents, networks_filena
         return no_update
 
     try:
-        trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+        triggered = getattr(ctx, 'triggered', [])
+        if not triggered:
+            return no_update
+            
+        trigger_id = triggered[0].get('prop_id', '').split('.')[0]
         db = NetworkDatabase()
         
         if trigger_id == 'upload-networks-branches-file' and networks_contents:
