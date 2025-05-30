@@ -1377,12 +1377,9 @@ def update_tabela_equipes(rede_selecionada, situacao_selecionada, data):
         else:  # total
             colaboradores_filtrados = todos_colaboradores
         
-        # Agrupar por filial
-        filiais_grupos = colaboradores_filtrados.groupby(['filial', 'rede'])
-        
         # Criar lista de tabelas, uma para cada filial
         tabelas_filiais = []
-        for (filial, rede), grupo in filiais_grupos:
+        for (filial, rede), grupo in colaboradores_filtrados.groupby(['filial', 'rede']):
             # Cabeçalho da filial
             header = dbc.Alert(
                 f"📍 {filial} - {rede}",
@@ -1390,11 +1387,28 @@ def update_tabela_equipes(rede_selecionada, situacao_selecionada, data):
                 className="mt-3 mb-2"
             )
             
+            # Preparar dados da tabela
+            dados_tabela = []
+            for _, row in grupo.iterrows():
+                vouchers_gerados = len(df[df['nome_vendedor'] == row['nome']])
+                vouchers_utilizados = len(df[
+                    (df['nome_vendedor'] == row['nome']) & 
+                    (df['situacao_voucher'].str.lower().str.contains('utilizado|usado|ativo', na=False))
+                ])
+                
+                dados_tabela.append({
+                    'Colaborador': row['nome'],
+                    'Vouchers Gerados': vouchers_gerados,
+                    'Vouchers Utilizados': vouchers_utilizados
+                })
+            
             # Tabela de colaboradores da filial
             tabela = dash_table.DataTable(
-                data=grupo[['nome']].to_dict('records'),
+                data=dados_tabela,
                 columns=[
-                    {"name": "Colaborador", "id": "nome"}
+                    {"name": "Colaborador", "id": "Colaborador"},
+                    {"name": "Vouchers Gerados", "id": "Vouchers Gerados"},
+                    {"name": "Vouchers Utilizados", "id": "Vouchers Utilizados"}
                 ],
                 style_header={
                     'backgroundColor': '#f8f9fa',
@@ -1423,7 +1437,7 @@ def update_tabela_equipes(rede_selecionada, situacao_selecionada, data):
             tabelas_filiais.extend([header, tabela])
         
         # Adicionar contador de resultados
-        total_filiais = len(filiais_grupos)
+        total_filiais = len(colaboradores_filtrados.groupby(['filial', 'rede']))
         total_colaboradores = len(colaboradores_filtrados)
         
         resumo = dbc.Alert(
@@ -1497,13 +1511,24 @@ def export_excel(n_clicks, rede_selecionada, situacao_selecionada, data):
             # Adicionar linha de cabeçalho da filial
             excel_data.append({
                 'Filial/Colaborador': f'📍 {filial} - {rede}',
+                'Vouchers Gerados': '',
+                'Vouchers Utilizados': '',
                 'Rede': rede
             })
             
             # Adicionar colaboradores
             for _, row in grupo.iterrows():
+                # Contar vouchers para este colaborador
+                vouchers_gerados = len(df[df['nome_vendedor'] == row['nome']])
+                vouchers_utilizados = len(df[
+                    (df['nome_vendedor'] == row['nome']) & 
+                    (df['situacao_voucher'].str.lower().str.contains('utilizado|usado|ativo', na=False))
+                ])
+                
                 excel_data.append({
                     'Filial/Colaborador': row['nome'],
+                    'Vouchers Gerados': vouchers_gerados,
+                    'Vouchers Utilizados': vouchers_utilizados,
                     'Rede': rede
                 })
         
@@ -1536,18 +1561,28 @@ def export_excel(n_clicks, rede_selecionada, situacao_selecionada, data):
                 'text_wrap': True
             })
             
+            number_format = workbook.add_format({  # type: ignore
+                'num_format': '0'
+            })
+            
             # Aplicar formatos
             for col_num, value in enumerate(df_excel.columns.values):
                 worksheet.write(0, col_num, value, header_format)
             
             # Ajustar largura das colunas
-            worksheet.set_column('A:A', 40)
-            worksheet.set_column('B:B', 30)
+            worksheet.set_column('A:A', 40)  # Filial/Colaborador
+            worksheet.set_column('B:C', 15)  # Vouchers
+            worksheet.set_column('D:D', 30)  # Rede
             
-            # Aplicar formato condicional para linhas de filial
+            # Aplicar formatos para cada linha
             for row_num in range(1, len(df_excel) + 1):
                 if df_excel.iloc[row_num-1]['Filial/Colaborador'].startswith('📍'):
+                    # Linha de filial
                     worksheet.set_row(row_num, None, filial_format)
+                else:
+                    # Linha de colaborador - aplicar formato numérico
+                    worksheet.write(row_num, 1, df_excel.iloc[row_num-1]['Vouchers Gerados'], number_format)
+                    worksheet.write(row_num, 2, df_excel.iloc[row_num-1]['Vouchers Utilizados'], number_format)
         
         # Preparar arquivo para download
         output.seek(0)
@@ -1556,7 +1591,7 @@ def export_excel(n_clicks, rede_selecionada, situacao_selecionada, data):
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"engajamento_equipes_{timestamp}.xlsx"
         
-        return dcc.send_bytes(output.read(), filename)
+        return dcc.send_bytes(output.getvalue(), filename)
         
     except Exception as e:
         print(f"Erro ao exportar para Excel: {str(e)}")
