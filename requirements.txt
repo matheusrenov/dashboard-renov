@@ -19,3 +19,4 @@ whitenoise==6.6.0
 openpyxl==3.1.2
 flask-sqlalchemy==3.0.2
 flask-migrate==4.0.4
+XlsxWriter==3.1.9

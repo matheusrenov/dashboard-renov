@@ -1248,7 +1248,7 @@ def generate_engagement_content(df, network_db):
                             clearable=False,
                             className="mb-3"
                         )
-                    ], md=6),
+                    ], md=5),
                     dbc.Col([
                         html.Label("Situação:", className="mb-2"),
                         dcc.Dropdown(
@@ -1258,7 +1258,17 @@ def generate_engagement_content(df, network_db):
                             clearable=False,
                             className="mb-3"
                         )
-                    ], md=6)
+                    ], md=5),
+                    dbc.Col([
+                        html.Label("\u00A0", className="mb-2 d-block"),  # Espaço em branco para alinhar com os dropdowns
+                        dbc.Button(
+                            [html.I(className="fas fa-file-excel me-2"), "Exportar para Excel"],
+                            id="btn-export-excel",
+                            color="success",
+                            className="w-100"
+                        ),
+                        dcc.Download(id="download-excel")
+                    ], md=2)
                 ]),
                 html.Div(id='tabela-equipes-container')
             ])
@@ -1436,6 +1446,123 @@ def update_tabela_equipes(rede_selecionada, situacao_selecionada, data):
         import traceback
         traceback.print_exc()
         return html.Div(f"Erro ao gerar tabela: {str(e)}")
+
+@app.callback(
+    Output("download-excel", "data"),
+    [Input("btn-export-excel", "n_clicks")],
+    [State('filtro-rede-equipes', 'value'),
+     State('filtro-situacao-equipes', 'value'),
+     State('store-data', 'data')]
+)
+def export_excel(n_clicks, rede_selecionada, situacao_selecionada, data):
+    """Exporta os dados filtrados para Excel"""
+    if not n_clicks or not data:
+        raise PreventUpdate
+
+    try:
+        # Converter dados para DataFrame
+        df = pd.DataFrame(data)
+        
+        # Obter dados do banco de dados de redes
+        network_db = NetworkDatabase()
+        todos_colaboradores = network_db.get_all_employees()
+        
+        if todos_colaboradores.empty:
+            raise PreventUpdate
+        
+        # Filtrar por rede se necessário
+        if rede_selecionada != 'todas':
+            todos_colaboradores = todos_colaboradores[todos_colaboradores['rede'] == rede_selecionada]
+        
+        # Criar conjunto de colaboradores com vouchers utilizados
+        colaboradores_com_vouchers = set(df[
+            df['situacao_voucher'].str.lower().str.contains('utilizado|usado|ativo', na=False)
+        ]['nome_vendedor'].unique())
+        
+        # Filtrar colaboradores baseado na situação selecionada
+        if situacao_selecionada == 'utilizado':
+            colaboradores_filtrados = todos_colaboradores[
+                todos_colaboradores['nome'].isin(colaboradores_com_vouchers)
+            ]
+        elif situacao_selecionada == 'sem_vouchers':
+            colaboradores_filtrados = todos_colaboradores[
+                ~todos_colaboradores['nome'].isin(colaboradores_com_vouchers)
+            ]
+        else:  # total
+            colaboradores_filtrados = todos_colaboradores
+        
+        # Criar DataFrame para Excel
+        excel_data = []
+        for (filial, rede), grupo in colaboradores_filtrados.groupby(['filial', 'rede']):
+            # Adicionar linha de cabeçalho da filial
+            excel_data.append({
+                'Filial/Colaborador': f'📍 {filial} - {rede}',
+                'Rede': rede
+            })
+            
+            # Adicionar colaboradores
+            for _, row in grupo.iterrows():
+                excel_data.append({
+                    'Filial/Colaborador': row['nome'],
+                    'Rede': rede
+                })
+        
+        # Converter para DataFrame
+        df_excel = pd.DataFrame(excel_data)
+        
+        # Criar buffer para o arquivo Excel
+        output = io.BytesIO()
+        
+        # Criar Excel writer
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            # Escrever dados
+            df_excel.to_excel(writer, sheet_name='Engajamento', index=False)
+            
+            # Obter workbook e worksheet
+            workbook = writer.book
+            worksheet = writer.sheets['Engajamento']
+            
+            # Definir formatos
+            header_format = workbook.add_format({  # type: ignore
+                'bold': True,
+                'bg_color': '#3498db',
+                'font_color': 'white',
+                'border': 1
+            })
+            
+            filial_format = workbook.add_format({  # type: ignore
+                'bg_color': '#f8f9fa',
+                'bold': True,
+                'text_wrap': True
+            })
+            
+            # Aplicar formatos
+            for col_num, value in enumerate(df_excel.columns.values):
+                worksheet.write(0, col_num, value, header_format)
+            
+            # Ajustar largura das colunas
+            worksheet.set_column('A:A', 40)
+            worksheet.set_column('B:B', 30)
+            
+            # Aplicar formato condicional para linhas de filial
+            for row_num in range(1, len(df_excel) + 1):
+                if df_excel.iloc[row_num-1]['Filial/Colaborador'].startswith('📍'):
+                    worksheet.set_row(row_num, None, filial_format)
+        
+        # Preparar arquivo para download
+        output.seek(0)
+        
+        # Gerar nome do arquivo com timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"engajamento_equipes_{timestamp}.xlsx"
+        
+        return dcc.send_bytes(output.read(), filename)
+        
+    except Exception as e:
+        print(f"Erro ao exportar para Excel: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise PreventUpdate
 
 # ========================
 # 📥 Callbacks de Upload e Filtros
