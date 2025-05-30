@@ -543,16 +543,29 @@ def create_dashboard_layout(is_super_admin=False):
         
         # Tabs Section (hidden initially)
         html.Div(id='tabs-section', style={'display': 'none'}, children=[
-            dcc.Tabs(id='main-tabs', value='overview', children=[
-                dcc.Tab(label='Visão Geral', value='overview'),
-                dcc.Tab(label='Redes', value='networks'),
-                dcc.Tab(label='Tim', value='tim'),
-                dcc.Tab(label='Rankings', value='rankings'),
-                dcc.Tab(label='Projeções', value='projections'),
-                dcc.Tab(label='Engajamento', value='engagement'),
-                dcc.Tab(label='Base de Redes', value='network-base', style={'display': 'none'})
-            ], className="mb-4"),
-            html.Div(id='tab-content-area')
+            dcc.Tabs([
+                dcc.Tab(label="Visão Geral", value="overview"),
+                dcc.Tab(label="Redes", value="networks"),
+                dcc.Tab(label="Tim", value="tim"),
+                dcc.Tab(label="Rankings", value="rankings"),
+                dcc.Tab(label="Projeções", value="projections"),
+                dcc.Tab(label="Engajamento", value="engagement"),
+                dcc.Tab(label="Base de Redes", value="network-base", style={'display': 'none'})
+            ],
+            id="main-tabs",
+            value="overview",
+            className="custom-tabs",
+            style={
+                'width': '100%',
+                'marginBottom': '20px',
+                'borderBottom': '1px solid #dee2e6'
+            },
+            colors={
+                "border": "white",
+                "primary": "#6200ea",
+                "background": "#f8f9fa"
+            }),
+            html.Div(id='tab-content-area', className="mt-4")
         ])
     ], fluid=True, style={'backgroundColor': '#f8f9fa', 'minHeight': '100vh', 'padding': '20px'})
 
@@ -1950,7 +1963,6 @@ def export_excel(n_clicks, rede_selecionada, situacao_selecionada, data):
     [Output('upload-status', 'children'),
      Output('store-data', 'data'),
      Output('welcome-message', 'style'),
-     Output('filters-section', 'style'),
      Output('tabs-section', 'style'),
      Output('filter-month', 'options'),
      Output('filter-network', 'options'),
@@ -1960,119 +1972,50 @@ def export_excel(n_clicks, rede_selecionada, situacao_selecionada, data):
     prevent_initial_call=True
 )
 def handle_upload(contents, filename):
-    if not contents:
-        return no_update, no_update, no_update, no_update, no_update, [], [], []
-
+    if contents is None:
+        raise PreventUpdate
+    
     try:
-        # Validar extensão do arquivo
-        if not filename.lower().endswith(('.xls', '.xlsx')):
-            raise ValueError("Por favor, faça upload de um arquivo Excel (.xls ou .xlsx)")
-
-        content_type, content_string = contents.split(',')
-        decoded = base64.b64decode(content_string)
-        df = pd.read_excel(io.BytesIO(decoded))
-
-        if df.empty:
-            raise ValueError("O arquivo está vazio!")
-
-        # Normalizar nomes das colunas
-        df.columns = [unidecode(str(col)).strip().lower().replace(' ', '_').replace('ç', 'c') for col in df.columns]
+        print(f"\n=== Processando upload do arquivo: {filename} ===")
         
-        # Validar colunas obrigatórias
-        required_columns = {
-            'imei': ['imei', 'device_id', 'dispositivo'],
-            'criado_em': ['criado_em', 'data_criacao', 'data', 'created_at'],
-            'valor_voucher': ['valor_do_voucher', 'valor_voucher', 'voucher_value'],
-            'valor_dispositivo': ['valor_do_dispositivo', 'valor_dispositivo', 'device_value'],
-            'situacao_voucher': ['situacao_do_voucher', 'situacao_voucher', 'status_voucher', 'status'],
-            'nome_vendedor': ['nome_do_vendedor', 'vendedor', 'seller_name'],
-            'nome_filial': ['nome_da_filial', 'filial', 'branch_name'],
-            'nome_rede': ['nome_da_rede', 'rede', 'network_name']
-        }
-
-        column_mapping = {}
-        missing_columns = []
-        for standard_name, possible_names in required_columns.items():
-            found = False
-            for possible_name in possible_names:
-                if possible_name in df.columns:
-                    column_mapping[possible_name] = standard_name
-                    found = True
-                    break
-            if not found:
-                missing_columns.append(standard_name)
-
-        if missing_columns:
-            raise ValueError(f"Colunas obrigatórias não encontradas: {', '.join(missing_columns)}")
-
-        # Renomear e processar colunas
-        df = df.rename(columns=column_mapping)
-
-        # Processar datas
-        if 'criado_em' in df.columns:
-            df['criado_em'] = pd.to_datetime(df['criado_em'], errors='coerce')
-            df = df.dropna(subset=['criado_em'])
-            df['mes'] = df['criado_em'].dt.strftime('%b')
-            df['mes_num'] = df['criado_em'].dt.month
-            df['dia'] = df['criado_em'].dt.day
-            df['ano'] = df['criado_em'].dt.year
-            df['data_str'] = df['criado_em'].dt.strftime('%Y-%m-%d')
-
-        if df.empty:
-            raise ValueError("Nenhuma data válida encontrada após processamento!")
-
-        # Limpar e converter valores numéricos
-        for col in ['valor_voucher', 'valor_dispositivo']:
-            if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-
-        # Preparar opções para filtros
-        month_options = []
-        network_options = []
-        status_options = []
+        # Processar o arquivo
+        df = parse_upload_content(contents, filename)
         
-        if 'mes' in df.columns and 'ano' in df.columns:
-            month_options = [
-                {'label': f"{month} ({year})", 'value': f"{month}_{year}"} 
-                for month, year in sorted(df.groupby(['mes', 'ano']).size().index)
-            ]
+        if df is None or df.empty:
+            return no_data_message(), None, {'display': 'block'}, {'display': 'none'}, [], [], []
         
-        if 'nome_rede' in df.columns:
-            network_options = [
-                {'label': network, 'value': network} 
-                for network in sorted(df['nome_rede'].dropna().unique())
-            ]
+        print(f"Dados carregados com sucesso. Registros: {len(df)}")
+        print(f"Colunas: {df.columns.tolist()}")
         
-        if 'situacao_voucher' in df.columns:
-            status_options = [
-                {'label': status, 'value': status} 
-                for status in sorted(df['situacao_voucher'].dropna().unique())
-            ]
-
-        success_alert = dbc.Alert([
-            html.I(className="fas fa-check-circle me-2"),
-            f"✅ Arquivo '{filename}' processado com sucesso! {len(df):,} registros carregados."
-        ], color="success", dismissable=True, duration=4000)
-
-        return (
-            success_alert,
-            df.to_dict('records'),
-            {'display': 'none'},
-            {'display': 'block'},
-            {'display': 'block'},
-            month_options,
-            network_options,
-            status_options
+        # Preparar opções para os filtros
+        month_options = [{'label': m, 'value': m} for m in sorted(df['Mês'].unique())]
+        network_options = [{'label': n, 'value': n} for n in sorted(df['Rede'].unique())]
+        status_options = [{'label': s, 'value': s} for s in sorted(df['Status'].unique())]
+        
+        # Mostrar mensagem de sucesso
+        success_message = dbc.Alert(
+            f"Arquivo '{filename}' carregado com sucesso! ({len(df)} registros)",
+            color="success",
+            duration=4000
         )
-
-    except Exception as e:
-        error_alert = dbc.Alert(f"❌ Erro ao processar arquivo: {str(e)}", 
-                               color="danger", dismissable=True)
+        
         return (
-            error_alert,
-            no_update,
+            success_message,           # upload-status
+            df.to_dict('records'),     # store-data
+            {'display': 'none'},       # welcome-message
+            {'display': 'block'},      # tabs-section
+            month_options,             # filter-month options
+            network_options,           # filter-network options
+            status_options            # filter-status options
+        )
+        
+    except Exception as e:
+        print(f"Erro no upload: {str(e)}")
+        traceback.print_exc()
+        return (
+            error_message(f"Erro ao processar arquivo: {str(e)}"),
+            None,
             {'display': 'block'},
-            {'display': 'none'},
             {'display': 'none'},
             [], [], []
         )
@@ -2163,33 +2106,40 @@ def update_kpis(original_data, filtered_data):
 def update_tab_content(active_tab, filtered_data, original_data):
     print(f"\n=== Atualizando conteúdo da aba: {active_tab} ===")
     
-    if not filtered_data or not original_data:
+    if filtered_data is None and original_data is None:
         return no_data_message()
     
     try:
-        df_filtered = pd.DataFrame(filtered_data)
-        df_original = pd.DataFrame(original_data)
+        # Usar dados filtrados se disponíveis, senão usar dados originais
+        data_to_use = filtered_data if filtered_data is not None else original_data
+        df = pd.DataFrame(data_to_use)
+        df_original = pd.DataFrame(original_data) if original_data is not None else df
+        
+        print(f"Quantidade de registros: {len(df)}")
+        print(f"Colunas disponíveis: {df.columns.tolist()}")
         
         if active_tab == "overview":
-            return generate_overview_content(df_filtered)
+            return generate_overview_content(df)
         elif active_tab == "networks":
-            return generate_networks_content(df_filtered)
+            return generate_networks_content(df)
         elif active_tab == "tim":
-            return generate_tim_content(df_filtered)
+            return generate_tim_content(df)
         elif active_tab == "rankings":
-            return generate_rankings_content(df_filtered)
+            return generate_rankings_content(df)
         elif active_tab == "projections":
-            return generate_projections_content(df_original, df_filtered)
+            return generate_projections_content(df_original, df)
         elif active_tab == "engagement":
-            return generate_engagement_content(df_filtered, NetworkDatabase())
+            return generate_engagement_content(df, NetworkDatabase())
         elif active_tab == "network-base":
             return generate_network_base_content()
+        
+        return html.Div("Selecione uma aba para visualizar os dados")
             
     except Exception as e:
         print(f"Erro ao atualizar conteúdo: {str(e)}")
         import traceback
         traceback.print_exc()
-        return error_message()
+        return error_message(f"Erro ao carregar dados: {str(e)}")
 
 # ========================
 # JavaScript para exportação PDF
@@ -2606,6 +2556,88 @@ def generate_detailed_network_summary(df):
     except Exception as e:
         print(f"Erro ao gerar resumo detalhado: {str(e)}")
         return error_message()
+
+def parse_upload_content(contents, filename):
+    """Processa o conteúdo do arquivo enviado."""
+    try:
+        # Validar extensão do arquivo
+        if not filename.lower().endswith(('.xls', '.xlsx')):
+            raise ValueError("Por favor, faça upload de um arquivo Excel (.xls ou .xlsx)")
+
+        content_type, content_string = contents.split(',')
+        decoded = base64.b64decode(content_string)
+        df = pd.read_excel(io.BytesIO(decoded))
+        
+        if df.empty:
+            raise ValueError("O arquivo está vazio!")
+
+        # Normalizar nomes das colunas
+        df.columns = [unidecode(str(col)).strip().lower().replace(' ', '_').replace('ç', 'c') for col in df.columns]
+        
+        # Validar colunas obrigatórias
+        required_columns = {
+            'imei': ['imei', 'device_id', 'dispositivo'],
+            'criado_em': ['criado_em', 'data_criacao', 'data', 'created_at'],
+            'valor_voucher': ['valor_do_voucher', 'valor_voucher', 'voucher_value'],
+            'valor_dispositivo': ['valor_do_dispositivo', 'valor_dispositivo', 'device_value'],
+            'situacao_voucher': ['situacao_do_voucher', 'situacao_voucher', 'status_voucher', 'status'],
+            'nome_vendedor': ['nome_do_vendedor', 'vendedor', 'seller_name'],
+            'nome_filial': ['nome_da_filial', 'filial', 'branch_name'],
+            'nome_rede': ['nome_da_rede', 'rede', 'network_name']
+        }
+
+        column_mapping = {}
+        missing_columns = []
+        for standard_name, possible_names in required_columns.items():
+            found = False
+            for possible_name in possible_names:
+                if possible_name in df.columns:
+                    column_mapping[possible_name] = standard_name
+                    found = True
+                    break
+            if not found:
+                missing_columns.append(standard_name)
+
+        if missing_columns:
+            raise ValueError(f"Colunas obrigatórias não encontradas: {', '.join(missing_columns)}")
+
+        # Renomear e processar colunas
+        df = df.rename(columns=column_mapping)
+
+        # Processar datas
+        if 'criado_em' in df.columns:
+            df['criado_em'] = pd.to_datetime(df['criado_em'], errors='coerce')
+            df = df.dropna(subset=['criado_em'])
+            df['Mês'] = df['criado_em'].dt.strftime('%b/%Y')
+            df['mes_num'] = df['criado_em'].dt.month
+            df['dia'] = df['criado_em'].dt.day
+            df['ano'] = df['criado_em'].dt.year
+            df['data_str'] = df['criado_em'].dt.strftime('%Y-%m-%d')
+
+        if df.empty:
+            raise ValueError("Nenhuma data válida encontrada após processamento!")
+
+        # Limpar e converter valores numéricos
+        for col in ['valor_voucher', 'valor_dispositivo']:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+        
+        # Renomear colunas para exibição
+        display_columns = {
+            'nome_rede': 'Rede',
+            'nome_filial': 'Filial',
+            'situacao_voucher': 'Status',
+            'valor_voucher': 'Valor Voucher',
+            'valor_dispositivo': 'Valor Dispositivo'
+        }
+        df = df.rename(columns=display_columns)
+        
+        return df
+        
+    except Exception as e:
+        print(f"Erro ao processar arquivo: {str(e)}")
+        traceback.print_exc()
+        return None
 
 if __name__ == '__main__':
     try:
