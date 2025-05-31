@@ -14,10 +14,8 @@ import os
 import io
 import base64
 import secrets
-import traceback
-import socket
 from datetime import datetime, timedelta
-from typing import TypeVar, TypedDict, Literal, Optional, cast
+from typing import Dict, Any
 
 # Bibliotecas de dados e análise
 import pandas as pd
@@ -50,137 +48,22 @@ from models import UserDatabase
 from models_network import NetworkDatabase
 from auth_layout import create_login_layout, create_register_layout, create_admin_approval_layout
 from error_layout import create_error_layout
-from custom_types import PsutilValue, PercentageValue, SystemStatus, ResourceStatus, DatabaseStatus
-
-# Carregar variáveis de ambiente
-from dotenv import load_dotenv
-load_dotenv()  # carrega variáveis do .env se existir
-
-# Tipos personalizados
-PsutilValue = TypeVar('PsutilValue', float, int)
-PercentageValue = float
-
-class ResourceStatus(TypedDict):
-    value: float
-    status: Literal['ok', 'warning', 'critical']
-
-class DatabaseStatus(TypedDict):
-    status: Literal['ok', 'error']
-
-class SystemStatus(TypedDict):
-    status: Literal['healthy', 'unhealthy', 'error']
-    cpu: ResourceStatus
-    memory: ResourceStatus
-    disk: ResourceStatus
-    database: DatabaseStatus
-    message: Optional[str]
-
-# Inicializa o SQLAlchemy
-db = SQLAlchemy()
-
-# ========================
-# 🔧 Funções Utilitárias
-# ========================
-
-def check_port(port: int) -> bool:
-    """Verifica se uma porta está disponível"""
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        try:
-            s.bind(('0.0.0.0', port))
-            return True
-        except OSError:
-            return False
-
-def get_available_port(start_port: int = 8080) -> int:
-    """Encontra uma porta disponível"""
-    port = start_port
-    while not check_port(port):
-        port += 1
-        if port > start_port + 100:  # Limite de tentativas
-            raise RuntimeError("Não foi possível encontrar uma porta disponível")
-    return port
-
-def check_system_health() -> SystemStatus:
-    """Verifica a saúde do sistema"""
-    try:
-        # Verifica uso de CPU
-        cpu_percent = cast(float, psutil.cpu_percent(interval=1))
-        cpu_status: ResourceStatus = {
-            'value': cpu_percent,
-            'status': 'critical' if cpu_percent > 90 else 'warning' if cpu_percent > 70 else 'ok'
-        }
-        
-        # Verifica uso de memória
-        memory = psutil.virtual_memory()
-        memory_percent = cast(float, memory.percent)
-        memory_status: ResourceStatus = {
-            'value': memory_percent,
-            'status': 'critical' if memory_percent > 90 else 'warning' if memory_percent > 70 else 'ok'
-        }
-        
-        # Verifica espaço em disco
-        disk = psutil.disk_usage('/')
-        disk_percent = cast(float, disk.percent)
-        disk_status: ResourceStatus = {
-            'value': disk_percent,
-            'status': 'critical' if disk_percent > 90 else 'warning' if disk_percent > 70 else 'ok'
-        }
-        
-        # Verifica conexão com o banco de dados
-        db_status: DatabaseStatus = {'status': 'ok'}
-        try:
-            user_db = UserDatabase()
-            if not user_db.test_connection():
-                db_status = {'status': 'error'}
-        except Exception:
-            db_status = {'status': 'error'}
-        
-        # Define o status inicial
-        system_status: SystemStatus = {
-            'status': 'healthy',
-            'cpu': cpu_status,
-            'memory': memory_status,
-            'disk': disk_status,
-            'database': db_status,
-            'message': None
-        }
-        
-        # Verifica condições críticas
-        if (cpu_status['status'] == 'critical' or 
-            memory_status['status'] == 'critical' or 
-            disk_status['status'] == 'critical' or 
-            db_status['status'] == 'error'):
-            system_status['status'] = 'unhealthy'
-        
-        return system_status
-    
-    except Exception as e:
-        error_status: SystemStatus = {
-            'status': 'error',
-            'cpu': {'value': 0.0, 'status': 'critical'},
-            'memory': {'value': 0.0, 'status': 'critical'},
-            'disk': {'value': 0.0, 'status': 'critical'},
-            'database': {'status': 'error'},
-            'message': str(e)
-        }
-        return error_status
-
-# ========================
-# 🚀 Inicialização do App
-# ========================
 
 # Configuração dos assets
 assets_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets')
 if not os.path.exists(assets_path):
     os.makedirs(assets_path)
 
-# Configuração da porta
-# Em produção, usa a porta fornecida pelo ambiente ou 8080 como fallback
-PORT = int(os.environ.get('PORT', 8080))
-HOST = '0.0.0.0'  # Sempre usa 0.0.0.0 para aceitar conexões externas
-
 # Inicialização do Flask
 server = Flask(__name__)
+CORS(server)
+
+# Configurações do Flask
+server.config.update(
+    SECRET_KEY=os.environ.get('SECRET_KEY', secrets.token_hex(16)),
+    SQLALCHEMY_DATABASE_URI=os.getenv('DATABASE_URL', 'sqlite:///database.db'),
+    SQLALCHEMY_TRACK_MODIFICATIONS=False
+)
 
 # Inicialização do Dash com todas as configurações necessárias
 app = dash.Dash(
@@ -197,212 +80,1467 @@ app = dash.Dash(
     routes_pathname_prefix='/'
 )
 
-# Configuração do CORS
-CORS(server)
+# Vincula o servidor Flask ao Dash
+app.server = server
+app.title = "Dashboard Renov"
 
-# Configuração do banco de dados
-server.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///data/network_data.db'
-server.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-db.init_app(server)
+# Layout inicial
+app.layout = html.Div([
+    dcc.Location(id='url', refresh=False),
+    html.Div(id='page-content')
+])
 
-# Rota de health check
-@server.route('/health')
-def health_check():
-    """Endpoint para verificar a saúde do sistema"""
-    status = check_system_health()
-    return jsonify(status)
+# Callback inicial para renderizar a página
+@app.callback(
+    Output('page-content', 'children'),
+    Input('url', 'pathname')
+)
+def display_page(pathname):
+    if pathname == '/dashboard':
+        return create_dashboard_layout()
+    elif pathname == '/login' or pathname == '/' or pathname is None:
+        return create_login_layout()
+    else:
+        return create_error_layout('404')
 
-def serve_layout():
-    """Função que serve o layout dinâmico do app"""
-    return html.Div([
-        dcc.Location(id='url', refresh=False),
-        html.Div(id='page-content')
-    ])
+# Callback de autenticação
+@app.callback(
+    Output('url', 'pathname'),
+    Input('login-button', 'n_clicks'),
+    [
+        State('login-username', 'value'),
+        State('login-password', 'value')
+    ],
+    prevent_initial_call=True
+)
+def authenticate(n_clicks, username, password):
+    if not n_clicks:
+        raise PreventUpdate
+    
+    if not username or not password:
+        return no_update
+    
+    try:
+        user_db = UserDatabase()
+        user = user_db.verify_user(username, password)
+        
+        if user:
+            return '/dashboard'
+        return no_update
+    except Exception as e:
+        print(f"Erro na autenticação: {str(e)}")
+        return no_update
 
-app.layout = serve_layout
+# Callback de logout
+@app.callback(
+    Output('url', 'pathname', allow_duplicate=True),
+    Input('logout-button', 'n_clicks'),
+    prevent_initial_call=True
+)
+def logout(n_clicks):
+    if n_clicks:
+        return '/login'
+    raise PreventUpdate
+
+# Inicialização das extensões
+db = SQLAlchemy(server)
+
+# ========================
+# 📊 Layout do Dashboard
+# ========================
 
 def create_dashboard_layout(is_super_admin=False):
-    """Cria o layout principal do dashboard"""
-    return html.Div([
-        # Navbar
-        dbc.Navbar(
-            dbc.Container([
-                html.A(
-                    dbc.Row([
-                        dbc.Col(html.Img(src="/assets/logo.png", height="30px")),
-                        dbc.Col(dbc.NavbarBrand("Dashboard Renov", className="ms-2")),
-                    ], align="center", className="g-0"),
-                    href="/",
-                    style={"textDecoration": "none"},
+    """
+    Cria o layout principal do dashboard.
+    """
+    return dbc.Container([
+        # Cabeçalho
+        dbc.Row([
+            dbc.Col([
+                html.Img(
+                    src='./assets/images/Logo Roxo.png',
+                    style={"height": "30px", "marginRight": "10px", "display": "inline-block"}
                 ),
-                dbc.NavbarToggler(id="navbar-toggler"),
-                dbc.Collapse(
-                    dbc.Nav([
-                        dbc.NavItem(dbc.Button("Logout", id="logout-button", color="light", className="ms-2")),
-                    ], className="ms-auto", navbar=True),
-                    id="navbar-collapse",
-                    navbar=True,
-                ),
-            ]),
-            color="primary",
-            dark=True,
-            className="mb-4",
-        ),
-        
-        # Conteúdo principal
-        dbc.Container([
-            # Área de upload
-            dbc.Card([
-                dbc.CardBody([
-                    dcc.Upload(
-                        id='upload-data',
-                        children=html.Div([
-                            'Arraste e solte ou ',
-                            html.A('selecione um arquivo Excel')
-                        ]),
-                        style={
-                            'width': '100%',
-                            'height': '60px',
-                            'lineHeight': '60px',
-                            'borderWidth': '1px',
-                            'borderStyle': 'dashed',
-                            'borderRadius': '5px',
-                            'textAlign': 'center',
-                            'margin': '10px 0'
-                        },
-                        multiple=False
-                    ),
-                    html.Div(id='upload-status')
-                ])
-            ], className="mb-4"),
-            
-            # Área de filtros
-            dbc.Card([
-                dbc.CardBody([
-                    dbc.Row([
-                        dbc.Col([
-                            html.Label("Mês"),
-                            dcc.Dropdown(id='filter-month', multi=True)
-                        ], md=3),
-                        dbc.Col([
-                            html.Label("Rede"),
-                            dcc.Dropdown(id='filter-network', multi=True)
-                        ], md=3),
-                        dbc.Col([
-                            html.Label("Status"),
-                            dcc.Dropdown(id='filter-status', multi=True)
-                        ], md=3),
-                        dbc.Col([
-                            html.Label("Data Inicial"),
-                            dcc.DatePickerSingle(id='filter-start-date')
-                        ], md=1),
-                        dbc.Col([
-                            html.Label("Data Final"),
-                            dcc.DatePickerSingle(id='filter-end-date')
-                        ], md=1),
-                        dbc.Col([
-                            html.Br(),
-                            dbc.Button("Limpar Filtros", id="clear-filters", color="secondary", size="sm")
-                        ], md=1)
+                html.H4("Dashboard de Performance", className="d-inline-block align-middle mb-0"),
+                dbc.Button(
+                    "Sair",
+                    id="logout-button",
+                    color="danger",
+                    className="float-end"
+                )
+            ])
+        ], className="mb-4"),
+
+        # Seção de Filtros
+        dbc.Card([
+            dbc.CardBody([
+                html.H6("🔍 Filtros", className="mb-3"),
+                dbc.Row([
+                    dbc.Col([
+                        html.Label("Período"),
+                        dbc.Row([
+                            dbc.Col([
+                                html.Label("De"),
+                                dcc.DatePickerSingle(
+                                    id='date-from',
+                                    placeholder="Selecione",
+                                    className="w-100"
+                                )
+                            ], width=6),
+                            dbc.Col([
+                                html.Label("Até"),
+                                dcc.DatePickerSingle(
+                                    id='date-to',
+                                    placeholder="Selecione",
+                                    className="w-100"
+                                )
+                            ], width=6)
+                        ])
+                    ], width=3),
+                    dbc.Col([
+                        html.Label("Mês"),
+                        dcc.Dropdown(
+                            id='filter-month',
+                            options=[],
+                            placeholder="Selecione o(s) mês(es)",
+                            multi=True,
+                            className="w-100"
+                        )
+                    ], width=3),
+                    dbc.Col([
+                        html.Label("Rede"),
+                        dcc.Dropdown(
+                            id='filter-network',
+                            options=[],
+                            placeholder="Selecione a(s) rede(s)",
+                            multi=True,
+                            className="w-100"
+                        )
+                    ], width=3),
+                    dbc.Col([
+                        html.Label("Situação"),
+                        dcc.Dropdown(
+                            id='filter-status',
+                            options=[],
+                            placeholder="Selecione o(s) status",
+                            multi=True,
+                            className="w-100"
+                        )
+                    ], width=3)
+                ]),
+                dbc.Row([
+                    dbc.Col([
+                        dbc.Button(
+                            "Limpar Filtros",
+                            id="clear-filters",
+                            color="secondary",
+                            size="sm",
+                            className="mt-3"
+                        )
                     ])
                 ])
-            ], className="mb-4", id="filters-section", style={'display': 'none'}),
-            
-            # KPIs
-            html.Div(id='kpi-section', style={'display': 'none'}),
-            
-            # Abas principais
-            dbc.Tabs([
-                dbc.Tab(label="Visão Geral", tab_id="tab-overview"),
-                dbc.Tab(label="TIM", tab_id="tab-tim"),
-                dbc.Tab(label="Rankings", tab_id="tab-rankings"),
-                dbc.Tab(label="Projeções", tab_id="tab-projections"),
-                dbc.Tab(label="Base de Redes", tab_id="tab-network-base"),
-                dbc.Tab(label="Engajamento", tab_id="tab-engagement")
-            ], id="main-tabs", active_tab="tab-overview"),
-            
-            # Área de conteúdo das abas
-            html.Div(id="tab-content-area", className="mt-4"),
-            
-            # Armazenamento de dados
-            dcc.Store(id='store-data'),
-            dcc.Store(id='store-filtered-data'),
-            
-            # Download de dados
-            dcc.Download(id="download-excel")
-        ], fluid=True)
-    ])
+            ])
+        ], className="mb-4"),
 
-def generate_kpi_cards(df):
-    """Gera cards com KPIs principais"""
+        # Seção de Upload Principal
+        dbc.Row([
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H6("📊 Upload de Dados", className="text-center mb-3"),
+                        dcc.Upload(
+                            id='upload-data',
+                            children=html.Div([
+                                html.P('Arraste e solte ou ', className="mb-0 d-inline"),
+                                html.A('selecione um arquivo Excel', className="text-primary"),
+                            ], className="text-center p-3 border rounded"),
+                            style={
+                                'width': '100%',
+                                'height': '60px',
+                                'lineHeight': '60px',
+                                'borderWidth': '1px',
+                                'borderStyle': 'dashed',
+                                'borderRadius': '5px',
+                                'textAlign': 'center',
+                                'margin': '10px 0'
+                            },
+                            multiple=False
+                        ),
+                        html.Div(id='upload-status', className="mt-2")
+                    ])
+                ])
+            ], width=12)
+        ], className="mb-4"),
+
+        # Seção de Upload de Redes e Colaboradores
+        dbc.Row([
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H6("Analisar Base de Redes e Filiais", className="text-center mb-3"),
+                        dcc.Upload(
+                            id='upload-networks-branches-file',
+                            children=html.Div([
+                                html.P('Arraste e solte ou ', className="mb-0 d-inline"),
+                                html.A('selecione o arquivo de Redes/Filiais', className="text-primary"),
+                            ], className="text-center p-3 border rounded"),
+                            style={
+                                'width': '100%',
+                                'height': '60px',
+                                'lineHeight': '60px',
+                                'borderWidth': '1px',
+                                'borderStyle': 'dashed',
+                                'borderRadius': '5px',
+                                'textAlign': 'center',
+                                'margin': '10px 0'
+                            },
+                            multiple=False
+                        ),
+                        html.Div(id='network-upload-status', className="mt-2")
+                    ])
+                ])
+            ], width=6),
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H6("Analisar Base de Colaboradores", className="text-center mb-3"),
+                        dcc.Upload(
+                            id='upload-employees-file',
+                            children=html.Div([
+                                html.P('Arraste e solte ou ', className="mb-0 d-inline"),
+                                html.A('selecione o arquivo de Colaboradores', className="text-primary"),
+                            ], className="text-center p-3 border rounded"),
+                            style={
+                                'width': '100%',
+                                'height': '60px',
+                                'lineHeight': '60px',
+                                'borderWidth': '1px',
+                                'borderStyle': 'dashed',
+                                'borderRadius': '5px',
+                                'textAlign': 'center',
+                                'margin': '10px 0'
+                            },
+                            multiple=False
+                        ),
+                        html.Div(id='employee-upload-status', className="mt-2")
+                    ])
+                ])
+            ], width=6)
+        ], className="mb-4"),
+
+        # KPIs
+        html.Div(id='kpi-cards', className="mb-4"),
+
+        # Abas principais
+        dbc.Tabs([
+            dbc.Tab(label="📊 Visão Geral", tab_id="overview"),
+            dbc.Tab(label="🏢 Redes", tab_id="networks"),
+            dbc.Tab(label="🏆 Rankings", tab_id="rankings"),
+            dbc.Tab(label="🔮 Projeções", tab_id="projections"),
+            dbc.Tab(label="👥 Engajamento", tab_id="engagement")
+        ], id="main-tabs", active_tab="overview"),
+        
+        html.Div(id="tab-content"),
+
+        # Componentes ocultos para armazenamento de dados
+        dcc.Store(id='store-data'),
+        dcc.Store(id='store-filtered-data'),
+        dcc.Download(id="download-dataframe-csv"),
+    ], fluid=True)
+
+# Callback para atualizar os KPIs
+@app.callback(
+    Output('kpi-cards', 'children'),
+    Input('store-filtered-data', 'data')
+)
+def update_kpis(filtered_data):
+    if not filtered_data:
+        return []
+    
+    df = pd.DataFrame(filtered_data)
+    return generate_kpi_cards(df)
+
+# Callback para atualizar o conteúdo das abas
+@app.callback(
+    Output('tab-content', 'children'),
+    [
+        Input('main-tabs', 'active_tab'),
+        Input('store-filtered-data', 'data')
+    ]
+)
+def render_tab_content(active_tab, filtered_data):
+    if not filtered_data:
+        return dbc.Alert("Por favor, faça o upload dos dados para visualizar as análises.", color="info")
+    
+    df = pd.DataFrame(filtered_data)
+    
+    if active_tab == "overview":
+        return generate_overview_content(df)
+    elif active_tab == "networks":
+        return generate_networks_content(df)
+    elif active_tab == "rankings":
+        return generate_rankings_content(df)
+    elif active_tab == "projections":
+        return generate_projections_content(df)
+    elif active_tab == "engagement":
+        return generate_engagement_content(df)
+    
+    return html.P("Esta aba está em desenvolvimento.")
+
+# ========================
+# 📊 Funções de Geração de Conteúdo
+# ========================
+
+def generate_kpi_cards(df: pd.DataFrame) -> html.Div:
+    """
+    Gera cards com KPIs principais.
+    
+    Args:
+        df: DataFrame com os dados de vouchers
+    
+    Returns:
+        Um componente Div com os cards de KPIs
+    """
     try:
+        # Calcular métricas
         total_vouchers = len(df)
-        used_vouchers = df[df['situacao_voucher'].str.lower().str.contains('utilizado|usado|ativo', na=False)]
-        total_used = len(used_vouchers)
-        
-        total_value = used_vouchers['valor_dispositivo'].sum()
-        avg_ticket = total_value / total_used if total_used > 0 else 0
-        conversion_rate = (total_used / total_vouchers * 100) if total_vouchers > 0 else 0
-        
-        total_stores = df['nome_filial'].nunique()
-        active_stores = used_vouchers['nome_filial'].nunique() if not used_vouchers.empty else 0
-        
+        vouchers_utilizados = df[df['situacao_voucher'].str.lower().str.contains('utilizado|usado|ativo', na=False)]
+        total_utilizados = len(vouchers_utilizados)
+        valor_total = vouchers_utilizados['valor_dispositivo'].sum()
+        ticket_medio = valor_total / total_utilizados if total_utilizados > 0 else 0
+        taxa_utilizacao = (total_utilizados / total_vouchers * 100) if total_vouchers > 0 else 0
+
+        # Criar cards
         return dbc.Row([
             dbc.Col([
                 dbc.Card([
                     dbc.CardBody([
-                        html.H6("Vouchers Totais", className="card-title text-muted mb-2"),
-                        html.H3(f"{total_vouchers:,}", className="text-info fw-bold mb-1")
+                        html.H4("📊 Total de Vouchers", className="card-title text-center"),
+                        html.H2(f"{total_vouchers:,}",
+                               className="text-primary text-center display-4"),
+                        html.P("Vouchers emitidos", className="text-muted text-center")
                     ])
-                ], className="h-100 shadow-sm border-0")
-            ], md=2),
+                ], className="mb-4 shadow-sm")
+            ], md=3),
             dbc.Col([
                 dbc.Card([
                     dbc.CardBody([
-                        html.H6("Vouchers Utilizados", className="card-title text-muted mb-2"),
-                        html.H3(f"{total_used:,}", className="text-success fw-bold mb-1"),
-                        html.Small(f"{conversion_rate:.1f}% conversão", className="text-muted")
+                        html.H4("✅ Vouchers Utilizados", className="card-title text-center"),
+                        html.H2(f"{total_utilizados:,}",
+                               className="text-success text-center display-4"),
+                        html.P(f"Taxa de utilização: {taxa_utilizacao:.1f}%",
+                              className="text-muted text-center")
                     ])
-                ], className="h-100 shadow-sm border-0")
-            ], md=2),
+                ], className="mb-4 shadow-sm")
+            ], md=3),
             dbc.Col([
                 dbc.Card([
                     dbc.CardBody([
-                        html.H6("Valor Total", className="card-title text-muted mb-2"),
-                        html.H3(f"R$ {total_value:,.2f}", className="text-warning fw-bold mb-1")
+                        html.H4("💰 Valor Total", className="card-title text-center"),
+                        html.H2(f"R$ {valor_total:,.2f}",
+                               className="text-info text-center display-4"),
+                        html.P("Valor total dos vouchers utilizados",
+                              className="text-muted text-center")
                     ])
-                ], className="h-100 shadow-sm border-0")
-            ], md=2),
+                ], className="mb-4 shadow-sm")
+            ], md=3),
             dbc.Col([
                 dbc.Card([
                     dbc.CardBody([
-                        html.H6("Ticket Médio", className="card-title text-muted mb-2"),
-                        html.H3(f"R$ {avg_ticket:,.2f}", className="text-primary fw-bold mb-1")
+                        html.H4("🎯 Ticket Médio", className="card-title text-center"),
+                        html.H2(f"R$ {ticket_medio:,.2f}",
+                               className="text-warning text-center display-4"),
+                        html.P("Valor médio por voucher utilizado",
+                              className="text-muted text-center")
                     ])
-                ], className="h-100 shadow-sm border-0")
-            ], md=2),
-            dbc.Col([
-                dbc.Card([
-                    dbc.CardBody([
-                        html.H6("Lojas Totais", className="card-title text-muted mb-2"),
-                        html.H3(f"{total_stores}", className="text-danger fw-bold mb-1")
-                    ])
-                ], className="h-100 shadow-sm border-0")
-            ], md=2),
-            dbc.Col([
-                dbc.Card([
-                    dbc.CardBody([
-                        html.H6("Lojas Ativas", className="card-title text-muted mb-2"),
-                        html.H3(f"{active_stores}", className="text-dark fw-bold mb-1"),
-                        html.Small(f"{(active_stores/total_stores*100):.1f}% do total", className="text-muted")
-                    ])
-                ], className="h-100 shadow-sm border-0")
-            ], md=2)
-        ], className="g-2 mb-4")
+                ], className="mb-4 shadow-sm")
+            ], md=3)
+        ])
+
     except Exception as e:
         print(f"Erro ao gerar KPIs: {str(e)}")
-        traceback.print_exc()
         return html.Div()
 
+def generate_overview_content(df: pd.DataFrame) -> html.Div:
+    """
+    Gera o conteúdo da aba de visão geral.
+    
+    Args:
+        df: DataFrame com os dados de vouchers
+    
+    Returns:
+        Um componente Div com a visão geral
+    """
+    try:
+        if df.empty:
+            return dbc.Alert("Nenhum dado disponível para análise.", color="warning")
+
+        # Gráfico de evolução diária
+        daily_data = df.groupby('data_str').agg({
+            'imei': 'count',
+            'valor_dispositivo': 'sum'
+        }).reset_index()
+        daily_data.columns = ['data', 'vouchers', 'valor']
+        daily_data['data'] = pd.to_datetime(daily_data['data'])
+        daily_data = daily_data.sort_values('data')
+
+        fig_evolution = go.Figure()
+        fig_evolution.add_trace(go.Scatter(
+            x=daily_data['data'],
+            y=daily_data['vouchers'],
+            mode='lines+markers',
+            name='Vouchers',
+            line=dict(color='#3498db', width=2),
+            marker=dict(size=6)
+        ))
+        fig_evolution.add_trace(go.Scatter(
+            x=daily_data['data'],
+            y=daily_data['valor'],
+            mode='lines+markers',
+            name='Valor (R$)',
+            line=dict(color='#2ecc71', width=2),
+            marker=dict(size=6),
+            yaxis='y2'
+        ))
+
+        fig_evolution.update_layout(
+            title='📈 Evolução Diária',
+            xaxis_title='Data',
+            yaxis_title='Quantidade de Vouchers',
+            yaxis2=dict(
+                title='Valor (R$)',
+                overlaying='y',
+                side='right'
+            ),
+            height=400,
+            hovermode='x unified',
+            template='plotly_white',
+            showlegend=True,
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1
+            )
+        )
+
+        # Gráfico de distribuição por status
+        status_data = df['situacao_voucher'].value_counts()
+        fig_status = go.Figure(data=[go.Pie(
+            labels=status_data.index,
+            values=status_data.values,
+            hole=.3,
+            marker_colors=['#3498db', '#2ecc71', '#e74c3c', '#f1c40f']
+        )])
+        fig_status.update_layout(
+            title='🔄 Distribuição por Status',
+            height=400,
+            template='plotly_white',
+            showlegend=True,
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1
+            )
+        )
+
+        # Gráfico de distribuição por rede
+        network_data = df['nome_rede'].value_counts().head(10)
+        fig_networks = go.Figure(data=[go.Bar(
+            x=network_data.values,
+            y=network_data.index,
+            orientation='h',
+            marker_color='#3498db'
+        )])
+        fig_networks.update_layout(
+            title='🏢 Top 10 Redes',
+            xaxis_title='Quantidade de Vouchers',
+            height=400,
+            template='plotly_white',
+            showlegend=False
+        )
+
+        return html.Div([
+            dbc.Row([
+                dbc.Col([dcc.Graph(figure=fig_evolution)], md=12)
+            ], className="mb-4"),
+            dbc.Row([
+                dbc.Col([dcc.Graph(figure=fig_status)], md=6),
+                dbc.Col([dcc.Graph(figure=fig_networks)], md=6)
+            ])
+        ])
+
+    except Exception as e:
+        print(f"Erro ao gerar visão geral: {str(e)}")
+        return dbc.Alert(f"Erro ao gerar análise: {str(e)}", color="danger")
+
+def generate_networks_content(df: pd.DataFrame) -> html.Div:
+    """
+    Gera o conteúdo da aba de redes.
+    
+    Args:
+        df: DataFrame com os dados de vouchers
+    
+    Returns:
+        Um componente Div com a análise de redes
+    """
+    try:
+        if df.empty:
+            return dbc.Alert("Nenhum dado disponível para análise de redes.", color="warning")
+
+        # Análise por rede
+        network_metrics = df.groupby('nome_rede').agg({
+            'imei': 'count',
+            'valor_dispositivo': 'sum'
+        }).reset_index()
+        network_metrics.columns = ['rede', 'total_vouchers', 'valor_total']
+        
+        # Calcular vouchers utilizados por rede
+        utilizados = df[df['situacao_voucher'].str.lower().str.contains('utilizado|usado|ativo', na=False)]
+        network_metrics['vouchers_utilizados'] = utilizados.groupby('nome_rede')['imei'].count().reindex(network_metrics['rede']).fillna(0)
+        
+        # Calcular métricas adicionais
+        network_metrics['taxa_utilizacao'] = (network_metrics['vouchers_utilizados'] / network_metrics['total_vouchers'] * 100).fillna(0)
+        network_metrics['ticket_medio'] = (network_metrics['valor_total'] / network_metrics['vouchers_utilizados']).fillna(0)
+        network_metrics = network_metrics.sort_values('valor_total', ascending=False)
+
+        # Tabela de métricas por rede
+        table = dash_table.DataTable(
+            id='network-metrics-table',
+            columns=[
+                {'name': 'Rede', 'id': 'rede'},
+                {'name': 'Total Vouchers', 'id': 'total_vouchers', 'type': 'numeric', 'format': {'specifier': ',d'}},
+                {'name': 'Vouchers Utilizados', 'id': 'vouchers_utilizados', 'type': 'numeric', 'format': {'specifier': ',d'}},
+                {'name': 'Taxa Utilização (%)', 'id': 'taxa_utilizacao', 'type': 'numeric', 'format': {'specifier': '.1f'}},
+                {'name': 'Valor Total (R$)', 'id': 'valor_total', 'type': 'numeric', 'format': {'specifier': ',.2f'}},
+                {'name': 'Ticket Médio (R$)', 'id': 'ticket_medio', 'type': 'numeric', 'format': {'specifier': ',.2f'}}
+            ],
+            data=network_metrics.to_dict('records'),
+            style_table={'overflowX': 'auto'},
+            style_cell={'textAlign': 'left', 'padding': '10px', 'whiteSpace': 'normal'},
+            style_header={'backgroundColor': '#f8f9fa', 'fontWeight': 'bold'},
+            style_data_conditional=[{'if': {'row_index': 'odd'}, 'backgroundColor': '#f8f9fa'}],
+            page_size=10,
+            sort_action='native',
+            filter_action='native'
+        )
+
+        # Gráfico de desempenho por rede
+        top_10_networks = network_metrics.head(10)
+        fig_performance = go.Figure()
+        fig_performance.add_trace(go.Bar(
+            name='Valor Total (R$)',
+            x=top_10_networks['rede'],
+            y=top_10_networks['valor_total'],
+            marker_color='#3498db'
+        ))
+        fig_performance.add_trace(go.Scatter(
+            name='Taxa de Utilização (%)',
+            x=top_10_networks['rede'],
+            y=top_10_networks['taxa_utilizacao'],
+            mode='lines+markers',
+            yaxis='y2',
+            line=dict(color='#e74c3c', width=2),
+            marker=dict(size=8)
+        ))
+
+        fig_performance.update_layout(
+            title='📊 Desempenho das Top 10 Redes',
+            xaxis_title='Rede',
+            yaxis_title='Valor Total (R$)',
+            yaxis2=dict(
+                title='Taxa de Utilização (%)',
+                overlaying='y',
+                side='right'
+            ),
+            height=400,
+            template='plotly_white',
+            showlegend=True,
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1
+            ),
+            barmode='group'
+        )
+
+        return html.Div([
+            dbc.Row([
+                dbc.Col([
+                    html.H4("📋 Métricas por Rede", className="mb-4"),
+                    table
+                ], md=12, className="mb-4")
+            ]),
+            dbc.Row([
+                dbc.Col([
+                    dcc.Graph(figure=fig_performance)
+                ], md=12)
+            ])
+        ])
+
+    except Exception as e:
+        print(f"Erro ao gerar análise de redes: {str(e)}")
+        return dbc.Alert(f"Erro ao gerar análise de redes: {str(e)}", color="danger")
+
+def generate_rankings_content(df: pd.DataFrame) -> html.Div:
+    """
+    Gera o conteúdo da aba de rankings.
+    
+    Args:
+        df: DataFrame com os dados de vouchers
+    
+    Returns:
+        Um componente Div com os rankings
+    """
+    try:
+        if df.empty:
+            return dbc.Alert("Nenhum dado disponível para análise de rankings.", color="warning")
+
+        # Filtrar apenas vouchers utilizados
+        df_utilizados = df[df['situacao_voucher'].str.lower().str.contains('utilizado|usado|ativo', na=False)]
+
+        # Rankings por vendedor
+        vendedor_metrics = df_utilizados.groupby('nome_vendedor').agg({
+            'imei': 'count',
+            'valor_dispositivo': 'sum'
+        }).reset_index()
+        vendedor_metrics.columns = ['vendedor', 'total_vouchers', 'valor_total']
+        vendedor_metrics['ticket_medio'] = vendedor_metrics['valor_total'] / vendedor_metrics['total_vouchers']
+        vendedor_metrics = vendedor_metrics.sort_values('valor_total', ascending=False)
+
+        # Rankings por filial
+        filial_metrics = df_utilizados.groupby(['nome_rede', 'nome_filial']).agg({
+            'imei': 'count',
+            'valor_dispositivo': 'sum'
+        }).reset_index()
+        filial_metrics.columns = ['rede', 'filial', 'total_vouchers', 'valor_total']
+        filial_metrics['ticket_medio'] = filial_metrics['valor_total'] / filial_metrics['total_vouchers']
+        filial_metrics = filial_metrics.sort_values('valor_total', ascending=False)
+
+        # Tabela Top Vendedores
+        table_vendedores = dash_table.DataTable(
+            id='vendedor-metrics-table',
+            columns=[
+                {'name': 'Vendedor', 'id': 'vendedor'},
+                {'name': 'Vouchers', 'id': 'total_vouchers', 'type': 'numeric', 'format': {'specifier': ',d'}},
+                {'name': 'Valor Total (R$)', 'id': 'valor_total', 'type': 'numeric', 'format': {'specifier': ',.2f'}},
+                {'name': 'Ticket Médio (R$)', 'id': 'ticket_medio', 'type': 'numeric', 'format': {'specifier': ',.2f'}}
+            ],
+            data=vendedor_metrics.head(10).to_dict('records'),
+            style_table={'overflowX': 'auto'},
+            style_cell={'textAlign': 'left', 'padding': '10px', 'whiteSpace': 'normal'},
+            style_header={'backgroundColor': '#f8f9fa', 'fontWeight': 'bold'},
+            style_data_conditional=[{'if': {'row_index': 'odd'}, 'backgroundColor': '#f8f9fa'}]
+        )
+
+        # Tabela Top Filiais
+        table_filiais = dash_table.DataTable(
+            id='filial-metrics-table',
+            columns=[
+                {'name': 'Rede', 'id': 'rede'},
+                {'name': 'Filial', 'id': 'filial'},
+                {'name': 'Vouchers', 'id': 'total_vouchers', 'type': 'numeric', 'format': {'specifier': ',d'}},
+                {'name': 'Valor Total (R$)', 'id': 'valor_total', 'type': 'numeric', 'format': {'specifier': ',.2f'}},
+                {'name': 'Ticket Médio (R$)', 'id': 'ticket_medio', 'type': 'numeric', 'format': {'specifier': ',.2f'}}
+            ],
+            data=filial_metrics.head(10).to_dict('records'),
+            style_table={'overflowX': 'auto'},
+            style_cell={'textAlign': 'left', 'padding': '10px', 'whiteSpace': 'normal'},
+            style_header={'backgroundColor': '#f8f9fa', 'fontWeight': 'bold'},
+            style_data_conditional=[{'if': {'row_index': 'odd'}, 'backgroundColor': '#f8f9fa'}]
+        )
+
+        # Gráfico de Top 10 Vendedores
+        top_10_vendedores = vendedor_metrics.head(10)
+        fig_vendedores = go.Figure()
+        fig_vendedores.add_trace(go.Bar(
+            name='Valor Total (R$)',
+            x=top_10_vendedores['vendedor'],
+            y=top_10_vendedores['valor_total'],
+            marker_color='#3498db'
+        ))
+        fig_vendedores.add_trace(go.Scatter(
+            name='Ticket Médio (R$)',
+            x=top_10_vendedores['vendedor'],
+            y=top_10_vendedores['ticket_medio'],
+            mode='lines+markers',
+            yaxis='y2',
+            line=dict(color='#e74c3c', width=2),
+            marker=dict(size=8)
+        ))
+
+        fig_vendedores.update_layout(
+            title='🏆 Top 10 Vendedores',
+            xaxis_title='Vendedor',
+            yaxis_title='Valor Total (R$)',
+            yaxis2=dict(
+                title='Ticket Médio (R$)',
+                overlaying='y',
+                side='right'
+            ),
+            height=400,
+            template='plotly_white',
+            showlegend=True,
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1
+            )
+        )
+
+        return html.Div([
+            dbc.Row([
+                dbc.Col([
+                    html.H4("🥇 Top 10 Vendedores", className="mb-4"),
+                    table_vendedores
+                ], md=12, className="mb-4")
+            ]),
+            dbc.Row([
+                dbc.Col([dcc.Graph(figure=fig_vendedores)], md=12, className="mb-4")
+            ]),
+            dbc.Row([
+                dbc.Col([
+                    html.H4("🏪 Top 10 Filiais", className="mb-4"),
+                    table_filiais
+                ], md=12)
+            ])
+        ])
+
+    except Exception as e:
+        print(f"Erro ao gerar rankings: {str(e)}")
+        return dbc.Alert(f"Erro ao gerar rankings: {str(e)}", color="danger")
+
+def generate_projections_content(df: pd.DataFrame) -> html.Div:
+    """
+    Gera o conteúdo da aba de projeções.
+    
+    Args:
+        df: DataFrame com os dados de vouchers
+    
+    Returns:
+        Um componente Div com as projeções
+    """
+    try:
+        if df.empty:
+            return dbc.Alert("Nenhum dado disponível para análise de projeções.", color="warning")
+
+        # Preparar dados para projeção
+        df['data'] = pd.to_datetime(df['data_str'])
+        df_utilizados = df[df['situacao_voucher'].str.lower().str.contains('utilizado|usado|ativo', na=False)]
+        
+        # Análise diária
+        daily_data = df_utilizados.groupby('data').agg({
+            'imei': 'count',
+            'valor_dispositivo': 'sum'
+        }).reset_index()
+        daily_data.columns = ['data', 'vouchers', 'valor']
+
+        # Calcular médias móveis
+        daily_data['mm_7d_vouchers'] = daily_data['vouchers'].rolling(window=7, min_periods=1).mean()
+        daily_data['mm_7d_valor'] = daily_data['valor'].rolling(window=7, min_periods=1).mean()
+        daily_data['mm_30d_vouchers'] = daily_data['vouchers'].rolling(window=30, min_periods=1).mean()
+        daily_data['mm_30d_valor'] = daily_data['valor'].rolling(window=30, min_periods=1).mean()
+
+        # Projetar próximos 30 dias
+        last_date = daily_data['data'].max()
+        future_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=30, freq='D')
+        
+        # Usar média dos últimos 30 dias para projeção
+        avg_vouchers = daily_data['vouchers'].tail(30).mean()
+        avg_valor = daily_data['valor'].tail(30).mean()
+        
+        projection_data = pd.DataFrame({
+            'data': future_dates,
+            'vouchers': [avg_vouchers] * 30,
+            'valor': [avg_valor] * 30,
+            'tipo': ['projeção'] * 30
+        })
+
+        # Gráfico de projeção de vouchers
+        fig_vouchers = go.Figure()
+        
+        # Dados reais
+        fig_vouchers.add_trace(go.Scatter(
+            name='Vouchers Diários',
+            x=daily_data['data'],
+            y=daily_data['vouchers'],
+            mode='markers',
+            marker=dict(size=6, color='#3498db', opacity=0.5)
+        ))
+        
+        fig_vouchers.add_trace(go.Scatter(
+            name='Média Móvel (7 dias)',
+            x=daily_data['data'],
+            y=daily_data['mm_7d_vouchers'],
+            mode='lines',
+            line=dict(color='#2ecc71', width=2)
+        ))
+        
+        fig_vouchers.add_trace(go.Scatter(
+            name='Média Móvel (30 dias)',
+            x=daily_data['data'],
+            y=daily_data['mm_30d_vouchers'],
+            mode='lines',
+            line=dict(color='#e74c3c', width=2)
+        ))
+        
+        # Projeção
+        fig_vouchers.add_trace(go.Scatter(
+            name='Projeção',
+            x=projection_data['data'],
+            y=projection_data['vouchers'],
+            mode='lines',
+            line=dict(color='#f1c40f', width=2, dash='dash')
+        ))
+
+        fig_vouchers.update_layout(
+            title='📈 Projeção de Vouchers',
+            xaxis_title='Data',
+            yaxis_title='Quantidade de Vouchers',
+            height=400,
+            template='plotly_white',
+            showlegend=True,
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1
+            )
+        )
+
+        # Gráfico de projeção de valor
+        fig_valor = go.Figure()
+        
+        # Dados reais
+        fig_valor.add_trace(go.Scatter(
+            name='Valor Diário (R$)',
+            x=daily_data['data'],
+            y=daily_data['valor'],
+            mode='markers',
+            marker=dict(size=6, color='#3498db', opacity=0.5)
+        ))
+        
+        fig_valor.add_trace(go.Scatter(
+            name='Média Móvel (7 dias)',
+            x=daily_data['data'],
+            y=daily_data['mm_7d_valor'],
+            mode='lines',
+            line=dict(color='#2ecc71', width=2)
+        ))
+        
+        fig_valor.add_trace(go.Scatter(
+            name='Média Móvel (30 dias)',
+            x=daily_data['data'],
+            y=daily_data['mm_30d_valor'],
+            mode='lines',
+            line=dict(color='#e74c3c', width=2)
+        ))
+        
+        # Projeção
+        fig_valor.add_trace(go.Scatter(
+            name='Projeção',
+            x=projection_data['data'],
+            y=projection_data['valor'],
+            mode='lines',
+            line=dict(color='#f1c40f', width=2, dash='dash')
+        ))
+
+        fig_valor.update_layout(
+            title='💰 Projeção de Valor',
+            xaxis_title='Data',
+            yaxis_title='Valor Total (R$)',
+            height=400,
+            template='plotly_white',
+            showlegend=True,
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1
+            )
+        )
+
+        # Calcular métricas de projeção
+        projecao_mensal_vouchers = avg_vouchers * 30
+        projecao_mensal_valor = avg_valor * 30
+
+        # Cards com métricas de projeção
+        cards = dbc.Row([
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H4("📊 Projeção Mensal de Vouchers", className="card-title text-center"),
+                        html.H2(f"{projecao_mensal_vouchers:,.0f}",
+                               className="text-primary text-center display-4"),
+                        html.P(f"Média diária: {avg_vouchers:,.1f}",
+                              className="text-muted text-center")
+                    ])
+                ], className="mb-4 shadow-sm")
+            ], md=6),
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H4("💰 Projeção Mensal de Valor", className="card-title text-center"),
+                        html.H2(f"R$ {projecao_mensal_valor:,.2f}",
+                               className="text-success text-center display-4"),
+                        html.P(f"Média diária: R$ {avg_valor:,.2f}",
+                              className="text-muted text-center")
+                    ])
+                ], className="mb-4 shadow-sm")
+            ], md=6)
+        ])
+
+        return html.Div([
+            cards,
+            dbc.Row([
+                dbc.Col([dcc.Graph(figure=fig_vouchers)], md=12, className="mb-4")
+            ]),
+            dbc.Row([
+                dbc.Col([dcc.Graph(figure=fig_valor)], md=12)
+            ])
+        ])
+
+    except Exception as e:
+        print(f"Erro ao gerar projeções: {str(e)}")
+        return dbc.Alert(f"Erro ao gerar projeções: {str(e)}", color="danger")
+
+def generate_engagement_content(df: pd.DataFrame) -> html.Div:
+    """
+    Gera o conteúdo da aba de engajamento.
+    
+    Args:
+        df: DataFrame com os dados de vouchers
+    
+    Returns:
+        Um componente Div com as métricas de engajamento
+    """
+    try:
+        if df.empty:
+            return dbc.Alert("Nenhum dado disponível para análise de engajamento.", color="warning")
+
+        # Calcular métricas de engajamento
+        total_redes = df['nome_rede'].nunique()
+        total_filiais = df.groupby('nome_rede')['nome_filial'].nunique().sum()
+        total_vendedores = df['nome_vendedor'].nunique()
+        
+        # Vendedores ativos (com vouchers utilizados)
+        df_utilizados = df[df['situacao_voucher'].str.lower().str.contains('utilizado|usado|ativo', na=False)]
+        vendedores_ativos = df_utilizados['nome_vendedor'].nunique()
+        taxa_ativacao = (vendedores_ativos / total_vendedores * 100) if total_vendedores > 0 else 0
+
+        # Análise de frequência de vendedores
+        freq_vendedores = df_utilizados.groupby('nome_vendedor').size()
+        freq_dist = freq_vendedores.value_counts().sort_index()
+        
+        # Gráfico de distribuição de frequência
+        fig_freq = go.Figure(data=[go.Bar(
+            x=freq_dist.index,
+            y=freq_dist.values,
+            marker_color='#3498db'
+        )])
+        
+        fig_freq.update_layout(
+            title='📊 Distribuição de Vouchers por Vendedor',
+            xaxis_title='Quantidade de Vouchers',
+            yaxis_title='Número de Vendedores',
+            height=400,
+            template='plotly_white',
+            showlegend=False
+        )
+
+        # Análise temporal de engajamento
+        df['data'] = pd.to_datetime(df['data_str'])
+        daily_engagement = df_utilizados.groupby('data').agg({
+            'nome_vendedor': 'nunique',
+            'nome_filial': 'nunique',
+            'nome_rede': 'nunique'
+        }).reset_index()
+        
+        # Gráfico de engajamento diário
+        fig_engagement = go.Figure()
+        
+        fig_engagement.add_trace(go.Scatter(
+            name='Vendedores Ativos',
+            x=daily_engagement['data'],
+            y=daily_engagement['nome_vendedor'],
+            mode='lines',
+            line=dict(color='#3498db', width=2)
+        ))
+        
+        fig_engagement.add_trace(go.Scatter(
+            name='Filiais Ativas',
+            x=daily_engagement['data'],
+            y=daily_engagement['nome_filial'],
+            mode='lines',
+            line=dict(color='#2ecc71', width=2)
+        ))
+        
+        fig_engagement.add_trace(go.Scatter(
+            name='Redes Ativas',
+            x=daily_engagement['data'],
+            y=daily_engagement['nome_rede'],
+            mode='lines',
+            line=dict(color='#e74c3c', width=2)
+        ))
+
+        fig_engagement.update_layout(
+            title='📈 Engajamento Diário',
+            xaxis_title='Data',
+            yaxis_title='Quantidade',
+            height=400,
+            template='plotly_white',
+            showlegend=True,
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1
+            )
+        )
+
+        # Cards com métricas principais
+        cards = dbc.Row([
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H4("🏢 Total de Redes", className="card-title text-center"),
+                        html.H2(f"{total_redes:,}",
+                               className="text-primary text-center display-4"),
+                        html.P(f"Com {total_filiais:,} filiais",
+                              className="text-muted text-center")
+                    ])
+                ], className="mb-4 shadow-sm")
+            ], md=4),
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H4("👥 Total de Vendedores", className="card-title text-center"),
+                        html.H2(f"{total_vendedores:,}",
+                               className="text-success text-center display-4"),
+                        html.P(f"{vendedores_ativos:,} vendedores ativos",
+                              className="text-muted text-center")
+                    ])
+                ], className="mb-4 shadow-sm")
+            ], md=4),
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H4("📊 Taxa de Ativação", className="card-title text-center"),
+                        html.H2(f"{taxa_ativacao:.1f}%",
+                               className="text-info text-center display-4"),
+                        html.P("Vendedores com vouchers utilizados",
+                              className="text-muted text-center")
+                    ])
+                ], className="mb-4 shadow-sm")
+            ], md=4)
+        ])
+
+        return html.Div([
+            cards,
+            dbc.Row([
+                dbc.Col([dcc.Graph(figure=fig_engagement)], md=12, className="mb-4")
+            ]),
+            dbc.Row([
+                dbc.Col([dcc.Graph(figure=fig_freq)], md=12)
+            ])
+        ])
+
+    except Exception as e:
+        print(f"Erro ao gerar análise de engajamento: {str(e)}")
+        return dbc.Alert(f"Erro ao gerar análise de engajamento: {str(e)}", color="danger")
+
+# Callback para popular os filtros
+@app.callback(
+    [
+        Output('filter-month', 'options'),
+        Output('filter-network', 'options'),
+        Output('filter-status', 'options')
+    ],
+    Input('store-data', 'data')
+)
+def update_filter_options(data):
+    if not data:
+        return [], [], []
+    
+    df = pd.DataFrame(data)
+    
+    # Opções para mês
+    df['mes'] = pd.to_datetime(df['data_str']).dt.strftime('%Y-%m')
+    meses = sorted(df['mes'].unique())
+    opcoes_mes = [{'label': mes, 'value': mes} for mes in meses]
+    
+    # Opções para rede
+    redes = sorted(df['nome_rede'].unique())
+    opcoes_rede = [{'label': rede, 'value': rede} for rede in redes]
+    
+    # Opções para status
+    status = sorted(df['situacao_voucher'].unique())
+    opcoes_status = [{'label': status, 'value': status} for status in status]
+    
+    return opcoes_mes, opcoes_rede, opcoes_status
+
+# Callback para limpar filtros
+@app.callback(
+    [
+        Output('filter-month', 'value'),
+        Output('filter-network', 'value'),
+        Output('filter-status', 'value'),
+        Output('date-from', 'date'),
+        Output('date-to', 'date')
+    ],
+    Input('clear-filters', 'n_clicks'),
+    prevent_initial_call=True
+)
+def clear_filters(n_clicks):
+    return None, None, None, None, None
+
+# Callback para filtrar dados
+@app.callback(
+    Output('store-filtered-data', 'data'),
+    [
+        Input('store-data', 'data'),
+        Input('filter-month', 'value'),
+        Input('filter-network', 'value'),
+        Input('filter-status', 'value'),
+        Input('date-from', 'date'),
+        Input('date-to', 'date')
+    ]
+)
+def filter_data(data, selected_months, selected_networks, selected_status, date_from, date_to):
+    if not data:
+        return None
+    
+    df = pd.DataFrame(data)
+    df['mes'] = pd.to_datetime(df['data_str']).dt.strftime('%Y-%m')
+    df['data'] = pd.to_datetime(df['data_str'])
+    
+    # Aplicar filtros
+    if selected_months:
+        if isinstance(selected_months, str):
+            selected_months = [selected_months]
+        df = df[df['mes'].isin(selected_months)]
+    
+    if selected_networks:
+        if isinstance(selected_networks, str):
+            selected_networks = [selected_networks]
+        df = df[df['nome_rede'].isin(selected_networks)]
+    
+    if selected_status:
+        if isinstance(selected_status, str):
+            selected_status = [selected_status]
+        df = df[df['situacao_voucher'].isin(selected_status)]
+    
+    if date_from:
+        df = df[df['data'] >= date_from]
+    
+    if date_to:
+        df = df[df['data'] <= date_to]
+    
+    return df.to_dict('records')
+
+# Callback para processar upload de dados
+@app.callback(
+    [
+        Output('store-data', 'data'),
+        Output('upload-status', 'children')
+    ],
+    Input('upload-data', 'contents'),
+    State('upload-data', 'filename')
+)
+def process_upload(contents, filename):
+    if contents is None:
+        return None, None
+    
+    try:
+        content_type, content_string = contents.split(',')
+        decoded = base64.b64decode(content_string)
+        
+        if filename.lower().endswith(('.xls', '.xlsx')):
+            df = pd.read_excel(io.BytesIO(decoded))
+        else:
+            return None, dbc.Alert("Por favor, use apenas arquivos Excel (.xls, .xlsx).", color="danger")
+        
+        # Validar colunas necessárias conforme dicionário de dados
+        required_columns = [
+            'Data',  # Data da operação
+            'IMEI',  # Identificador único do dispositivo
+            'Valor do Voucher',  # Valor do voucher gerado
+            'Valor do Dispositivo',  # Valor do dispositivo avaliado
+            'Status do Voucher',  # Situação atual do voucher
+            'Vendedor',  # Nome do vendedor responsável
+            'Filial',  # Nome da filial
+            'Rede'  # Nome da rede
+        ]
+        
+        # Normalizar nomes das colunas
+        df.columns = [unidecode(col).strip().lower() for col in df.columns]
+        normalized_required = [unidecode(col).strip().lower() for col in required_columns]
+        
+        missing_columns = [col for col in normalized_required if col not in df.columns]
+        if missing_columns:
+            return None, dbc.Alert(
+                f"Colunas obrigatórias ausentes: {', '.join(required_columns)}",
+                color="danger"
+            )
+        
+        # Validar e processar datas
+        try:
+            df['data_str'] = pd.to_datetime(df['data']).dt.strftime('%Y-%m-%d')
+        except Exception as e:
+            return None, dbc.Alert(
+                "Erro no formato das datas. Use o formato dd/mm/aaaa.",
+                color="danger"
+            )
+        
+        # Validar valores numéricos
+        try:
+            df['valor_voucher'] = pd.to_numeric(df['valor_do_voucher'])
+            df['valor_dispositivo'] = pd.to_numeric(df['valor_do_dispositivo'])
+        except Exception as e:
+            return None, dbc.Alert(
+                "Erro nos valores numéricos. Certifique-se que os valores estão no formato correto.",
+                color="danger"
+            )
+        
+        # Validar IMEIs
+        invalid_imeis = df[df['imei'].astype(str).str.len() != 15]['imei'].unique()
+        if len(invalid_imeis) > 0:
+            return None, dbc.Alert(
+                f"IMEIs inválidos encontrados. O IMEI deve ter 15 dígitos.",
+                color="danger"
+            )
+        
+        # Validar relacionamentos com redes e filiais
+        try:
+            network_db = NetworkDatabase()
+            valid_networks = network_db.get_valid_networks()
+            valid_branches = network_db.get_valid_branches()
+            
+            invalid_networks = df[~df['rede'].isin(valid_networks)]['rede'].unique()
+            invalid_branches = df[~df['filial'].isin(valid_branches)]['filial'].unique()
+            
+            if len(invalid_networks) > 0:
+                return None, dbc.Alert(
+                    f"Redes não encontradas na base: {', '.join(invalid_networks)}",
+                    color="danger"
+                )
+            
+            if len(invalid_branches) > 0:
+                return None, dbc.Alert(
+                    f"Filiais não encontradas na base: {', '.join(invalid_branches)}",
+                    color="danger"
+                )
+        except Exception as e:
+            print(f"Erro ao validar relacionamentos: {str(e)}")
+        
+        return df.to_dict('records'), dbc.Alert(
+            f"Dados carregados com sucesso! {len(df)} registros processados.",
+            color="success"
+        )
+        
+    except Exception as e:
+        print(f"Erro no processamento do arquivo: {str(e)}")
+        return None, dbc.Alert(
+            f"Erro ao processar o arquivo: {str(e)}",
+            color="danger"
+        )
+
+# Callback para processar upload de redes e filiais
+@app.callback(
+    Output('network-upload-status', 'children'),
+    Input('upload-networks-branches-file', 'contents'),
+    State('upload-networks-branches-file', 'filename'),
+    prevent_initial_call=True
+)
+def process_network_upload(contents, filename):
+    if contents is None:
+        raise PreventUpdate
+    
+    try:
+        content_type, content_string = contents.split(',')
+        decoded = base64.b64decode(content_string)
+        
+        if filename.lower().endswith(('.xls', '.xlsx')):
+            df = pd.read_excel(io.BytesIO(decoded))
+        else:
+            return dbc.Alert(
+                "Por favor, use apenas arquivos Excel (.xls, .xlsx) para a base de redes.",
+                color="danger"
+            )
+        
+        # Validar colunas necessárias para redes/filiais conforme glossário
+        required_columns = [
+            'Nome da Rede',
+            'Nome da Filial',
+            'Data de Início',
+            'Ativo'  # Status da rede/filial
+        ]
+        
+        # Normalizar nomes das colunas (remover espaços extras, acentos, etc)
+        df.columns = [unidecode(col).strip().lower() for col in df.columns]
+        normalized_required = [unidecode(col).strip().lower() for col in required_columns]
+        
+        missing_columns = [col for col in normalized_required if col not in df.columns]
+        if missing_columns:
+            return dbc.Alert(
+                f"Colunas obrigatórias ausentes: {', '.join(required_columns)}",
+                color="danger"
+            )
+        
+        # Validar status (ATIVO/INATIVO)
+        status_values = df['ativo'].str.upper().unique()
+        invalid_status = [s for s in status_values if s not in ['ATIVO', 'ATIVA', 'INATIVO', 'INATIVA']]
+        if invalid_status:
+            return dbc.Alert(
+                f"Status inválidos encontrados: {', '.join(invalid_status)}. Use apenas ATIVO/ATIVA ou INATIVO/INATIVA.",
+                color="danger"
+            )
+        
+        # Validar datas
+        try:
+            df['data_de_inicio'] = pd.to_datetime(df['data_de_inicio'])
+        except Exception as e:
+            return dbc.Alert(
+                "Erro no formato das datas. Use o formato dd/mm/aaaa.",
+                color="danger"
+            )
+        
+        # Processar e salvar dados de redes
+        try:
+            network_db = NetworkDatabase()
+            network_db.update_networks(df)
+            
+            return dbc.Alert([
+                html.I(className="fas fa-check-circle me-2"),
+                f"Base de redes atualizada com sucesso! ",
+                html.Strong(f"{len(df):,}"), " registros processados."
+            ], color="success")
+            
+        except Exception as e:
+            return dbc.Alert(
+                f"Erro ao atualizar base de redes: {str(e)}",
+                color="danger"
+            )
+        
+    except Exception as e:
+        print(f"Erro no processamento do arquivo de redes: {str(e)}")
+        return dbc.Alert(
+            f"Erro ao processar o arquivo: {str(e)}",
+            color="danger"
+        )
+
+# Callback para processar upload de colaboradores
+@app.callback(
+    Output('employee-upload-status', 'children'),
+    Input('upload-employees-file', 'contents'),
+    State('upload-employees-file', 'filename'),
+    prevent_initial_call=True
+)
+def process_employee_upload(contents, filename):
+    if contents is None:
+        raise PreventUpdate
+    
+    try:
+        content_type, content_string = contents.split(',')
+        decoded = base64.b64decode(content_string)
+        
+        if filename.lower().endswith(('.xls', '.xlsx')):
+            df = pd.read_excel(io.BytesIO(decoded))
+        else:
+            return dbc.Alert(
+                "Por favor, use apenas arquivos Excel (.xls, .xlsx) para a base de colaboradores.",
+                color="danger"
+            )
+        
+        # Validar colunas necessárias para colaboradores conforme glossário
+        required_columns = [
+            'Colaborador',
+            'Filial',
+            'Rede',
+            'Ativo',
+            'Data de Cadastro'
+        ]
+        
+        # Normalizar nomes das colunas
+        df.columns = [unidecode(col).strip().lower() for col in df.columns]
+        normalized_required = [unidecode(col).strip().lower() for col in required_columns]
+        
+        missing_columns = [col for col in normalized_required if col not in df.columns]
+        if missing_columns:
+            return dbc.Alert(
+                f"Colunas obrigatórias ausentes: {', '.join(required_columns)}",
+                color="danger"
+            )
+        
+        # Validar status (ATIVO/INATIVO)
+        status_values = df['ativo'].str.upper().unique()
+        invalid_status = [s for s in status_values if s not in ['ATIVO', 'ATIVA', 'INATIVO', 'INATIVA']]
+        if invalid_status:
+            return dbc.Alert(
+                f"Status inválidos encontrados: {', '.join(invalid_status)}. Use apenas ATIVO/ATIVA ou INATIVO/INATIVA.",
+                color="danger"
+            )
+        
+        # Validar datas
+        try:
+            df['data_de_cadastro'] = pd.to_datetime(df['data_de_cadastro'])
+        except Exception as e:
+            return dbc.Alert(
+                "Erro no formato das datas. Use o formato dd/mm/aaaa.",
+                color="danger"
+            )
+        
+        # Validar relacionamentos (colaborador deve pertencer a uma rede/filial existente)
+        try:
+            network_db = NetworkDatabase()
+            valid_networks = network_db.get_valid_networks()
+            valid_branches = network_db.get_valid_branches()
+            
+            invalid_networks = df[~df['rede'].isin(valid_networks)]['rede'].unique()
+            invalid_branches = df[~df['filial'].isin(valid_branches)]['filial'].unique()
+            
+            if len(invalid_networks) > 0:
+                return dbc.Alert(
+                    f"Redes não encontradas na base: {', '.join(invalid_networks)}",
+                    color="danger"
+                )
+            
+            if len(invalid_branches) > 0:
+                return dbc.Alert(
+                    f"Filiais não encontradas na base: {', '.join(invalid_branches)}",
+                    color="danger"
+                )
+            
+            network_db.update_employees(df)
+            
+            return dbc.Alert([
+                html.I(className="fas fa-check-circle me-2"),
+                f"Base de colaboradores atualizada com sucesso! ",
+                html.Strong(f"{len(df):,}"), " registros processados."
+            ], color="success")
+            
+        except Exception as e:
+            return dbc.Alert(
+                f"Erro ao atualizar base de colaboradores: {str(e)}",
+                color="danger"
+            )
+        
+    except Exception as e:
+        print(f"Erro no processamento do arquivo de colaboradores: {str(e)}")
+        return dbc.Alert(
+            f"Erro ao processar o arquivo: {str(e)}",
+            color="danger"
+        )
+
 if __name__ == '__main__':
-    app.run_server(host=HOST, port=PORT, debug=True)
+    app.run_server(debug=True, host='0.0.0.0', port=8080)
