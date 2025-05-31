@@ -295,8 +295,54 @@ def create_dashboard_layout(is_super_admin=False):
             ], width=2)
         ], className="mb-4"),
         
-        # KPIs Section (Moved from Overview tab to main layout)
+        # KPIs Section
         html.Div(id='kpi-section', className="mb-4"),
+        
+        # Upload Section
+        dbc.Row([
+            dbc.Col([
+                html.H5("📤 Upload de Dados", className="mb-3"),
+                dbc.Row([
+                    dbc.Col([
+                        dcc.Upload(
+                            id='upload-data',
+                            children=dbc.Button(
+                                "Atualizar Base de Resultados",
+                                color="primary",
+                                className="w-100"
+                            ),
+                            multiple=False
+                        )
+                    ], width=4),
+                    dbc.Col([
+                        dcc.Upload(
+                            id='upload-networks-branches-file',
+                            children=dbc.Button(
+                                "Atualizar Base de Redes e Filiais",
+                                color="secondary",
+                                className="w-100"
+                            ),
+                            multiple=False
+                        )
+                    ], width=4),
+                    dbc.Col([
+                        dcc.Upload(
+                            id='upload-employees-file',
+                            children=dbc.Button(
+                                "Atualizar Base de Colaboradores",
+                                color="secondary",
+                                className="w-100"
+                            ),
+                            multiple=False
+                        )
+                    ], width=4)
+                ], className="mb-3"),
+                html.Div([
+                    html.Div(id='upload-status'),
+                    html.Div(id='network-upload-status')
+                ], className="mt-2")
+            ], width=12)
+        ], className="mb-4"),
         
         # Filtros
         dbc.Row([
@@ -355,46 +401,6 @@ def create_dashboard_layout(is_super_admin=False):
                     className="mt-3"
                 )
             ])
-        ], className="mb-4"),
-        
-        # Upload Section
-        dbc.Row([
-            dbc.Col([
-                dbc.Row([
-                    dbc.Col([
-                        dcc.Upload(
-                            id='upload-networks-branches-file',
-                            children=dbc.Button(
-                                "Atualizar Base de Redes e Filiais",
-                                color="secondary",
-                                className="w-100"
-                            )
-                        )
-                    ], width=6),
-                    dbc.Col([
-                        dcc.Upload(
-                            id='upload-employees-file',
-                            children=dbc.Button(
-                                "Atualizar Base de Colaboradores",
-                                color="secondary",
-                                className="w-100"
-                            )
-                        )
-                    ], width=6)
-                ], className="mb-3"),
-                html.Div(id='network-upload-status')
-            ], width=12),
-            dbc.Col([
-                dcc.Upload(
-                    id='upload-data',
-                    children=html.Div([
-                        'Arraste e solte ou ',
-                        html.A('selecione um arquivo Excel')
-                    ]),
-                    className="upload-area"
-                ),
-                html.Div(id='upload-status')
-            ], width=12)
         ], className="mb-4"),
         
         # Tabs
@@ -2458,9 +2464,10 @@ def update_network_base_tab(upload_status, current_tab):
 )
 def clear_filters(n_clicks):
     """Limpa todos os filtros"""
-    if n_clicks:
-        return None, None, None, None, None
-    raise PreventUpdate
+    if n_clicks is None:
+        raise PreventUpdate
+    
+    return None, None, None, None, None
 
 # ========================
 # 🔚 Execução e Documentação
