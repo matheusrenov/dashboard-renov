@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.renovsmart.railway-logs</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>-c</string>
+        <string>source venv/bin/activate && python scripts/railway_webhook.py</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/matheusmundstock/Library/CloudStorage/OneDrive-renovsmart.com.br/Github/dashboard-renov/Dashboard-Renov</string>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardErrorPath</key>
+    <string>logs/railway_webhook_error.log</string>
+    <key>StandardOutPath</key>
+    <string>logs/railway_webhook_output.log</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>WEBHOOK_PORT</key>
+        <string>5000</string>
+        <key>PYTHONUNBUFFERED</key>
+        <string>1</string>
+    </dict>
+</dict>
+</plist> 
