@@ -39,8 +39,12 @@ env/
 *.db
 *.sqlite3
 
-# OS
+# Temp files
+*.tmp
+*.temp
 .DS_Store
+
+# OS
 Thumbs.db
 
 # Railway
@@ -52,13 +56,11 @@ railway.json
 .dash_debug.log
 
 # Temporary files
-*.tmp
 *.bak
 *.swp
 *~
 
 # OS generated files
-.DS_Store?
 ._*
 .Spotlight-V100
 .Trashes

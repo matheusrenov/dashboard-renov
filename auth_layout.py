@@ -5,30 +5,30 @@ def create_login_layout(error_message=None):
     return dbc.Container([
         dbc.Row([
             dbc.Col([
-                html.Div([
-                    html.Img(
+                        html.Div([
+                            html.Img(
                         src='assets/images/Logo Roxo.png',
                         style={"height": "50px", "marginBottom": "20px"}
                     ),
                     html.H2("Login", className="text-center mb-4"),
-                    dbc.Input(
+                        dbc.Input(
                         id="username",
-                        type="text",
-                        placeholder="Usuário",
-                        className="mb-3"
-                    ),
-                    dbc.Input(
+                            type="text",
+                            placeholder="Usuário",
+                            className="mb-3"
+                        ),
+                        dbc.Input(
                         id="password",
-                        type="password",
-                        placeholder="Senha",
-                        className="mb-3"
-                    ),
-                    dbc.Button(
-                        "Entrar",
-                        id="login-button",
-                        color="primary",
+                            type="password",
+                            placeholder="Senha",
+                            className="mb-3"
+                        ),
+                        dbc.Button(
+                            "Entrar",
+                            id="login-button",
+                            color="primary",
                         className="w-100 mb-3"
-                    ),
+                        ),
                     html.Div(id="auth-status")
                 ], className="p-4 bg-white rounded shadow-sm")
             ], md=6, lg=4, className="mx-auto")
