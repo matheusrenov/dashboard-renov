@@ -17,7 +17,7 @@ import secrets
 import traceback
 import socket
 from datetime import datetime, timedelta
-from typing import Literal, TypedDict, TypeVar, cast
+from typing import Literal, TypedDict, TypeVar, cast, Optional
 
 # Bibliotecas de dados e análise
 import pandas as pd
@@ -73,7 +73,7 @@ class SystemStatus(TypedDict):
     memory: ResourceStatus
     disk: ResourceStatus
     database: DatabaseStatus
-    message: str | None
+    message: Optional[str]
 
 # Inicializa o SQLAlchemy
 db = SQLAlchemy()
@@ -2279,10 +2279,10 @@ def create_login_layout():
 
 @app.callback(
     [Output('url', 'pathname'),
-     Output('login-status', 'children')],  # Alterado de auth-status para login-status
+     Output('auth-status', 'children')],
     [Input('login-button', 'n_clicks')],
-    [State('login-username', 'value'),
-     State('login-password', 'value')],
+    [State('username', 'value'),
+     State('password', 'value')],
     prevent_initial_call=True
 )
 def handle_login(n_clicks, username, password):
