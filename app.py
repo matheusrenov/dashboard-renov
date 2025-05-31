@@ -105,17 +105,26 @@ def check_system_health() -> SystemStatus:
     try:
         # Verifica uso de CPU
         cpu_percent = cast(float, psutil.cpu_percent(interval=1))
-        cpu_status = 'critical' if cpu_percent > 90 else 'warning' if cpu_percent > 70 else 'ok'
+        cpu_status: ResourceStatus = {
+            'value': cpu_percent,
+            'status': 'critical' if cpu_percent > 90 else 'warning' if cpu_percent > 70 else 'ok'
+        }
         
         # Verifica uso de memória
         memory = psutil.virtual_memory()
         memory_percent = cast(float, memory.percent)
-        memory_status = 'critical' if memory_percent > 90 else 'warning' if memory_percent > 70 else 'ok'
+        memory_status: ResourceStatus = {
+            'value': memory_percent,
+            'status': 'critical' if memory_percent > 90 else 'warning' if memory_percent > 70 else 'ok'
+        }
         
         # Verifica espaço em disco
         disk = psutil.disk_usage('/')
         disk_percent = cast(float, disk.percent)
-        disk_status = 'critical' if disk_percent > 90 else 'warning' if disk_percent > 70 else 'ok'
+        disk_status: ResourceStatus = {
+            'value': disk_percent,
+            'status': 'critical' if disk_percent > 90 else 'warning' if disk_percent > 70 else 'ok'
+        }
         
         # Verifica conexão com o banco de dados
         db_status: DatabaseStatus = {'status': 'ok'}
@@ -127,35 +136,34 @@ def check_system_health() -> SystemStatus:
             db_status = {'status': 'error'}
         
         # Define o status inicial
-        status: Literal['healthy', 'unhealthy', 'error'] = 'healthy'
-        
-        # Verifica condições críticas
-        if cpu_status == 'critical' or memory_status == 'critical' or disk_status == 'critical':
-            status = 'unhealthy'
-        
-        # Se o banco de dados estiver com erro, sistema está unhealthy
-        if db_status['status'] == 'error':
-            status = 'unhealthy'
-        
-        # Constrói o dicionário de retorno
-        return {
-            'status': status,
-            'cpu': {'value': cpu_percent, 'status': cpu_status},
-            'memory': {'value': memory_percent, 'status': memory_status},
-            'disk': {'value': disk_percent, 'status': disk_status},
+        system_status: SystemStatus = {
+            'status': 'healthy',
+            'cpu': cpu_status,
+            'memory': memory_status,
+            'disk': disk_status,
             'database': db_status,
             'message': None
         }
+        
+        # Verifica condições críticas
+        if (cpu_status['status'] == 'critical' or 
+            memory_status['status'] == 'critical' or 
+            disk_status['status'] == 'critical' or 
+            db_status['status'] == 'error'):
+            system_status['status'] = 'unhealthy'
+        
+        return system_status
     
     except Exception as e:
-        return {
+        error_status: SystemStatus = {
             'status': 'error',
-            'cpu': {'value': 0.0, 'status': 'error'},
-            'memory': {'value': 0.0, 'status': 'error'},
-            'disk': {'value': 0.0, 'status': 'error'},
+            'cpu': {'value': 0.0, 'status': 'critical'},
+            'memory': {'value': 0.0, 'status': 'critical'},
+            'disk': {'value': 0.0, 'status': 'critical'},
             'database': {'status': 'error'},
             'message': str(e)
         }
+        return error_status
 
 # ========================
 # 🚀 Inicialização do App
@@ -272,45 +280,23 @@ def create_dashboard_layout(is_super_admin=False):
                 html.Div([
                     html.Img(
                         src='/assets/images/Logo Roxo.png',
-                        className="dashboard-logo",
-                        style={
-                            'height': '50px',
-                            'marginRight': '20px',
-                            'marginTop': '0px',
-                            'marginBottom': '0px',
-                            'verticalAlign': 'middle'
-                        }
+                        className="dashboard-logo"
                     ),
-                    html.H1(
-                        "Dashboard de Performance",
-                        className="dashboard-title",
-                        style={
-                            'display': 'inline-block',
-                            'verticalAlign': 'middle',
-                            'margin': '0',
-                            'color': '#2c3e50',
-                            'fontSize': '28px',
-                            'fontWeight': '600',
-                            'lineHeight': '50px'
-                        }
-                    )
-                ], className="dashboard-header", style={
-                    'display': 'flex',
-                    'alignItems': 'center',
-                    'padding': '15px 0',
-                    'backgroundColor': '#ffffff',
-                    'borderBottom': '2px solid #e0e0e0'
-                })
+                    html.H1("Dashboard de Performance", className="dashboard-title")
+                ], className="dashboard-header")
             ], width=10),
             dbc.Col([
                 dbc.Button(
                     "Sair",
                     id="logout-button",
                     color="danger",
-                    style={'marginTop': '10px'}
+                    className="mt-2"
                 )
             ], width=2)
         ], className="mb-4"),
+        
+        # KPIs Section (Moved from Overview tab to main layout)
+        html.Div(id='kpi-section', className="mb-4"),
         
         # Filtros
         dbc.Row([
@@ -318,94 +304,46 @@ def create_dashboard_layout(is_super_admin=False):
                 html.H5("🔍 Filtros", className="mb-3"),
                 dbc.Row([
                     dbc.Col([
-                        html.Label("Período:", className="filter-label mb-2", style={
-                            'fontSize': '14px',
-                            'fontWeight': '500',
-                            'color': '#2c3e50'
-                        }),
+                        html.Label("Período:", className="filter-label"),
                         dbc.Row([
                             dbc.Col([
-                                html.Label("De", className="me-2", style={
-                                    'fontSize': '14px',
-                                    'fontWeight': '500',
-                                    'color': '#2c3e50',
-                                    'marginTop': '8px'
-                                }),
                                 dcc.DatePickerSingle(
                                     id='filter-start-date',
-                                    placeholder="",
-                                    display_format='DD/MM/YYYY',
-                                    className="date-picker-filter",
-                                    style={
-                                        'width': '100%',
-                                        'height': '38px',
-                                        'borderRadius': '4px',
-                                        'border': '1px solid #cccccc'
-                                    }
+                                    placeholder="Data Inicial",
+                                    display_format='DD/MM/YYYY'
                                 )
-                            ], width=6, className="pe-1 d-flex"),
+                            ], width=6),
                             dbc.Col([
-                                html.Label("Até", className="me-2", style={
-                                    'fontSize': '14px',
-                                    'fontWeight': '500',
-                                    'color': '#2c3e50',
-                                    'marginTop': '8px'
-                                }),
                                 dcc.DatePickerSingle(
                                     id='filter-end-date',
-                                    placeholder="",
-                                    display_format='DD/MM/YYYY',
-                                    className="date-picker-filter",
-                                    style={
-                                        'width': '100%',
-                                        'height': '38px',
-                                        'borderRadius': '4px',
-                                        'border': '1px solid #cccccc'
-                                    }
+                                    placeholder="Data Final",
+                                    display_format='DD/MM/YYYY'
                                 )
-                            ], width=6, className="ps-1 d-flex")
+                            ], width=6)
                         ])
                     ], md=3),
                     dbc.Col([
-                        html.Label("Mês:", className="filter-label mb-2", style={
-                            'fontSize': '14px',
-                            'fontWeight': '500',
-                            'color': '#2c3e50'
-                        }),
+                        html.Label("Mês:", className="filter-label"),
                         dcc.Dropdown(
                             id='filter-month',
                             multi=True,
-                            placeholder="Selecione o(s) mês(es)",
-                            className="filter-dropdown",
-                            style={'height': '38px'}
+                            placeholder="Selecione o(s) mês(es)"
                         )
                     ], md=3),
                     dbc.Col([
-                        html.Label("Rede:", className="filter-label mb-2", style={
-                            'fontSize': '14px',
-                            'fontWeight': '500',
-                            'color': '#2c3e50'
-                        }),
+                        html.Label("Rede:", className="filter-label"),
                         dcc.Dropdown(
                             id='filter-network',
                             multi=True,
-                            placeholder="Selecione a(s) rede(s)",
-                            className="filter-dropdown",
-                            style={'height': '38px'}
+                            placeholder="Selecione a(s) rede(s)"
                         )
                     ], md=3),
                     dbc.Col([
-                        html.Label("Situação:", className="filter-label mb-2", style={
-                            'fontSize': '14px',
-                            'fontWeight': '500',
-                            'color': '#2c3e50'
-                        }),
+                        html.Label("Situação:", className="filter-label"),
                         dcc.Dropdown(
                             id='filter-status',
                             multi=True,
-                            placeholder="Selecione o(s) status",
-                            className="filter-dropdown",
-                            style={'height': '38px'}
+                            placeholder="Selecione a(s) situação(ões)"
                         )
                     ], md=3)
                 ]),
@@ -414,16 +352,12 @@ def create_dashboard_layout(is_super_admin=False):
                     id="clear-filters",
                     color="secondary",
                     size="sm",
-                    className="mt-3",
-                    style={
-                        'fontSize': '12px',
-                        'padding': '5px 10px'
-                    }
+                    className="mt-3"
                 )
             ])
         ], className="mb-4"),
         
-        # Upload Section with Network Buttons
+        # Upload Section
         dbc.Row([
             dbc.Col([
                 dbc.Row([
@@ -432,27 +366,21 @@ def create_dashboard_layout(is_super_admin=False):
                             id='upload-networks-branches-file',
                             children=dbc.Button(
                                 "Atualizar Base de Redes e Filiais",
-                                id="upload-networks-branches",
                                 color="secondary",
-                                size="sm",
                                 className="w-100"
-                            ),
-                            className="me-2"
-                        ),
+                            )
+                        )
                     ], width=6),
                     dbc.Col([
                         dcc.Upload(
                             id='upload-employees-file',
                             children=dbc.Button(
                                 "Atualizar Base de Colaboradores",
-                                id="upload-employees",
                                 color="secondary",
-                                size="sm",
                                 className="w-100"
-                            ),
-                            className="me-2"
-                        ),
-                    ], width=6),
+                            )
+                        )
+                    ], width=6)
                 ], className="mb-3"),
                 html.Div(id='network-upload-status')
             ], width=12),
@@ -461,151 +389,30 @@ def create_dashboard_layout(is_super_admin=False):
                     id='upload-data',
                     children=html.Div([
                         'Arraste e solte ou ',
-                        html.A('selecione um arquivo Excel', className="text-primary")
+                        html.A('selecione um arquivo Excel')
                     ]),
-                    style={
-                        'width': '100%',
-                        'height': '60px',
-                        'lineHeight': '60px',
-                        'borderWidth': '1px',
-                        'borderStyle': 'dashed',
-                        'borderRadius': '5px',
-                        'textAlign': 'center',
-                        'margin': '10px'
-                    },
-                    multiple=False
+                    className="upload-area"
                 ),
                 html.Div(id='upload-status')
             ], width=12)
-        ]),
+        ], className="mb-4"),
         
-        # Welcome Message (shown before upload)
-        html.Div(id='welcome-message', children=[
-            html.H4("👋 Bem-vindo ao Dashboard!", className="text-center mt-5"),
-            html.P("Faça o upload de um arquivo Excel para começar.", className="text-center text-muted")
-        ]),
+        # Tabs
+        dcc.Tabs([
+            dcc.Tab(label="Visão Geral", value="overview"),
+            dcc.Tab(label="Redes", value="networks"),
+            dcc.Tab(label="Tim", value="tim"),
+            dcc.Tab(label="Rankings", value="rankings"),
+            dcc.Tab(label="Projeções", value="projections"),
+            dcc.Tab(label="Engajamento", value="engagement"),
+            dcc.Tab(label="Redes e Colaboradores", value="network-employees")
+        ],
+        id="main-tabs",
+        value="overview",
+        className="custom-tabs"),
         
-        # Filters Section (hidden initially)
-        html.Div(id='filters-section', style={'display': 'none'}, children=[
-            dbc.Row([
-                dbc.Col([
-                    html.H5("🔍 Filtros", className="mb-3"),
-                    dbc.Row([
-                        dbc.Col([
-                            html.Label("Mês:", className="filter-label", style={
-                                'fontSize': '14px',
-                                'fontWeight': '500',
-                                'color': '#2c3e50',
-                                'marginBottom': '8px'
-                            }),
-                            dcc.Dropdown(
-                                id='filter-month',
-                                placeholder='Selecione o(s) mês(es)',
-                                multi=True,
-                                className='filter-dropdown',
-                                style={'width': '100%'}
-                            )
-                        ], md=4),
-                        dbc.Col([
-                            html.Label("Rede:", className="filter-label", style={
-                                'fontSize': '14px',
-                                'fontWeight': '500',
-                                'color': '#2c3e50',
-                                'marginBottom': '8px'
-                            }),
-                            dcc.Dropdown(
-                                id='filter-network',
-                                placeholder='Selecione a(s) rede(s)',
-                                multi=True,
-                                className='filter-dropdown',
-                                style={'width': '100%'}
-                            )
-                        ], md=4),
-                        dbc.Col([
-                            html.Label("Período:", className="filter-label", style={
-                                'fontSize': '14px',
-                                'fontWeight': '500',
-                                'color': '#2c3e50',
-                                'marginBottom': '8px'
-                            }),
-                            dbc.Row([
-                                dbc.Col([
-                                    html.Label("De", className="me-2", style={
-                                        'fontSize': '14px',
-                                        'fontWeight': '500',
-                                        'color': '#2c3e50',
-                                        'marginTop': '8px'
-                                    }),
-                                    dcc.DatePickerSingle(
-                                        id='filter-start-date',
-                                        placeholder="",
-                                        display_format='DD/MM/YYYY',
-                                        className="date-picker-filter",
-                                        style={
-                                            'width': '100%',
-                                            'height': '38px',
-                                            'borderRadius': '4px',
-                                            'border': '1px solid #cccccc'
-                                        }
-                                    )
-                                ], width=6, className="pe-1 d-flex"),
-                                dbc.Col([
-                                    html.Label("Até", className="me-2", style={
-                                        'fontSize': '14px',
-                                        'fontWeight': '500',
-                                        'color': '#2c3e50',
-                                        'marginTop': '8px'
-                                    }),
-                                    dcc.DatePickerSingle(
-                                        id='filter-end-date',
-                                        placeholder="",
-                                        display_format='DD/MM/YYYY',
-                                        className="date-picker-filter",
-                                        style={
-                                            'width': '100%',
-                                            'height': '38px',
-                                            'borderRadius': '4px',
-                                            'border': '1px solid #cccccc'
-                                        }
-                                    )
-                                ], width=6, className="ps-1 d-flex")
-                            ])
-                        ], md=4)
-                    ], className="mb-4")
-                ])
-            ], className="mb-4")
-        ]),
-        
-        # KPIs Section
-        html.Div(id='kpi-section'),
-        
-        # Tabs Section (hidden initially)
-        html.Div(id='tabs-section', style={'display': 'none'}, children=[
-            dcc.Tabs([
-                dcc.Tab(label="Visão Geral", value="overview"),
-                dcc.Tab(label="Redes", value="networks"),
-                dcc.Tab(label="Tim", value="tim"),
-                dcc.Tab(label="Rankings", value="rankings"),
-                dcc.Tab(label="Projeções", value="projections"),
-                dcc.Tab(label="Engajamento", value="engagement"),
-                dcc.Tab(label="Base de Redes", value="network-base", style={'display': 'none'})
-            ],
-            id="main-tabs",
-            value="overview",
-            className="custom-tabs",
-            style={
-                'width': '100%',
-                'marginBottom': '20px',
-                'borderBottom': '1px solid #dee2e6'
-            },
-            colors={
-                "border": "white",
-                "primary": "#6200ea",
-                "background": "#f8f9fa"
-            }),
-            html.Div(id='tab-content-area', className="mt-4")
-        ])
-    ], fluid=True, style={'backgroundColor': '#f8f9fa', 'minHeight': '100vh', 'padding': '20px'})
+        html.Div(id='tab-content-area', className="mt-4")
+    ], fluid=True)
 
 # ========================
 # 📊 FUNÇÕES DE GERAÇÃO DE CONTEÚDO
@@ -682,21 +489,21 @@ def generate_kpi_cards(df):
         traceback.print_exc()
         return html.Div()
 
-def generate_overview_content(df):
+def generate_overview_content(df, include_kpis=False):
     """Gera o conteúdo da aba de visão geral"""
     try:
-        # Gerar KPIs
-        kpi_section = generate_kpi_cards(df)
+        # Removido os KPIs duplicados
+        if df.empty:
+            return dbc.Alert("Nenhum dado disponível para análise.", color="warning")
         
         # Gráfico de pizza - distribuição por situação
         status_counts = df['situacao_voucher'].value_counts()
         fig_pie = px.pie(
-            values=status_counts.values,
+            values=status_counts.values, 
             names=status_counts.index,
             title="📊 Distribuição por Situação"
         )
         fig_pie.update_traces(textposition='inside', textinfo='percent+label')
-        fig_pie.update_layout(height=400)
         
         # Gráfico de barras - top redes (total)
         network_counts = df['nome_rede'].value_counts().head(10)
@@ -708,7 +515,7 @@ def generate_overview_content(df):
             color=network_counts.values,
             color_continuous_scale='blues'
         )
-        fig_bar_total.update_layout(yaxis={'categoryorder': 'total ascending'}, height=400)
+        fig_bar_total.update_layout(yaxis={'categoryorder': 'total ascending'})
         
         # Gráfico de barras - top redes (apenas utilizados)
         used_vouchers = df[df['situacao_voucher'].str.lower().str.contains('utilizado|usado|ativo', na=False)]
@@ -721,7 +528,7 @@ def generate_overview_content(df):
             color=network_used_counts.values,
             color_continuous_scale='greens'
         )
-        fig_bar_used.update_layout(yaxis={'categoryorder': 'total ascending'}, height=400)
+        fig_bar_used.update_layout(yaxis={'categoryorder': 'total ascending'})
         
         # Gráfico de evolução diária
         if 'data_str' in df.columns:
@@ -729,27 +536,22 @@ def generate_overview_content(df):
             daily_series['data_str'] = pd.to_datetime(daily_series['data_str'])
             
             fig_line = px.line(
-                daily_series,
-                x='data_str',
+                daily_series, 
+                x='data_str', 
                 y='count',
-                title="📅 Evolução Diária de Vouchers",
-                labels={'data_str': 'Data', 'count': 'Quantidade de Vouchers'}
+                title="📅 Evolução Diária de Vouchers"
             )
-            fig_line.update_traces(line_color='#3498db', line_width=3)
-            fig_line.update_layout(height=350)
+            fig_line.update_traces(line_color='#3498db')
         else:
             fig_line = go.Figure()
             fig_line.add_annotation(
                 text="Dados temporais não disponíveis",
-                x=0.5, y=0.5, xref="paper", yref="paper",
-                showarrow=False, font_size=16
+                x=0.5, y=0.5,
+                xref="paper", yref="paper",
+                showarrow=False
             )
-            fig_line.update_layout(height=350, title="Evolução Diária")
         
         return html.Div([
-            # KPIs
-            kpi_section,
-            
             # Primeira linha: Vouchers utilizados + Gráfico total
             dbc.Row([
                 dbc.Col([dcc.Graph(figure=fig_bar_used)], md=6),
@@ -760,81 +562,106 @@ def generate_overview_content(df):
             dbc.Row([
                 dbc.Col([dcc.Graph(figure=fig_pie)], md=6),
                 dbc.Col([dcc.Graph(figure=fig_line)], md=6)
-            ], className="mb-4")
+            ])
         ])
-    
+        
     except Exception as e:
         print(f"Erro na visão geral: {str(e)}")
         traceback.print_exc()
         return dbc.Alert(f"Erro na visão geral: {str(e)}", color="danger")
 
 def generate_networks_content(df):
-    if df is None or df.empty:
-        return no_data_message()
-    
+    """Gera o conteúdo da aba de redes"""
     try:
-        # Agrupar dados por rede
-        network_summary = df.groupby('nome_rede').agg({
-            'imei': 'count',
-            'valor_dispositivo': 'sum',
-            'nome_vendedor': 'nunique'
-        }).round(2)
+        if df.empty:
+            return dbc.Alert("Nenhum dado disponível para análise.", color="warning")
         
-        network_summary.columns = ['Total Vouchers', 'Valor Total', 'Total Colaboradores']
-        network_summary = network_summary.reset_index()
+        # Filtrar apenas vouchers utilizados
+        df_used = df[df['situacao_voucher'].str.lower().str.contains('utilizado|usado|ativo', na=False)]
         
-        # Calcular vouchers utilizados
-        used_vouchers = df[df['situacao_voucher'].str.lower().str.contains('utilizado|usado|ativo', na=False)]
-        used_by_network = used_vouchers.groupby('nome_rede').size().reset_index(name='Vouchers Utilizados')
+        # Agrupar por rede
+        network_summary = df_used.groupby('nome_rede').agg({
+            'id': 'count',  # Total de vouchers
+            'valor_dispositivo': 'sum'  # Soma do valor dos dispositivos
+        }).reset_index()
         
-        # Juntar com o resumo
-        network_summary = network_summary.merge(used_by_network, on='nome_rede', how='left')
-        network_summary['Vouchers Utilizados'] = network_summary['Vouchers Utilizados'].fillna(0)
+        # Renomear colunas
+        network_summary.columns = ['Rede', 'Total de Vouchers', 'Valor Total']
         
-        # Calcular taxa de utilização
-        network_summary['Taxa de Utilização'] = (network_summary['Vouchers Utilizados'] /
-                                               network_summary['Total Vouchers'] * 100).round(2)
+        # Ordenar por total de vouchers
+        network_summary = network_summary.sort_values('Total de Vouchers', ascending=False)
         
-        # Criar tabela com os dados
+        # Formatar valores monetários
+        network_summary['Valor Total'] = network_summary['Valor Total'].apply(
+            lambda x: f"R$ {x:,.2f}".replace(',', '_').replace('.', ',').replace('_', '.')
+        )
+        
+        # Criar tabela
         table = dash_table.DataTable(
-            id='network-summary-table',
-            columns=[
-                {"name": "Rede", "id": "nome_rede"},
-                {"name": "Total de Vouchers", "id": "Total Vouchers", "type": "numeric", "format": {"specifier": ","}},
-                {"name": "Vouchers Utilizados", "id": "Vouchers Utilizados", "type": "numeric", "format": {"specifier": ","}},
-                {"name": "Valor Total", "id": "Valor Total", "type": "numeric", "format": {"specifier": ",.2f", "prefix": "R$ "}},
-                {"name": "Total de Colaboradores", "id": "Total Colaboradores", "type": "numeric", "format": {"specifier": ","}},
-                {"name": "Taxa de Utilização (%)", "id": "Taxa de Utilização", "type": "numeric", "format": {"specifier": ".2f"}}
-            ],
             data=network_summary.to_dict('records'),
-            style_table={'overflowX': 'auto'},
+            columns=[{"name": i, "id": i} for i in network_summary.columns],
             style_header={
-                'backgroundColor': 'rgb(230, 230, 230)',
+                'backgroundColor': '#3498db',
+                'color': 'white',
                 'fontWeight': 'bold',
                 'textAlign': 'center'
             },
             style_cell={
                 'textAlign': 'center',
-                'padding': '10px',
-                'minWidth': '100px'
+                'padding': '10px'
             },
             style_data_conditional=[
                 {
                     'if': {'row_index': 'odd'},
-                    'backgroundColor': 'rgb(248, 248, 248)'
+                    'backgroundColor': '#f8f9fa'
                 }
             ],
-            sort_action='native',
-            sort_mode='multi'
+            page_size=10,
+            sort_action='native'
+        )
+        
+        # Gráficos
+        # 1. Volume por Rede
+        fig_volume = px.bar(
+            network_summary,
+            x='Rede',
+            y='Total de Vouchers',
+            title="📊 Volume por Rede",
+            color='Total de Vouchers',
+            color_continuous_scale='blues'
+        )
+        
+        # 2. Valor Total por Rede
+        network_summary['Valor Numérico'] = df_used.groupby('nome_rede')['valor_dispositivo'].sum().values
+        fig_value = px.bar(
+            network_summary,
+            x='Rede',
+            y='Valor Numérico',
+            title="💰 Valor Total por Rede",
+            color='Valor Numérico',
+            color_continuous_scale='greens'
+        )
+        fig_value.update_layout(
+            yaxis_title="Valor Total (R$)",
+            yaxis_tickformat=",.2f"
         )
         
         return html.Div([
-            html.H4("📊 Resumo por Rede", className="mb-4"),
-            table
+            # Tabela
+            html.H4("📋 Resumo por Rede", className="mb-4"),
+            table,
+            
+            # Gráficos
+            dbc.Row([
+                dbc.Col([dcc.Graph(figure=fig_volume)], md=6),
+                dbc.Col([dcc.Graph(figure=fig_value)], md=6)
+            ], className="mt-4")
         ])
+        
     except Exception as e:
-        print(f"Erro ao gerar resumo detalhado: {str(e)}")
-        return error_message()
+        print(f"Erro na aba de redes: {str(e)}")
+        traceback.print_exc()
+        return dbc.Alert(f"Erro na aba de redes: {str(e)}", color="danger")
 
 def generate_tim_content(df):
     if df is None or df.empty:
@@ -2264,9 +2091,6 @@ def update_tab_content(active_tab, filtered_data, original_data):
     try:
         # Usar dados filtrados se disponíveis, senão usar dados originais
         data_to_use = filtered_data if filtered_data is not None else original_data
-        
-        print(f"Quantidade de registros a processar: {len(data_to_use)}")
-        
         df = pd.DataFrame(data_to_use)
         df_original = pd.DataFrame(original_data) if original_data is not None else df
         
@@ -2275,8 +2099,6 @@ def update_tab_content(active_tab, filtered_data, original_data):
         missing_columns = [col for col in required_columns if col not in df.columns]
         
         if missing_columns:
-            print(f"Colunas faltando: {missing_columns}")
-            print("Colunas disponíveis:", df.columns.tolist())
             raise ValueError(f"Colunas necessárias não encontradas: {', '.join(missing_columns)}")
         
         # Garantir que as colunas numéricas estão no formato correto
@@ -2293,14 +2115,9 @@ def update_tab_content(active_tab, filtered_data, original_data):
                 df[col] = df[col].fillna('Não informado').astype(str)
                 df_original[col] = df_original[col].fillna('Não informado').astype(str)
         
-        print("\nColunas disponíveis após processamento:", df.columns.tolist())
-        print("\nAmostra de valores por coluna:")
-        for col in ['nome_rede', 'situacao_voucher', 'mes']:
-            if col in df.columns:
-                print(f"{col}:", df[col].unique()[:5].tolist())
-        
         if active_tab == "overview":
-            return generate_overview_content(df)
+            # Removido os KPIs duplicados da aba overview
+            return generate_overview_content(df, include_kpis=False)
         elif active_tab == "networks":
             return generate_networks_content(df)
         elif active_tab == "tim":
@@ -2311,8 +2128,8 @@ def update_tab_content(active_tab, filtered_data, original_data):
             return generate_projections_content(df_original, df)
         elif active_tab == "engagement":
             return generate_engagement_content(df, NetworkDatabase())
-        elif active_tab == "network-base":
-            return generate_network_base_content()
+        elif active_tab == "network-employees":
+            return generate_network_employees_content(NetworkDatabase())
         
         return html.Div("Selecione uma aba para visualizar os dados")
     
@@ -2640,6 +2457,7 @@ def update_network_base_tab(upload_status, current_tab):
     prevent_initial_call=True
 )
 def clear_filters(n_clicks):
+    """Limpa todos os filtros"""
     if n_clicks:
         return None, None, None, None, None
     raise PreventUpdate
@@ -2819,6 +2637,140 @@ def parse_upload_content(contents, filename):
         print(f"Erro ao processar arquivo: {str(e)}")
         traceback.print_exc()
         return None
+
+def generate_network_employees_content(network_db):
+    """Gera o conteúdo da aba de Redes e Colaboradores"""
+    try:
+        # Obter estatísticas gerais
+        stats = network_db.get_network_stats()
+        
+        # KPIs principais
+        kpi_cards = dbc.Row([
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H4("🏢 Total de Redes", className="card-title text-center"),
+                        html.H2(f"{stats['total_networks']:,}", className="text-primary text-center display-4"),
+                        html.P("Redes parceiras cadastradas", className="text-muted text-center")
+                    ])
+                ])
+            ], md=4),
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H4("🏪 Total de Filiais", className="card-title text-center"),
+                        html.H2(f"{stats['total_branches']:,}", className="text-success text-center display-4"),
+                        html.P("Filiais ativas no sistema", className="text-muted text-center")
+                    ])
+                ])
+            ], md=4),
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H4("👥 Total de Colaboradores", className="card-title text-center"),
+                        html.H2(f"{stats['total_employees']:,}", className="text-info text-center display-4"),
+                        html.P("Colaboradores cadastrados", className="text-muted text-center")
+                    ])
+                ])
+            ], md=4)
+        ], className="mb-4")
+        
+        # Resumo por Rede
+        network_summary = network_db.get_executive_summary()
+        if not network_summary.empty:
+            network_table = dash_table.DataTable(
+                data=network_summary.to_dict('records'),
+                columns=[
+                    {"name": "Rede", "id": "Nome da Rede"},
+                    {"name": "Total de Filiais", "id": "Total de Filiais"},
+                    {"name": "Filiais Ativas", "id": "Filiais Ativas"},
+                    {"name": "Total de Colaboradores", "id": "Total de Colaboradores"},
+                    {"name": "Colaboradores Ativos", "id": "Colaboradores Ativos"},
+                    {"name": "Taxa de Ativação (%)", "id": "Taxa de Ativação"}
+                ],
+                style_header={
+                    'backgroundColor': '#3498db',
+                    'color': 'white',
+                    'fontWeight': 'bold',
+                    'textAlign': 'center'
+                },
+                style_cell={
+                    'textAlign': 'center',
+                    'padding': '10px'
+                },
+                style_data_conditional=[
+                    {
+                        'if': {'row_index': 'odd'},
+                        'backgroundColor': '#f8f9fa'
+                    }
+                ],
+                page_size=10,
+                sort_action='native'
+            )
+        else:
+            network_table = html.Div("Nenhum dado disponível")
+        
+        # Detalhes de Colaboradores
+        employee_details = network_db.get_employee_details()
+        if not employee_details.empty:
+            employee_table = dash_table.DataTable(
+                data=employee_details.to_dict('records'),
+                columns=[
+                    {"name": "Rede", "id": "rede"},
+                    {"name": "Filial", "id": "filial"},
+                    {"name": "Colaborador", "id": "nome"},
+                    {"name": "Status", "id": "ativo"},
+                    {"name": "Data de Cadastro", "id": "data_cadastro"}
+                ],
+                style_header={
+                    'backgroundColor': '#2ecc71',
+                    'color': 'white',
+                    'fontWeight': 'bold',
+                    'textAlign': 'center'
+                },
+                style_cell={
+                    'textAlign': 'left',
+                    'padding': '10px'
+                },
+                style_data_conditional=[
+                    {
+                        'if': {'row_index': 'odd'},
+                        'backgroundColor': '#f8f9fa'
+                    },
+                    {
+                        'if': {'filter_query': '{ativo} = "SIM"'},
+                        'color': '#2ecc71'
+                    },
+                    {
+                        'if': {'filter_query': '{ativo} = "NÃO"'},
+                        'color': '#e74c3c'
+                    }
+                ],
+                page_size=15,
+                sort_action='native',
+                filter_action='native'
+            )
+        else:
+            employee_table = html.Div("Nenhum dado disponível")
+        
+        return html.Div([
+            html.H4("📊 Resumo de Redes e Colaboradores", className="mb-4"),
+            kpi_cards,
+            
+            html.H5("🏢 Resumo por Rede", className="mb-3"),
+            network_table,
+            
+            html.H5("👥 Detalhes de Colaboradores", className="mt-5 mb-3"),
+            employee_table
+        ])
+        
+    except Exception as e:
+        print(f"Erro ao gerar conteúdo de Redes e Colaboradores: {str(e)}")
+        traceback.print_exc()
+        return dbc.Alert(
+            f"Erro ao carregar dados: {str(e)}",
+            color="danger"
+        )
 
 if __name__ == '__main__':
     try:
