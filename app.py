@@ -90,61 +90,54 @@ app.layout = html.Div([
     html.Div(id='page-content')
 ])
 
-# Callback unificado para navegação e autenticação
+# Callback inicial para renderizar a página
 @app.callback(
-    [
-        Output('page-content', 'children'),
-        Output('url', 'pathname')
-    ],
-    [
-        Input('url', 'pathname'),
-        Input('login-button', 'n_clicks'),
-        Input('logout-button', 'n_clicks')
-    ],
+    Output('page-content', 'children'),
+    Input('url', 'pathname')
+)
+def display_page(pathname):
+    if pathname == '/dashboard':
+        return create_dashboard_layout()
+    return create_login_layout()
+
+# Callback de autenticação
+@app.callback(
+    Output('url', 'pathname'),
+    Input('login-button', 'n_clicks'),
     [
         State('login-username', 'value'),
         State('login-password', 'value')
     ],
     prevent_initial_call=True
 )
-def handle_navigation_and_auth(pathname, login_clicks, logout_clicks, username, password):
-    ctx = callback_context
-    if not ctx.triggered:
-        return create_login_layout(), no_update
+def authenticate(n_clicks, username, password):
+    if not n_clicks:
+        return no_update
     
-    trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    if not username or not password:
+        return no_update
     
-    # Logout
-    if trigger_id == 'logout-button' and logout_clicks:
-        return create_login_layout(), '/login'
-    
-    # Login
-    if trigger_id == 'login-button' and login_clicks:
-        if not username or not password:
-            return create_login_layout("Por favor, preencha todos os campos"), no_update
+    try:
+        user_db = UserDatabase()
+        user = user_db.verify_user(username, password)
         
-        try:
-            user_db = UserDatabase()
-            user = user_db.verify_user(username, password)
-            
-            if user:
-                return create_dashboard_layout(), '/dashboard'
-            else:
-                return create_login_layout("Usuário ou senha inválidos"), no_update
-        except Exception as e:
-            print(f"Erro na autenticação: {str(e)}")
-            return create_login_layout("Erro ao tentar fazer login. Tente novamente."), no_update
-    
-    # Navegação por URL
-    if trigger_id == 'url':
-        if pathname == '/login' or pathname == '/':
-            return create_login_layout(), no_update
-        elif pathname == '/dashboard':
-            return create_dashboard_layout(), no_update
-        else:
-            return create_error_layout('404'), no_update
-    
-    return create_login_layout(), no_update
+        if user:
+            return '/dashboard'
+        return no_update
+    except Exception as e:
+        print(f"Erro na autenticação: {str(e)}")
+        return no_update
+
+# Callback de logout
+@app.callback(
+    Output('url', 'pathname', allow_duplicate=True),
+    Input('logout-button', 'n_clicks'),
+    prevent_initial_call=True
+)
+def logout(n_clicks):
+    if n_clicks:
+        return '/login'
+    return no_update
 
 # Inicialização das extensões
 db = SQLAlchemy(server)
