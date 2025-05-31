@@ -139,8 +139,8 @@ app.layout = html.Div([
      State('password', 'value')],
     prevent_initial_call=False
 )
-def display_page_and_handle_login(pathname, login_clicks, username, password):
-    """Gerencia navegação e login"""
+def display_page_with_login(pathname, login_clicks, username, password):
+    """Callback que gerencia navegação e login"""
     ctx = callback_context
     
     # Se o botão de login foi clicado
@@ -229,7 +229,8 @@ def display_page_and_handle_login(pathname, login_clicks, username, password):
                                             id="username",
                                             placeholder="Digite seu usuário",
                                             type="text",
-                                            className="mb-3"
+                                            className="mb-3",
+                                            value=""
                                         )
                                     ])
                                 ]),
@@ -240,7 +241,8 @@ def display_page_and_handle_login(pathname, login_clicks, username, password):
                                             id="password",
                                             placeholder="Digite sua senha",
                                             type="password",
-                                            className="mb-3"
+                                            className="mb-3",
+                                            value=""
                                         )
                                     ])
                                 ]),
@@ -262,7 +264,7 @@ def display_page_and_handle_login(pathname, login_clicks, username, password):
                     dbc.Alert("❌ Usuário ou senha incorretos! Use: admin/admin", color="danger"),
                     dbc.Alert([
                         html.I(className="fas fa-info-circle me-2"),
-                        "Sistema funcionando no Railway! Use: admin/admin"
+                        "Sistema funcionando no Railway!"
                     ], color="info")
                 ], width=6)
             ], justify="center", className="mt-5")
