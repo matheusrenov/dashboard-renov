@@ -1,33 +1,79 @@
+# -*- coding: utf-8 -*-
+"""
+Dashboard Renov - Aplicação principal
+
+Este módulo contém a aplicação principal do Dashboard Renov, responsável por:
+- Visualização e análise de dados de vouchers
+- Gestão de redes e colaboradores
+- Monitoramento de performance
+- Geração de relatórios e KPIs
+"""
+
+# Bibliotecas padrão
 import os
-import base64
 import io
+import base64
+import secrets
+import traceback
+import socket
+from datetime import datetime, timedelta
+from typing import Literal, TypedDict, TypeVar, cast
+
+# Bibliotecas de dados e análise
 import pandas as pd
 import numpy as np
-import dash
-from dash import dcc, html, Input, Output, State, dash_table, callback_context, no_update
-import dash_bootstrap_components as dbc
-import plotly.express as px
-import plotly.graph_objects as go
-from datetime import datetime, timedelta
 from unidecode import unidecode
-import warnings
+
+# Monitoramento do sistema
+import psutil
+
+# Flask e extensões
+from flask import Flask, jsonify
+from flask_sqlalchemy import SQLAlchemy
+from flask_cors import CORS
+
+# Dash e componentes
+import dash
+import dash_bootstrap_components as dbc
+from dash import dcc, html, Input, Output, State, dash_table, callback_context, no_update
+from dash.exceptions import PreventUpdate
+
+# Plotly para gráficos
+import plotly.graph_objects as go
+import plotly.express as px
+
+# Exportação de dados
+import xlsxwriter
+
+# Módulos locais
 from models import UserDatabase
 from models_network import NetworkDatabase
 from auth_layout import create_login_layout, create_register_layout, create_admin_approval_layout
 from error_layout import create_error_layout
-from dash.exceptions import PreventUpdate
-from dotenv import load_dotenv
-import secrets
-from flask_cors import CORS
-from flask import Flask, jsonify
-import socket
-import psutil
-import traceback
-from typing import cast, Union, Any, Dict
-from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import text
+from custom_types import PsutilValue, PercentageValue, SystemStatus, ResourceStatus, DatabaseStatus
 
+# Carregar variáveis de ambiente
+from dotenv import load_dotenv
 load_dotenv()  # carrega variáveis do .env se existir
+
+# Tipos personalizados
+PsutilValue = TypeVar('PsutilValue', float, int)
+PercentageValue = float
+
+class ResourceStatus(TypedDict):
+    value: float
+    status: Literal['ok', 'warning', 'critical']
+
+class DatabaseStatus(TypedDict):
+    status: Literal['ok', 'error']
+
+class SystemStatus(TypedDict):
+    status: Literal['healthy', 'unhealthy', 'error']
+    cpu: ResourceStatus
+    memory: ResourceStatus
+    disk: ResourceStatus
+    database: DatabaseStatus
+    message: str | None
 
 # Inicializa o SQLAlchemy
 db = SQLAlchemy()
@@ -58,53 +104,37 @@ def check_system_health() -> SystemStatus:
     """Verifica a saúde do sistema"""
     try:
         # Verifica uso de CPU
-        cpu_percent: PercentageValue = cast(float, psutil.cpu_percent(interval=1))
+        cpu_percent = cast(float, psutil.cpu_percent(interval=1))
+        cpu_status = 'critical' if cpu_percent > 90 else 'warning' if cpu_percent > 70 else 'ok'
         
         # Verifica uso de memória
         memory = psutil.virtual_memory()
-        memory_percent: PercentageValue = cast(float, memory.percent)
+        memory_percent = cast(float, memory.percent)
+        memory_status = 'critical' if memory_percent > 90 else 'warning' if memory_percent > 70 else 'ok'
         
         # Verifica espaço em disco
         disk = psutil.disk_usage('/')
-        disk_percent: PercentageValue = cast(float, disk.percent)
+        disk_percent = cast(float, disk.percent)
+        disk_status = 'critical' if disk_percent > 90 else 'warning' if disk_percent > 70 else 'ok'
         
         # Verifica conexão com o banco de dados
-        db_status = True
+        db_status: DatabaseStatus = {'status': 'ok'}
         try:
             user_db = UserDatabase()
-            db_status = user_db.test_connection()
+            if not user_db.test_connection():
+                db_status = {'status': 'error'}
         except Exception:
-            db_status = False
+            db_status = {'status': 'error'}
         
         # Define o status inicial
-        status = 'healthy'
-        cpu_status = 'ok'
-        memory_status = 'ok'
-        disk_status = 'ok'
+        status: Literal['healthy', 'unhealthy', 'error'] = 'healthy'
         
-        # Verifica CPU
-        if cpu_percent > 90:
+        # Verifica condições críticas
+        if cpu_status == 'critical' or memory_status == 'critical' or disk_status == 'critical':
             status = 'unhealthy'
-            cpu_status = 'critical'
-        elif cpu_percent > 70:
-            cpu_status = 'warning'
-        
-        # Verifica Memória
-        if memory_percent > 90:
-            status = 'unhealthy'
-            memory_status = 'critical'
-        elif memory_percent > 70:
-            memory_status = 'warning'
-        
-        # Verifica Disco
-        if disk_percent > 90:
-            status = 'unhealthy'
-            disk_status = 'critical'
-        elif disk_percent > 70:
-            disk_status = 'warning'
         
         # Se o banco de dados estiver com erro, sistema está unhealthy
-        if not db_status:
+        if db_status['status'] == 'error':
             status = 'unhealthy'
         
         # Constrói o dicionário de retorno
@@ -113,12 +143,17 @@ def check_system_health() -> SystemStatus:
             'cpu': {'value': cpu_percent, 'status': cpu_status},
             'memory': {'value': memory_percent, 'status': memory_status},
             'disk': {'value': disk_percent, 'status': disk_status},
-            'database': {'status': 'ok' if db_status else 'error'}
+            'database': db_status,
+            'message': None
         }
     
     except Exception as e:
         return {
             'status': 'error',
+            'cpu': {'value': 0.0, 'status': 'error'},
+            'memory': {'value': 0.0, 'status': 'error'},
+            'disk': {'value': 0.0, 'status': 'error'},
+            'database': {'status': 'error'},
             'message': str(e)
         }
 
