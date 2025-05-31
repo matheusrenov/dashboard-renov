@@ -1,1 +1,1 @@
-web: gunicorn wsgi:server --workers 4 --threads 2 --timeout 120 
+web: gunicorn wsgi:server --workers 2 --threads 4 --timeout 180 --max-requests 1000 --max-requests-jitter 50 --log-level info 

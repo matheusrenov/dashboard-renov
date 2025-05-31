@@ -43,30 +43,34 @@ import plotly.express as px
 # Exportação de dados
 import xlsxwriter
 
-# Configurações da aplicação
-app = Flask(__name__)
-app.config['SECRET_KEY'] = secrets.token_hex(16)
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///database.db')
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+# Inicialização do Flask
+server = Flask(__name__)
+CORS(server)
 
-# Inicialização das extensões
-db = SQLAlchemy(app)
-CORS(app)
-
-# Inicialização do Dash
-dash_app = dash.Dash(
-    __name__,
-    server=app,
-    external_stylesheets=[
-        dbc.themes.BOOTSTRAP,
-        'https://use.fontawesome.com/releases/v5.15.4/css/all.css'
-    ],
-    suppress_callback_exceptions=True
+# Configurações do Flask
+server.config.update(
+    SECRET_KEY=os.environ.get('SECRET_KEY', secrets.token_hex(16)),
+    SQLALCHEMY_DATABASE_URI=os.getenv('DATABASE_URL', 'sqlite:///database.db'),
+    SQLALCHEMY_TRACK_MODIFICATIONS=False
 )
 
-# Configurações do layout
-dash_app.title = 'Dashboard Renov'
-dash_app.config.suppress_callback_exceptions = True
+# Inicialização do Dash
+app = dash.Dash(
+    __name__,
+    server=server,
+    external_stylesheets=[dbc.themes.BOOTSTRAP],
+    suppress_callback_exceptions=True,
+    update_title='Carregando...',
+    meta_tags=[
+        {"name": "viewport", "content": "width=device-width, initial-scale=1"}
+    ]
+)
+
+# Configurações do Dash
+app.title = "Dashboard Renov"
+
+# Inicialização das extensões
+db = SQLAlchemy(server)
 
 # ========================
 # 📱 Funções de Layout
