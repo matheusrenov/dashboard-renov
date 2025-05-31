@@ -273,6 +273,7 @@ app.layout = serve_layout
 # ========================
 
 def create_dashboard_layout(is_super_admin=False):
+    """Cria o layout do dashboard"""
     return dbc.Container([
         # Header
         dbc.Row([
@@ -341,8 +342,10 @@ def create_dashboard_layout(is_super_admin=False):
             ], width=12)
         ], className="mb-4"),
         
-        # KPIs Section (inicialmente oculta)
-        html.Div(id='kpi-section', style={'display': 'none'}, className="mb-4"),
+        # Área de conteúdo
+        html.Div([
+            no_data_message()
+        ], id='tab-content-area', className="mt-4")
         
         # Filtros (inicialmente ocultos)
         html.Div([
@@ -353,14 +356,14 @@ def create_dashboard_layout(is_super_admin=False):
                         dbc.Col([
                             html.Label("Período:", className="filter-label"),
                             dbc.Row([
-                                dbc.Col([
+                        dbc.Col([
                                     dcc.DatePickerSingle(
                                         id='filter-start-date',
                                         placeholder="Data Inicial",
                                         display_format='DD/MM/YYYY'
                                     )
                                 ], width=6),
-                                dbc.Col([
+                        dbc.Col([
                                     dcc.DatePickerSingle(
                                         id='filter-end-date',
                                         placeholder="Data Final",
@@ -561,7 +564,7 @@ def generate_overview_content(df, include_kpis=False):
                 x=0.5, y=0.5,
                 xref="paper", yref="paper",
                 showarrow=False
-            )
+        )
         
         return html.Div([
             # Primeira linha: Vouchers utilizados + Gráfico total
@@ -885,7 +888,7 @@ def generate_projections_content(original_df, filtered_df):
         current_year = last_date.year
         
         current_month_data = df[
-            (df['criado_em'].dt.month == current_month) &
+            (df['criado_em'].dt.month == current_month) & 
             (df['criado_em'].dt.year == current_year)
         ]
         
@@ -985,7 +988,7 @@ def generate_projections_content(original_df, filtered_df):
         
         # Adicionar barras para vouchers gerados
         fig_temporal.add_trace(go.Bar(
-            x=daily_data['data'],
+            x=daily_data['data'], 
             y=daily_data['vouchers'],
             name='Vouchers Gerados',
             marker_color='#3498db',  # Azul
@@ -1033,7 +1036,7 @@ def generate_projections_content(original_df, filtered_df):
         
         return html.Div([
             html.H4("🔮 Projeções e Análise Detalhada", className="mb-4"),
-            html.P(f"Período analisado: {unique_days_month} dias de {pd.Timestamp(current_year, current_month, 1).strftime('%B %Y')}",
+            html.P(f"Período analisado: {unique_days_month} dias de {pd.Timestamp(current_year, current_month, 1).strftime('%B %Y')}", 
                    className="text-muted mb-4"),
             metrics_cards,
             dbc.Row([
@@ -1046,13 +1049,13 @@ def generate_projections_content(original_df, filtered_df):
                         dbc.CardBody([
                             html.P([
                                 "Com base nos ", html.Strong(f"{unique_days_month}"), " dias analisados no período, ",
-                                "a projeção de fechamento mensal indica um total de ",
+                                "a projeção de fechamento mensal indica um total de ", 
                                 html.Strong(f"{projecao_vouchers_utilizados:.0f}"), " vouchers utilizados, ",
-                                "gerando uma receita projetada de ",
+                                "gerando uma receita projetada de ", 
                                 html.Strong(f"R$ {projecao_valor_total:,.2f}"), "."
                             ]),
                             html.P([
-                                "O ticket médio projetado é de ",
+                                "O ticket médio projetado é de ", 
                                 html.Strong(f"R$ {projecao_ticket_medio:,.2f}"), " por voucher utilizado."
                             ]),
                             html.Hr(),
@@ -1062,7 +1065,7 @@ def generate_projections_content(original_df, filtered_df):
                 ], md=12)
             ])
         ])
-    
+        
     except Exception as e:
         return dbc.Alert(f"Erro nas projeções: {str(e)}", color="danger")
 
@@ -1100,7 +1103,7 @@ def generate_network_base_content():
                 dbc.Card([
                     dbc.CardBody([
                         html.H4("🏢 Total de Redes", className="card-title text-center"),
-                        html.H2(f"{stats['total_networks']:,}",
+                        html.H2(f"{stats['total_networks']:,}", 
                                className="text-primary text-center display-4"),
                         html.P("Redes parceiras ativas", className="text-muted text-center")
                     ])
@@ -1110,7 +1113,7 @@ def generate_network_base_content():
                 dbc.Card([
                     dbc.CardBody([
                         html.H4("🏪 Total de Filiais", className="card-title text-center"),
-                        html.H2(f"{stats['total_branches']:,}",
+                        html.H2(f"{stats['total_branches']:,}", 
                                className="text-success text-center display-4"),
                         html.P("Filiais ativas no sistema", className="text-muted text-center")
                     ])
@@ -1120,7 +1123,7 @@ def generate_network_base_content():
                 dbc.Card([
                     dbc.CardBody([
                         html.H4("👥 Total de Colaboradores", className="card-title text-center"),
-                        html.H2(f"{stats['total_employees']:,}",
+                        html.H2(f"{stats['total_employees']:,}", 
                                className="text-info text-center display-4"),
                         html.P("Colaboradores ativos", className="text-muted text-center")
                     ])
@@ -1261,7 +1264,7 @@ def generate_network_base_content():
                 summary_table
             ], className="table-responsive")
         ])
-    
+        
     except Exception as e:
         print(f"Erro ao gerar conteúdo: {str(e)}")
         import traceback
@@ -1273,7 +1276,7 @@ def generate_engagement_content(df, network_db):
     try:
         if df.empty:
             return dbc.Alert("Dados não disponíveis para análise de engajamento.", color="warning")
-        
+
         # Obter dados das bases de redes e colaboradores
         executive_summary = network_db.get_executive_summary()
         
@@ -1308,16 +1311,16 @@ def generate_engagement_content(df, network_db):
         taxa_ativacao_filiais = (filiais_ativas / total_filiais * 100) if total_filiais > 0 else 0
         taxa_ativacao_colaboradores = (colaboradores_ativos / total_colaboradores * 100) if total_colaboradores > 0 else 0
         taxa_ativacao_colaboradores_utilizados = (colaboradores_com_vouchers_utilizados / total_colaboradores * 100) if total_colaboradores > 0 else 0
-        
+
         # KPIs de Engajamento
         kpi_cards = dbc.Row([
             dbc.Col([
                 dbc.Card([
                     dbc.CardBody([
                         html.H4("🎯 Taxa de Ativação de Redes", className="card-title text-center"),
-                        html.H2(f"{taxa_ativacao_redes:.1f}%",
+                        html.H2(f"{taxa_ativacao_redes:.1f}%", 
                                className="text-primary text-center display-4"),
-                        html.P(f"{redes_ativas} de {total_redes} redes ativas",
+                        html.P(f"{redes_ativas} de {total_redes} redes ativas", 
                               className="text-muted text-center")
                     ])
                 ], className="mb-4 shadow-sm")
@@ -1326,9 +1329,9 @@ def generate_engagement_content(df, network_db):
                 dbc.Card([
                     dbc.CardBody([
                         html.H4("🏪 Taxa de Ativação de Filiais", className="card-title text-center"),
-                        html.H2(f"{taxa_ativacao_filiais:.1f}%",
+                        html.H2(f"{taxa_ativacao_filiais:.1f}%", 
                                className="text-success text-center display-4"),
-                        html.P(f"{filiais_ativas} de {total_filiais} filiais ativas",
+                        html.P(f"{filiais_ativas} de {total_filiais} filiais ativas", 
                               className="text-muted text-center")
                     ])
                 ], className="mb-4 shadow-sm")
@@ -1337,9 +1340,9 @@ def generate_engagement_content(df, network_db):
                 dbc.Card([
                     dbc.CardBody([
                         html.H4("👥 Taxa de Ativação - Vouchers Utilizados", className="card-title text-center"),
-                        html.H2(f"{taxa_ativacao_colaboradores_utilizados:.1f}%",
+                        html.H2(f"{taxa_ativacao_colaboradores_utilizados:.1f}%", 
                                className="text-info text-center display-4"),
-                        html.P(f"{colaboradores_com_vouchers_utilizados} de {total_colaboradores} colaboradores",
+                        html.P(f"{colaboradores_com_vouchers_utilizados} de {total_colaboradores} colaboradores", 
                               className="text-muted text-center")
                     ])
                 ], className="mb-4 shadow-sm")
@@ -1348,15 +1351,15 @@ def generate_engagement_content(df, network_db):
                 dbc.Card([
                     dbc.CardBody([
                         html.H4("⚠️ Taxa de Ausência de Vouchers", className="card-title text-center"),
-                        html.H2(f"{taxa_ausencia_vouchers:.1f}%",
+                        html.H2(f"{taxa_ausencia_vouchers:.1f}%", 
                                className="text-danger text-center display-4"),
-                        html.P(f"{total_colaboradores_inativos} colaboradores sem atividade",
+                        html.P(f"{total_colaboradores_inativos} colaboradores sem atividade", 
                               className="text-muted text-center")
                     ])
                 ], className="mb-4 shadow-sm")
             ], md=3)
         ])
-        
+
         # Análise Temporal de Engajamento com novo gráfico de colunas empilhadas
         if 'data_str' in df.columns:
             df_temporal = df.groupby('data_str').agg({
@@ -1459,7 +1462,7 @@ def generate_engagement_content(df, network_db):
             ),
             margin=dict(b=100)  # Margem inferior para acomodar os rótulos
         )
-        
+
         # Tabela Analítica
         tabela_analitica = []
         for rede in executive_summary['Nome da Rede'].unique():
@@ -1482,7 +1485,7 @@ def generate_engagement_content(df, network_db):
             rede_data['Taxa_Ausencia_Vouchers'] = f"{(rede_data['Total_Colaboradores_Sem_Vouchers'] / rede_data['Total_Colaboradores_Ativos'] * 100 if rede_data['Total_Colaboradores_Ativos'] > 0 else 0):.1f}%"
             
             tabela_analitica.append(rede_data)
-        
+
         # Nova seção: Engajamento de Equipes
         # Preparar dados para a análise de engajamento
         colaboradores_ativos = set(df['nome_vendedor'].unique())
@@ -1600,7 +1603,7 @@ def generate_engagement_content(df, network_db):
                 sort_action='native'
             )
         ])
-    
+        
     except Exception as e:
         print(f"Erro na análise de engajamento: {str(e)}")
         import traceback
@@ -1962,17 +1965,17 @@ def handle_upload(contents, filename):
     """Processa o upload do arquivo de dados e atualiza os filtros"""
     if contents is None:
         return no_update, no_update, no_update, no_update, no_update, no_data_message()
-    
+
     try:
         print(f"\n=== Processando upload do arquivo: {filename} ===")
-        
+
         # Processar o arquivo
         content_type, content_string = contents.split(',')
         decoded = base64.b64decode(content_string)
         
         # Ler o arquivo Excel
         df = pd.read_excel(io.BytesIO(decoded))
-        
+
         if df.empty:
             return (
                 dbc.Alert("Arquivo vazio!", color="warning"),
@@ -1981,14 +1984,14 @@ def handle_upload(contents, filename):
             )
         
         print(f"Colunas encontradas: {df.columns.tolist()}")
-        
+
         # Processar datas
         if 'criado_em' in df.columns:
             df['criado_em'] = pd.to_datetime(df['criado_em'], errors='coerce')
             df = df.dropna(subset=['criado_em'])
             df['mes'] = df['criado_em'].dt.strftime('%Y-%m')  # Formato YYYY-MM
             df['data_str'] = df['criado_em'].dt.strftime('%Y-%m-%d')
-        
+
         # Preparar opções para os filtros
         month_options = [{'label': mes, 'value': mes} for mes in sorted(df['mes'].unique())] if 'mes' in df.columns else []
         network_options = [{'label': rede, 'value': rede} for rede in sorted(df['nome_rede'].unique())] if 'nome_rede' in df.columns else []
@@ -1998,7 +2001,7 @@ def handle_upload(contents, filename):
         
         # Gerar conteúdo inicial
         initial_content = generate_overview_content(df)
-        
+
         return (
             dbc.Alert(f"✅ Arquivo '{filename}' carregado com sucesso! ({len(df)} registros)", color="success", duration=4000),
             df.to_dict('records'),
@@ -2007,7 +2010,7 @@ def handle_upload(contents, filename):
             status_options,
             initial_content
         )
-    
+
     except Exception as e:
         print(f"Erro ao processar arquivo: {str(e)}")
         traceback.print_exc()
@@ -2061,13 +2064,13 @@ def apply_filters(months, networks, statuses, start_date, end_date, clear_clicks
             df = df[df['situacao_voucher'].isin(statuses)]
         
         if df.empty:
-            return no_update, dbc.Alert("Nenhum dado encontrado com os filtros selecionados!",
+            return no_update, dbc.Alert("Nenhum dado encontrado com os filtros selecionados!", 
                                       color="warning", duration=4000)
         
         return df.to_dict('records'), no_update
     
     except Exception as e:
-        return no_update, dbc.Alert(f"Erro ao aplicar filtros: {str(e)}",
+        return no_update, dbc.Alert(f"Erro ao aplicar filtros: {str(e)}", 
                                   color="danger", duration=4000)
 
 # ========================
@@ -2104,10 +2107,10 @@ def update_kpis(original_data, filtered_data):
 )
 def update_tab_content(active_tab, filtered_data, original_data):
     print(f"\n=== Atualizando conteúdo da aba: {active_tab} ===")
-    
+            
     if filtered_data is None and original_data is None:
         return no_data_message()
-    
+        
     try:
         # Usar dados filtrados se disponíveis, senão usar dados originais
         data_to_use = filtered_data if filtered_data is not None else original_data
@@ -2191,37 +2194,31 @@ app.clientside_callback(
 
 @app.callback(
     Output('page-content', 'children'),
-    [Input('url', 'pathname'),
-     Input('error-store', 'data')],
+    [Input('url', 'pathname')],
     prevent_initial_call=True
 )
-def display_page(pathname, error_data):
-    ctx = callback_context
-    if not ctx.triggered:
-        return create_login_layout()
-    
-    triggered = getattr(ctx, 'triggered', [])
-    if not triggered:
-        return create_login_layout()
-    
-    trigger_id = triggered[0].get('prop_id', '').split('.')[0]
-    
-    if trigger_id == 'error-store' and error_data:
-        return create_error_layout(
-            error_type=error_data.get('type', 'deploy'),
-            error_message=error_data.get('message'),
-            error_details=error_data.get('details')
-        )
+def display_page(pathname):
+    """Gerencia o roteamento entre páginas"""
+    print(f"\n=== Roteamento para: {pathname} ===")
     
     if not pathname:
+        print("Sem pathname - Redirecionando para login")
         return create_login_layout()
+    
+    if pathname == '/':
+        print("Rota / - Exibindo login")
+        return create_login_layout()
+    
     elif pathname == '/dashboard':
+        print("Rota /dashboard - Exibindo dashboard")
         return create_dashboard_layout()
+    
     elif pathname == '/register':
+        print("Rota /register - Exibindo registro")
         return create_register_layout()
-    elif pathname == '/error':
-        return create_error_layout()
+    
     else:
+        print(f"Rota desconhecida ({pathname}) - Redirecionando para login")
         return create_login_layout()
 
 # ========================
@@ -2243,14 +2240,15 @@ def handle_navigation(show_login_clicks):
 # ========================
 
 @app.callback(
-    [Output('url', 'pathname', allow_duplicate=True),
-     Output('auth-status', 'children', allow_duplicate=True)],
+    [Output('url', 'pathname'),
+     Output('auth-status', 'children')],
     [Input('login-button', 'n_clicks')],
     [State('login-username', 'value'),
      State('login-password', 'value')],
     prevent_initial_call=True
 )
 def handle_login(n_clicks, username, password):
+    """Gerencia o processo de login"""
     if not n_clicks:
         raise PreventUpdate
     
@@ -2261,9 +2259,8 @@ def handle_login(n_clicks, username, password):
             duration=4000
         )
     
-    user = db.verify_user(username, password)
-    
-    if user:
+    # Usuário e senha fixos para teste
+    if username == "admin" and password == "admin":
         return '/dashboard', dbc.Alert(
             "Login realizado com sucesso!",
             color="success",
@@ -2302,7 +2299,7 @@ def handle_network_upload(networks_contents, employees_contents, networks_filena
     ctx = callback_context
     if not ctx.triggered:
         return no_update
-    
+
     try:
         triggered = getattr(ctx, 'triggered', [])
         if not triggered:
@@ -2337,7 +2334,7 @@ def handle_network_upload(networks_contents, employees_contents, networks_filena
                     color="danger",
                     dismissable=True
                 )
-        
+                
         elif trigger_id == 'upload-employees-file' and employees_contents:
             print("\n=== Processando upload de Colaboradores ===")
             try:
@@ -2436,7 +2433,6 @@ def handle_network_upload(networks_contents, employees_contents, networks_filena
                     )
             except Exception as e:
                 print(f"Erro ao processar arquivo de colaboradores: {str(e)}")
-                import traceback
                 traceback.print_exc()
                 return dbc.Alert(
                     f"❌ Erro ao processar arquivo de colaboradores: {str(e)}",
@@ -2453,7 +2449,7 @@ def handle_network_upload(networks_contents, employees_contents, networks_filena
             color="danger",
             dismissable=True
         )
-    
+
     return no_update
 
 @app.callback(
@@ -2483,6 +2479,18 @@ def clear_filters(n_clicks):
     
     return None, None, None, None, None
 
+@app.callback(
+    [Output('filters-section', 'style'),
+     Output('kpi-section', 'style')],
+    [Input('store-data', 'data')],
+    prevent_initial_call=True
+)
+def toggle_sections_visibility(data):
+    """Controla a visibilidade das seções baseado na existência de dados"""
+    if data:
+        return {'display': 'block'}, {'display': 'block'}
+    return {'display': 'none'}, {'display': 'none'}
+
 # ========================
 # 🔚 Execução e Documentação
 # ========================
@@ -2491,25 +2499,25 @@ def clear_filters(n_clicks):
 Instruções de Execução:
 
 1. Desenvolvimento Local:
-    python app.py
-    - O servidor iniciará em http://0.0.0.0:8080
-    - Variáveis de ambiente opcionais:
+   python app.py
+   - O servidor iniciará em http://0.0.0.0:8080
+   - Variáveis de ambiente opcionais:
         - FLASK_ENV=development (para modo debug)
         - PORT=8080 (ou outra porta desejada)
 
 2. Produção:
-    gunicorn wsgi:server
-    - O servidor iniciará em http://0.0.0.0:8080 (ou a porta definida em $PORT)
-    - Variáveis de ambiente necessárias:
+   gunicorn wsgi:server
+   - O servidor iniciará em http://0.0.0.0:8080 (ou a porta definida em $PORT)
+   - Variáveis de ambiente necessárias:
         - FLASK_ENV=production
         - PORT=8080 (ou porta desejada)
         - SECRET_KEY=chave_secreta_segura
 
 3. Usando Procfile:
-    web: gunicorn wsgi:server --workers 4 --threads 2 --timeout 120 --bind 0.0.0.0:$PORT
-    - Usa automaticamente a variável $PORT do ambiente
-    - Configurado para performance em produção
-    - Recomendado para deploy no GitHub ou serviços similares
+   web: gunicorn wsgi:server --workers 4 --threads 2 --timeout 120 --bind 0.0.0.0:$PORT
+   - Usa automaticamente a variável $PORT do ambiente
+   - Configurado para performance em produção
+   - Recomendado para deploy no GitHub ou serviços similares
 """
 
 # Funções auxiliares
