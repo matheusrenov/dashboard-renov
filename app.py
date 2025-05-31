@@ -98,7 +98,10 @@ app.layout = html.Div([
 def display_page(pathname):
     if pathname == '/dashboard':
         return create_dashboard_layout()
-    return create_login_layout()
+    elif pathname == '/login' or pathname == '/' or pathname is None:
+        return create_login_layout()
+    else:
+        return create_error_layout('404')
 
 # Callback de autenticação
 @app.callback(
@@ -112,7 +115,7 @@ def display_page(pathname):
 )
 def authenticate(n_clicks, username, password):
     if not n_clicks:
-        return no_update
+        raise PreventUpdate
     
     if not username or not password:
         return no_update
@@ -137,7 +140,7 @@ def authenticate(n_clicks, username, password):
 def logout(n_clicks):
     if n_clicks:
         return '/login'
-    return no_update
+    raise PreventUpdate
 
 # Inicialização das extensões
 db = SQLAlchemy(server)
@@ -149,18 +152,16 @@ db = SQLAlchemy(server)
 def create_dashboard_layout(is_super_admin=False):
     """
     Cria o layout principal do dashboard.
-    
-    Args:
-        is_super_admin: Se o usuário é um super administrador
-    
-    Returns:
-        Um componente Container com o layout do dashboard
     """
     return dbc.Container([
         # Cabeçalho
         dbc.Row([
             dbc.Col([
-                html.H1("Dashboard Renov", className="mb-4"),
+                html.Img(
+                    src='./assets/images/Logo Roxo.png',
+                    style={"height": "30px", "marginRight": "10px", "display": "inline-block"}
+                ),
+                html.H4("Dashboard de Performance", className="d-inline-block align-middle mb-0"),
                 dbc.Button(
                     "Sair",
                     id="logout-button",
@@ -170,166 +171,221 @@ def create_dashboard_layout(is_super_admin=False):
             ])
         ], className="mb-4"),
 
-        # Status do sistema
-        dbc.Row([
-            dbc.Col([
-                html.Div(id="system-health"),
-                dcc.Interval(
-                    id='health-interval',
-                    interval=30000,  # 30 segundos
-                    n_intervals=0
-                )
+        # Seção de Filtros
+        dbc.Card([
+            dbc.CardBody([
+                html.H6("🔍 Filtros", className="mb-3"),
+                dbc.Row([
+                    dbc.Col([
+                        html.Label("Período"),
+                        dbc.Row([
+                            dbc.Col([
+                                html.Label("De"),
+                                dcc.DatePickerSingle(
+                                    id='date-from',
+                                    placeholder="Selecione",
+                                    className="w-100"
+                                )
+                            ], width=6),
+                            dbc.Col([
+                                html.Label("Até"),
+                                dcc.DatePickerSingle(
+                                    id='date-to',
+                                    placeholder="Selecione",
+                                    className="w-100"
+                                )
+                            ], width=6)
+                        ])
+                    ], width=3),
+                    dbc.Col([
+                        html.Label("Mês"),
+                        dcc.Dropdown(
+                            id='filter-month',
+                            options=[],
+                            placeholder="Selecione o(s) mês(es)",
+                            multi=True,
+                            className="w-100"
+                        )
+                    ], width=3),
+                    dbc.Col([
+                        html.Label("Rede"),
+                        dcc.Dropdown(
+                            id='filter-network',
+                            options=[],
+                            placeholder="Selecione a(s) rede(s)",
+                            multi=True,
+                            className="w-100"
+                        )
+                    ], width=3),
+                    dbc.Col([
+                        html.Label("Situação"),
+                        dcc.Dropdown(
+                            id='filter-status',
+                            options=[],
+                            placeholder="Selecione o(s) status",
+                            multi=True,
+                            className="w-100"
+                        )
+                    ], width=3)
+                ]),
+                dbc.Row([
+                    dbc.Col([
+                        dbc.Button(
+                            "Limpar Filtros",
+                            id="clear-filters",
+                            color="secondary",
+                            size="sm",
+                            className="mt-3"
+                        )
+                    ])
+                ])
             ])
         ], className="mb-4"),
 
-        # Upload de dados
+        # Seção de Upload Principal
         dbc.Row([
             dbc.Col([
-                dcc.Upload(
-                    id='upload-data',
-                    children=html.Div([
-                        '📊 Upload de Dados'
-                    ], className="text-center p-3 border rounded"),
-                    className="mb-3"
-                ),
-                html.Div(id='upload-status')
-            ], md=6),
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H6("📊 Upload de Dados", className="text-center mb-3"),
+                        dcc.Upload(
+                            id='upload-data',
+                            children=html.Div([
+                                html.P('Arraste e solte ou ', className="mb-0 d-inline"),
+                                html.A('selecione um arquivo Excel', className="text-primary"),
+                            ], className="text-center p-3 border rounded"),
+                            style={
+                                'width': '100%',
+                                'height': '60px',
+                                'lineHeight': '60px',
+                                'borderWidth': '1px',
+                                'borderStyle': 'dashed',
+                                'borderRadius': '5px',
+                                'textAlign': 'center',
+                                'margin': '10px 0'
+                            },
+                            multiple=False
+                        ),
+                        html.Div(id='upload-status', className="mt-2")
+                    ])
+                ])
+            ], width=12)
+        ], className="mb-4"),
+
+        # Seção de Upload de Redes e Colaboradores
+        dbc.Row([
             dbc.Col([
-                dbc.Row([
-                    dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H6("Analisar Base de Redes e Filiais", className="text-center mb-3"),
                         dcc.Upload(
                             id='upload-networks-branches-file',
                             children=html.Div([
-                                '🏪 Upload de Redes/Filiais'
+                                html.P('Arraste e solte ou ', className="mb-0 d-inline"),
+                                html.A('selecione o arquivo de Redes/Filiais', className="text-primary"),
                             ], className="text-center p-3 border rounded"),
-                            className="mb-3"
-                        )
-                    ], md=6),
-                    dbc.Col([
+                            style={
+                                'width': '100%',
+                                'height': '60px',
+                                'lineHeight': '60px',
+                                'borderWidth': '1px',
+                                'borderStyle': 'dashed',
+                                'borderRadius': '5px',
+                                'textAlign': 'center',
+                                'margin': '10px 0'
+                            },
+                            multiple=False
+                        ),
+                        html.Div(id='network-upload-status', className="mt-2")
+                    ])
+                ])
+            ], width=6),
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H6("Analisar Base de Colaboradores", className="text-center mb-3"),
                         dcc.Upload(
                             id='upload-employees-file',
                             children=html.Div([
-                                '👥 Upload de Colaboradores'
+                                html.P('Arraste e solte ou ', className="mb-0 d-inline"),
+                                html.A('selecione o arquivo de Colaboradores', className="text-primary"),
                             ], className="text-center p-3 border rounded"),
-                            className="mb-3"
-                        )
-                    ], md=6)
-                ]),
-                html.Div(id='network-upload-status')
-            ], md=6)
-        ], className="mb-4"),
-
-        # Mensagem de boas-vindas
-        html.Div([
-            dbc.Alert([
-                html.H4("👋 Bem-vindo ao Dashboard Renov!", className="alert-heading"),
-                html.P([
-                    "Para começar, faça o upload do arquivo de dados usando o botão acima. ",
-                    "O arquivo deve estar no formato Excel (.xls ou .xlsx) e conter as seguintes colunas:"
-                ]),
-                html.Hr(),
-                html.P([
-                    "Colunas obrigatórias:",
-                    html.Ul([
-                        html.Li("IMEI ou Device ID"),
-                        html.Li("Data de Criação"),
-                        html.Li("Valor do Voucher"),
-                        html.Li("Valor do Dispositivo"),
-                        html.Li("Situação do Voucher"),
-                        html.Li("Nome do Vendedor"),
-                        html.Li("Nome da Filial"),
-                        html.Li("Nome da Rede")
+                            style={
+                                'width': '100%',
+                                'height': '60px',
+                                'lineHeight': '60px',
+                                'borderWidth': '1px',
+                                'borderStyle': 'dashed',
+                                'borderRadius': '5px',
+                                'textAlign': 'center',
+                                'margin': '10px 0'
+                            },
+                            multiple=False
+                        ),
+                        html.Div(id='employee-upload-status', className="mt-2")
                     ])
-                ], className="mb-0")
-            ], color="info", id="welcome-message")
+                ])
+            ], width=6)
         ], className="mb-4"),
 
-        # Seção de filtros
-        html.Div([
-            dbc.Row([
-                dbc.Col([
-                    html.H4("🔍 Filtros", className="mb-3"),
-                    dbc.Row([
-                        dbc.Col([
-                            html.Label("Mês"),
-                            dcc.Dropdown(
-                                id='filter-month',
-                                options=[],
-                                placeholder="Selecione o mês",
-                                multi=True
-                            )
-                        ], md=4),
-                        dbc.Col([
-                            html.Label("Rede"),
-                            dcc.Dropdown(
-                                id='filter-network',
-                                options=[],
-                                value='todas',
-                                placeholder="Selecione a rede"
-                            )
-                        ], md=4),
-                        dbc.Col([
-                            html.Label("Status"),
-                            dcc.Dropdown(
-                                id='filter-status',
-                                options=[],
-                                value='todos',
-                                placeholder="Selecione o status"
-                            )
-                        ], md=4)
-                    ], className="mb-3"),
-                    dbc.Button(
-                        "Limpar Filtros",
-                        id="clear-filters",
-                        color="secondary",
-                        size="sm"
-                    )
-                ])
-            ])
-        ], id="filters-section", style={'display': 'none'}, className="mb-4"),
+        # KPIs
+        html.Div(id='kpi-cards', className="mb-4"),
 
-        # Seção de abas
-        html.Div([
-            dbc.Row([
-                dbc.Col([
-                    html.Div(id='kpi-section', className="mb-4"),
-                    dbc.Tabs([
-                        dbc.Tab(label="📊 Visão Geral", tab_id="overview"),
-                        dbc.Tab(label="🏢 Redes", tab_id="networks"),
-                        dbc.Tab(label="🏆 Rankings", tab_id="rankings"),
-                        dbc.Tab(label="🔮 Projeções", tab_id="projections"),
-                        dbc.Tab(label="👥 Engajamento", tab_id="engagement"),
-                        dbc.Tab(label="📋 Base de Redes", tab_id="network-base")
-                    ], id="main-tabs", active_tab="overview"),
-                    html.Div(id="tab-content-area", className="mt-4")
-                ])
-            ])
-        ], id="tabs-section", style={'display': 'none'}, className="mb-4"),
+        # Abas principais
+        dbc.Tabs([
+            dbc.Tab(label="📊 Visão Geral", tab_id="overview"),
+            dbc.Tab(label="🏢 Redes", tab_id="networks"),
+            dbc.Tab(label="🏆 Rankings", tab_id="rankings"),
+            dbc.Tab(label="🔮 Projeções", tab_id="projections"),
+            dbc.Tab(label="👥 Engajamento", tab_id="engagement")
+        ], id="main-tabs", active_tab="overview"),
+        
+        html.Div(id="tab-content"),
 
-        # Seção de exportação
-        dbc.Row([
-            dbc.Col([
-                dbc.ButtonGroup([
-                    dbc.Button(
-                        "📥 Exportar Excel",
-                        id="export-excel",
-                        color="success",
-                        className="me-2"
-                    ),
-                    dbc.Button(
-                        "📄 Exportar PDF",
-                        id="export-pdf",
-                        color="primary"
-                    )
-                ])
-            ], className="text-end")
-        ]),
-
-        # Componentes ocultos
+        # Componentes ocultos para armazenamento de dados
         dcc.Store(id='store-data'),
         dcc.Store(id='store-filtered-data'),
-        dcc.Download(id="download-data")
+        dcc.Download(id="download-dataframe-csv"),
     ], fluid=True)
+
+# Callback para atualizar os KPIs
+@app.callback(
+    Output('kpi-cards', 'children'),
+    Input('store-filtered-data', 'data')
+)
+def update_kpis(filtered_data):
+    if not filtered_data:
+        return []
+    
+    df = pd.DataFrame(filtered_data)
+    return generate_kpi_cards(df)
+
+# Callback para atualizar o conteúdo das abas
+@app.callback(
+    Output('tab-content', 'children'),
+    [
+        Input('main-tabs', 'active_tab'),
+        Input('store-filtered-data', 'data')
+    ]
+)
+def render_tab_content(active_tab, filtered_data):
+    if not filtered_data:
+        return dbc.Alert("Por favor, faça o upload dos dados para visualizar as análises.", color="info")
+    
+    df = pd.DataFrame(filtered_data)
+    
+    if active_tab == "overview":
+        return generate_overview_content(df)
+    elif active_tab == "networks":
+        return generate_networks_content(df)
+    elif active_tab == "rankings":
+        return generate_rankings_content(df)
+    elif active_tab == "projections":
+        return generate_projections_content(df)
+    elif active_tab == "engagement":
+        return generate_engagement_content(df)
+    
+    return html.P("Esta aba está em desenvolvimento.")
 
 # ========================
 # 📊 Funções de Geração de Conteúdo
@@ -1102,6 +1158,389 @@ def generate_engagement_content(df: pd.DataFrame) -> html.Div:
     except Exception as e:
         print(f"Erro ao gerar análise de engajamento: {str(e)}")
         return dbc.Alert(f"Erro ao gerar análise de engajamento: {str(e)}", color="danger")
+
+# Callback para popular os filtros
+@app.callback(
+    [
+        Output('filter-month', 'options'),
+        Output('filter-network', 'options'),
+        Output('filter-status', 'options')
+    ],
+    Input('store-data', 'data')
+)
+def update_filter_options(data):
+    if not data:
+        return [], [], []
+    
+    df = pd.DataFrame(data)
+    
+    # Opções para mês
+    df['mes'] = pd.to_datetime(df['data_str']).dt.strftime('%Y-%m')
+    meses = sorted(df['mes'].unique())
+    opcoes_mes = [{'label': mes, 'value': mes} for mes in meses]
+    
+    # Opções para rede
+    redes = sorted(df['nome_rede'].unique())
+    opcoes_rede = [{'label': rede, 'value': rede} for rede in redes]
+    
+    # Opções para status
+    status = sorted(df['situacao_voucher'].unique())
+    opcoes_status = [{'label': status, 'value': status} for status in status]
+    
+    return opcoes_mes, opcoes_rede, opcoes_status
+
+# Callback para limpar filtros
+@app.callback(
+    [
+        Output('filter-month', 'value'),
+        Output('filter-network', 'value'),
+        Output('filter-status', 'value'),
+        Output('date-from', 'date'),
+        Output('date-to', 'date')
+    ],
+    Input('clear-filters', 'n_clicks'),
+    prevent_initial_call=True
+)
+def clear_filters(n_clicks):
+    return None, None, None, None, None
+
+# Callback para filtrar dados
+@app.callback(
+    Output('store-filtered-data', 'data'),
+    [
+        Input('store-data', 'data'),
+        Input('filter-month', 'value'),
+        Input('filter-network', 'value'),
+        Input('filter-status', 'value'),
+        Input('date-from', 'date'),
+        Input('date-to', 'date')
+    ]
+)
+def filter_data(data, selected_months, selected_networks, selected_status, date_from, date_to):
+    if not data:
+        return None
+    
+    df = pd.DataFrame(data)
+    df['mes'] = pd.to_datetime(df['data_str']).dt.strftime('%Y-%m')
+    df['data'] = pd.to_datetime(df['data_str'])
+    
+    # Aplicar filtros
+    if selected_months:
+        if isinstance(selected_months, str):
+            selected_months = [selected_months]
+        df = df[df['mes'].isin(selected_months)]
+    
+    if selected_networks:
+        if isinstance(selected_networks, str):
+            selected_networks = [selected_networks]
+        df = df[df['nome_rede'].isin(selected_networks)]
+    
+    if selected_status:
+        if isinstance(selected_status, str):
+            selected_status = [selected_status]
+        df = df[df['situacao_voucher'].isin(selected_status)]
+    
+    if date_from:
+        df = df[df['data'] >= date_from]
+    
+    if date_to:
+        df = df[df['data'] <= date_to]
+    
+    return df.to_dict('records')
+
+# Callback para processar upload de dados
+@app.callback(
+    [
+        Output('store-data', 'data'),
+        Output('upload-status', 'children')
+    ],
+    Input('upload-data', 'contents'),
+    State('upload-data', 'filename')
+)
+def process_upload(contents, filename):
+    if contents is None:
+        return None, None
+    
+    try:
+        content_type, content_string = contents.split(',')
+        decoded = base64.b64decode(content_string)
+        
+        if filename.lower().endswith(('.xls', '.xlsx')):
+            df = pd.read_excel(io.BytesIO(decoded))
+        else:
+            return None, dbc.Alert("Por favor, use apenas arquivos Excel (.xls, .xlsx).", color="danger")
+        
+        # Validar colunas necessárias conforme dicionário de dados
+        required_columns = [
+            'Data',  # Data da operação
+            'IMEI',  # Identificador único do dispositivo
+            'Valor do Voucher',  # Valor do voucher gerado
+            'Valor do Dispositivo',  # Valor do dispositivo avaliado
+            'Status do Voucher',  # Situação atual do voucher
+            'Vendedor',  # Nome do vendedor responsável
+            'Filial',  # Nome da filial
+            'Rede'  # Nome da rede
+        ]
+        
+        # Normalizar nomes das colunas
+        df.columns = [unidecode(col).strip().lower() for col in df.columns]
+        normalized_required = [unidecode(col).strip().lower() for col in required_columns]
+        
+        missing_columns = [col for col in normalized_required if col not in df.columns]
+        if missing_columns:
+            return None, dbc.Alert(
+                f"Colunas obrigatórias ausentes: {', '.join(required_columns)}",
+                color="danger"
+            )
+        
+        # Validar e processar datas
+        try:
+            df['data_str'] = pd.to_datetime(df['data']).dt.strftime('%Y-%m-%d')
+        except Exception as e:
+            return None, dbc.Alert(
+                "Erro no formato das datas. Use o formato dd/mm/aaaa.",
+                color="danger"
+            )
+        
+        # Validar valores numéricos
+        try:
+            df['valor_voucher'] = pd.to_numeric(df['valor_do_voucher'])
+            df['valor_dispositivo'] = pd.to_numeric(df['valor_do_dispositivo'])
+        except Exception as e:
+            return None, dbc.Alert(
+                "Erro nos valores numéricos. Certifique-se que os valores estão no formato correto.",
+                color="danger"
+            )
+        
+        # Validar IMEIs
+        invalid_imeis = df[df['imei'].astype(str).str.len() != 15]['imei'].unique()
+        if len(invalid_imeis) > 0:
+            return None, dbc.Alert(
+                f"IMEIs inválidos encontrados. O IMEI deve ter 15 dígitos.",
+                color="danger"
+            )
+        
+        # Validar relacionamentos com redes e filiais
+        try:
+            network_db = NetworkDatabase()
+            valid_networks = network_db.get_valid_networks()
+            valid_branches = network_db.get_valid_branches()
+            
+            invalid_networks = df[~df['rede'].isin(valid_networks)]['rede'].unique()
+            invalid_branches = df[~df['filial'].isin(valid_branches)]['filial'].unique()
+            
+            if len(invalid_networks) > 0:
+                return None, dbc.Alert(
+                    f"Redes não encontradas na base: {', '.join(invalid_networks)}",
+                    color="danger"
+                )
+            
+            if len(invalid_branches) > 0:
+                return None, dbc.Alert(
+                    f"Filiais não encontradas na base: {', '.join(invalid_branches)}",
+                    color="danger"
+                )
+        except Exception as e:
+            print(f"Erro ao validar relacionamentos: {str(e)}")
+        
+        return df.to_dict('records'), dbc.Alert(
+            f"Dados carregados com sucesso! {len(df)} registros processados.",
+            color="success"
+        )
+        
+    except Exception as e:
+        print(f"Erro no processamento do arquivo: {str(e)}")
+        return None, dbc.Alert(
+            f"Erro ao processar o arquivo: {str(e)}",
+            color="danger"
+        )
+
+# Callback para processar upload de redes e filiais
+@app.callback(
+    Output('network-upload-status', 'children'),
+    Input('upload-networks-branches-file', 'contents'),
+    State('upload-networks-branches-file', 'filename'),
+    prevent_initial_call=True
+)
+def process_network_upload(contents, filename):
+    if contents is None:
+        raise PreventUpdate
+    
+    try:
+        content_type, content_string = contents.split(',')
+        decoded = base64.b64decode(content_string)
+        
+        if filename.lower().endswith(('.xls', '.xlsx')):
+            df = pd.read_excel(io.BytesIO(decoded))
+        else:
+            return dbc.Alert(
+                "Por favor, use apenas arquivos Excel (.xls, .xlsx) para a base de redes.",
+                color="danger"
+            )
+        
+        # Validar colunas necessárias para redes/filiais conforme glossário
+        required_columns = [
+            'Nome da Rede',
+            'Nome da Filial',
+            'Data de Início',
+            'Ativo'  # Status da rede/filial
+        ]
+        
+        # Normalizar nomes das colunas (remover espaços extras, acentos, etc)
+        df.columns = [unidecode(col).strip().lower() for col in df.columns]
+        normalized_required = [unidecode(col).strip().lower() for col in required_columns]
+        
+        missing_columns = [col for col in normalized_required if col not in df.columns]
+        if missing_columns:
+            return dbc.Alert(
+                f"Colunas obrigatórias ausentes: {', '.join(required_columns)}",
+                color="danger"
+            )
+        
+        # Validar status (ATIVO/INATIVO)
+        status_values = df['ativo'].str.upper().unique()
+        invalid_status = [s for s in status_values if s not in ['ATIVO', 'ATIVA', 'INATIVO', 'INATIVA']]
+        if invalid_status:
+            return dbc.Alert(
+                f"Status inválidos encontrados: {', '.join(invalid_status)}. Use apenas ATIVO/ATIVA ou INATIVO/INATIVA.",
+                color="danger"
+            )
+        
+        # Validar datas
+        try:
+            df['data_de_inicio'] = pd.to_datetime(df['data_de_inicio'])
+        except Exception as e:
+            return dbc.Alert(
+                "Erro no formato das datas. Use o formato dd/mm/aaaa.",
+                color="danger"
+            )
+        
+        # Processar e salvar dados de redes
+        try:
+            network_db = NetworkDatabase()
+            network_db.update_networks(df)
+            
+            return dbc.Alert([
+                html.I(className="fas fa-check-circle me-2"),
+                f"Base de redes atualizada com sucesso! ",
+                html.Strong(f"{len(df):,}"), " registros processados."
+            ], color="success")
+            
+        except Exception as e:
+            return dbc.Alert(
+                f"Erro ao atualizar base de redes: {str(e)}",
+                color="danger"
+            )
+        
+    except Exception as e:
+        print(f"Erro no processamento do arquivo de redes: {str(e)}")
+        return dbc.Alert(
+            f"Erro ao processar o arquivo: {str(e)}",
+            color="danger"
+        )
+
+# Callback para processar upload de colaboradores
+@app.callback(
+    Output('employee-upload-status', 'children'),
+    Input('upload-employees-file', 'contents'),
+    State('upload-employees-file', 'filename'),
+    prevent_initial_call=True
+)
+def process_employee_upload(contents, filename):
+    if contents is None:
+        raise PreventUpdate
+    
+    try:
+        content_type, content_string = contents.split(',')
+        decoded = base64.b64decode(content_string)
+        
+        if filename.lower().endswith(('.xls', '.xlsx')):
+            df = pd.read_excel(io.BytesIO(decoded))
+        else:
+            return dbc.Alert(
+                "Por favor, use apenas arquivos Excel (.xls, .xlsx) para a base de colaboradores.",
+                color="danger"
+            )
+        
+        # Validar colunas necessárias para colaboradores conforme glossário
+        required_columns = [
+            'Colaborador',
+            'Filial',
+            'Rede',
+            'Ativo',
+            'Data de Cadastro'
+        ]
+        
+        # Normalizar nomes das colunas
+        df.columns = [unidecode(col).strip().lower() for col in df.columns]
+        normalized_required = [unidecode(col).strip().lower() for col in required_columns]
+        
+        missing_columns = [col for col in normalized_required if col not in df.columns]
+        if missing_columns:
+            return dbc.Alert(
+                f"Colunas obrigatórias ausentes: {', '.join(required_columns)}",
+                color="danger"
+            )
+        
+        # Validar status (ATIVO/INATIVO)
+        status_values = df['ativo'].str.upper().unique()
+        invalid_status = [s for s in status_values if s not in ['ATIVO', 'ATIVA', 'INATIVO', 'INATIVA']]
+        if invalid_status:
+            return dbc.Alert(
+                f"Status inválidos encontrados: {', '.join(invalid_status)}. Use apenas ATIVO/ATIVA ou INATIVO/INATIVA.",
+                color="danger"
+            )
+        
+        # Validar datas
+        try:
+            df['data_de_cadastro'] = pd.to_datetime(df['data_de_cadastro'])
+        except Exception as e:
+            return dbc.Alert(
+                "Erro no formato das datas. Use o formato dd/mm/aaaa.",
+                color="danger"
+            )
+        
+        # Validar relacionamentos (colaborador deve pertencer a uma rede/filial existente)
+        try:
+            network_db = NetworkDatabase()
+            valid_networks = network_db.get_valid_networks()
+            valid_branches = network_db.get_valid_branches()
+            
+            invalid_networks = df[~df['rede'].isin(valid_networks)]['rede'].unique()
+            invalid_branches = df[~df['filial'].isin(valid_branches)]['filial'].unique()
+            
+            if len(invalid_networks) > 0:
+                return dbc.Alert(
+                    f"Redes não encontradas na base: {', '.join(invalid_networks)}",
+                    color="danger"
+                )
+            
+            if len(invalid_branches) > 0:
+                return dbc.Alert(
+                    f"Filiais não encontradas na base: {', '.join(invalid_branches)}",
+                    color="danger"
+                )
+            
+            network_db.update_employees(df)
+            
+            return dbc.Alert([
+                html.I(className="fas fa-check-circle me-2"),
+                f"Base de colaboradores atualizada com sucesso! ",
+                html.Strong(f"{len(df):,}"), " registros processados."
+            ], color="success")
+            
+        except Exception as e:
+            return dbc.Alert(
+                f"Erro ao atualizar base de colaboradores: {str(e)}",
+                color="danger"
+            )
+        
+    except Exception as e:
+        print(f"Erro no processamento do arquivo de colaboradores: {str(e)}")
+        return dbc.Alert(
+            f"Erro ao processar o arquivo: {str(e)}",
+            color="danger"
+        )
 
 if __name__ == '__main__':
     app.run_server(debug=True, host='0.0.0.0', port=8080)
