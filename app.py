@@ -54,7 +54,12 @@ server.config.update(
     SQLALCHEMY_TRACK_MODIFICATIONS=False
 )
 
-# Inicialização do Dash
+# Configuração dos assets
+assets_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets')
+if not os.path.exists(assets_path):
+    os.makedirs(assets_path)
+
+# Inicialização do Dash com todas as configurações necessárias
 app = dash.Dash(
     __name__,
     server=server,
@@ -63,11 +68,34 @@ app = dash.Dash(
     update_title='Carregando...',
     meta_tags=[
         {"name": "viewport", "content": "width=device-width, initial-scale=1"}
-    ]
+    ],
+    assets_folder=assets_path,
+    serve_locally=True,
+    routes_pathname_prefix='/'
 )
 
-# Configurações do Dash
+# Vincula o servidor Flask ao Dash
+app.server = server
 app.title = "Dashboard Renov"
+
+# Layout inicial
+app.layout = html.Div([
+    dcc.Location(id='url', refresh=False),
+    html.Div(id='page-content')
+])
+
+# Callback para roteamento de páginas
+@app.callback(
+    Output('page-content', 'children'),
+    Input('url', 'pathname')
+)
+def display_page(pathname):
+    if pathname == '/login' or pathname == '/':
+        return create_login_layout()
+    elif pathname == '/dashboard':
+        return create_dashboard_layout()
+    else:
+        return create_error_layout('404')
 
 # Inicialização das extensões
 db = SQLAlchemy(server)
@@ -1146,3 +1174,6 @@ def generate_engagement_content(df: pd.DataFrame) -> html.Div:
     except Exception as e:
         print(f"Erro ao gerar análise de engajamento: {str(e)}")
         return dbc.Alert(f"Erro ao gerar análise de engajamento: {str(e)}", color="danger")
+
+if __name__ == '__main__':
+    app.run_server(debug=True, host='0.0.0.0', port=8080)
