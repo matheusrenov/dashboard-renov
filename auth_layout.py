@@ -5,59 +5,34 @@ def create_login_layout(error_message=None):
     return dbc.Container([
         dbc.Row([
             dbc.Col([
-                dbc.Card([
-                    dbc.CardBody([
-                        html.Div([
-                            html.Img(
-                                src='./assets/images/Logo Roxo.png',
-                                style={
-                                    "width": "150px",
-                                    "marginBottom": "20px",
-                                    "display": "inline-block"
-                                }
-                            )
-                        ], className="text-center mb-4"),
-                        
-                        dbc.Input(
-                            id="login-username",
-                            type="text",
-                            placeholder="Usuário",
-                            className="mb-3"
-                        ),
-                        
-                        dbc.Input(
-                            id="login-password",
-                            type="password",
-                            placeholder="Senha",
-                            className="mb-3"
-                        ),
-                        
-                        dbc.Button(
-                            "Entrar",
-                            id="login-button",
-                            color="primary",
-                            className="w-100 mb-3",
-                            n_clicks=0
-                        ),
-                        
-                        html.Div(
-                            error_message,
-                            id="login-error",
-                            className="text-danger text-center mb-3" if error_message else "d-none"
-                        ),
-                        
-                        html.Div([
-                            dbc.Button(
-                                "Criar nova conta",
-                                id="show-register",
-                                color="link",
-                                className="p-0"
-                            )
-                        ], className="text-center")
-                    ])
-                ], className="shadow", style={"maxWidth": "400px", "width": "100%"})
-            ], width=12, className="d-flex justify-content-center")
-        ], className="min-vh-100 align-items-center")
+                html.Div([
+                    html.Img(
+                        src='assets/images/Logo Roxo.png',
+                        style={"height": "50px", "marginBottom": "20px"}
+                    ),
+                    html.H2("Login", className="text-center mb-4"),
+                    dbc.Input(
+                        id="username",
+                        type="text",
+                        placeholder="Usuário",
+                        className="mb-3"
+                    ),
+                    dbc.Input(
+                        id="password",
+                        type="password",
+                        placeholder="Senha",
+                        className="mb-3"
+                    ),
+                    dbc.Button(
+                        "Entrar",
+                        id="login-button",
+                        color="primary",
+                        className="w-100 mb-3"
+                    ),
+                    html.Div(id="auth-status")
+                ], className="p-4 bg-white rounded shadow-sm")
+            ], md=6, lg=4, className="mx-auto")
+        ], className="vh-100 align-items-center")
     ], fluid=True, className="bg-light")
 
 def create_register_layout():

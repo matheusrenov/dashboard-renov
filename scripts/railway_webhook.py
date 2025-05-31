@@ -1,6 +1,13 @@
 from flask import Flask, request, jsonify
 import os
-from sync_railway_logs import get_railway_logs, save_logs
+import sys
+from pathlib import Path
+
+# Adicionar diretório raiz ao PYTHONPATH
+root_dir = Path(__file__).parent.parent
+sys.path.append(str(root_dir))
+
+from scripts.sync_railway_logs import get_railway_logs, save_logs
 from utils.logger import logger
 
 app = Flask(__name__)

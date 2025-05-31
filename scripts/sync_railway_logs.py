@@ -2,6 +2,12 @@ import os
 import subprocess
 import sys
 from datetime import datetime
+from pathlib import Path
+
+# Adicionar diretório raiz ao PYTHONPATH
+root_dir = Path(__file__).parent.parent
+sys.path.append(str(root_dir))
+
 from utils.logger import logger
 
 def get_railway_logs(since=None):
