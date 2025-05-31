@@ -26,7 +26,6 @@ import traceback
 from typing import cast, Union, Any, Dict
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import text
-from custom_types import PsutilValue, PercentageValue, SystemStatus
 
 load_dotenv()  # carrega variáveis do .env se existir
 
