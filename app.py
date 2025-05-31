@@ -133,52 +133,40 @@ app.layout = html.Div([
 
 @app.callback(
     Output('page-content', 'children'),
-    [Input('url', 'pathname'),
-     Input('login-button', 'n_clicks')],
-    [State('username', 'value'),
-     State('password', 'value')],
+    [Input('url', 'pathname')],
     prevent_initial_call=False
 )
-def handle_login_and_routing(pathname, login_clicks, username, password):
-    """Gerencia login e roteamento de forma simplificada"""
-    try:
-        ctx = callback_context
-        
-        # Se o botão de login foi clicado
-        if ctx.triggered and ctx.triggered[0]['prop_id'] == 'login-button.n_clicks':
-            if username == 'admin' and password == 'admin':
-                # Login bem-sucedido - mostrar dashboard simples
-                return html.Div([
-                    dbc.Container([
-                        dbc.Row([
-                            dbc.Col([
-                                html.H1("🎉 Login realizado com sucesso!", className="text-center text-success"),
-                                html.H3("Dashboard Renov", className="text-center"),
-                                html.P("Bem-vindo ao sistema!", className="text-center"),
-                                html.Hr(),
-                                dbc.Alert("Sistema funcionando perfeitamente no Railway!", color="success"),
-                                dbc.Button("Fazer Logout", href="/", color="danger", className="mt-3")
-                            ])
-                        ])
+def display_page_simple(pathname):
+    """Callback ultra-simplificado"""
+    return dbc.Container([
+        dbc.Row([
+            dbc.Col([
+                html.H1("Dashboard Renov", className="text-center mb-4"),
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H3("Login", className="text-center mb-3"),
+                        dbc.Input(id="username", placeholder="Usuário", className="mb-2"),
+                        dbc.Input(id="password", placeholder="Senha", type="password", className="mb-2"),
+                        dbc.Button("Entrar", id="login-button", color="primary", className="w-100"),
+                        html.Div(id="login-message", className="mt-3")
                     ])
                 ])
-            else:
-                # Login falhou - mostrar login com erro
-                return html.Div([
-                    create_login_layout(),
-                    dbc.Alert("Usuário ou senha incorretos!", color="danger", className="mt-3")
-                ])
-        
-        # Página inicial - mostrar login
-        return create_login_layout()
-        
-    except Exception as e:
-        print(f"Erro no handle_login_and_routing: {e}")
-        return html.Div([
-            html.H1("Dashboard Renov", className="text-center"),
-            html.P("Sistema funcionando!", className="text-center"),
-            dbc.Alert(f"Erro: {str(e)}", color="warning")
-        ])
+            ], width=6)
+        ], justify="center")
+    ])
+
+@app.callback(
+    Output('login-message', 'children'),
+    [Input('login-button', 'n_clicks')],
+    [State('username', 'value'), State('password', 'value')],
+    prevent_initial_call=True
+)
+def handle_login(n_clicks, username, password):
+    """Callback simples para login"""
+    if username == 'admin' and password == 'admin':
+        return dbc.Alert("✅ Login realizado com sucesso!", color="success")
+    else:
+        return dbc.Alert("❌ Usuário ou senha incorretos!", color="danger")
 
 @app.callback(
     Output('tab-content', 'children'),
