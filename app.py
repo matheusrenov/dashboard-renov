@@ -133,40 +133,193 @@ app.layout = html.Div([
 
 @app.callback(
     Output('page-content', 'children'),
-    [Input('url', 'pathname')],
+    [Input('url', 'pathname'),
+     Input('login-button', 'n_clicks')],
+    [State('username', 'value'),
+     State('password', 'value')],
     prevent_initial_call=False
 )
-def display_page_simple(pathname):
-    """Callback ultra-simplificado"""
-    return dbc.Container([
-        dbc.Row([
-            dbc.Col([
-                html.H1("Dashboard Renov", className="text-center mb-4"),
-                dbc.Card([
-                    dbc.CardBody([
-                        html.H3("Login", className="text-center mb-3"),
-                        dbc.Input(id="username", placeholder="Usuário", className="mb-2"),
-                        dbc.Input(id="password", placeholder="Senha", type="password", className="mb-2"),
-                        dbc.Button("Entrar", id="login-button", color="primary", className="w-100"),
-                        html.Div(id="login-message", className="mt-3")
+def display_page_and_handle_login(pathname, login_clicks, username, password):
+    """Gerencia navegação e login"""
+    ctx = callback_context
+    
+    # Se o botão de login foi clicado
+    if ctx.triggered and ctx.triggered[0]['prop_id'] == 'login-button.n_clicks':
+        if username == 'admin' and password == 'admin':
+            # Login bem-sucedido - mostrar dashboard completo
+            return dbc.Container([
+                # Cabeçalho do Dashboard
+                dbc.Row([
+                    dbc.Col([
+                        html.H1("🎯 Dashboard Renov", className="text-primary mb-0"),
+                        html.P("Sistema de Análise de Performance", className="text-muted")
+                    ], width=8),
+                    dbc.Col([
+                        dbc.Button("Sair", id="logout-btn", color="danger", size="sm", className="float-end")
+                    ], width=4)
+                ], className="mb-4"),
+                
+                # Cards de Upload
+                dbc.Row([
+                    dbc.Col([
+                        dbc.Card([
+                            dbc.CardBody([
+                                html.H5("📊 Upload de Dados", className="card-title"),
+                                dcc.Upload(
+                                    id='upload-data-main',
+                                    children=html.Div([
+                                        html.I(className="fas fa-cloud-upload-alt fa-2x mb-2"),
+                                        html.P("Arraste ou clique para fazer upload"),
+                                        html.Small("Arquivo Excel (.xlsx, .xls)")
+                                    ], className="text-center p-3"),
+                                    style={
+                                        'width': '100%',
+                                        'height': '120px',
+                                        'lineHeight': '60px',
+                                        'borderWidth': '2px',
+                                        'borderStyle': 'dashed',
+                                        'borderRadius': '10px',
+                                        'textAlign': 'center',
+                                        'borderColor': '#007bff'
+                                    },
+                                    multiple=False
+                                ),
+                                html.Div(id='upload-status-dashboard', className="mt-2")
+                            ])
+                        ])
+                    ], width=12)
+                ], className="mb-4"),
+                
+                # Área de Conteúdo Principal
+                dbc.Row([
+                    dbc.Col([
+                        dbc.Alert([
+                            html.I(className="fas fa-chart-line me-2"),
+                            "Dashboard pronto para uso! Faça upload de um arquivo Excel para começar a análise."
+                        ], color="info"),
+                        
+                        # Placeholder para dados quando carregados
+                        html.Div(id='dashboard-content', children=[
+                            dbc.Card([
+                                dbc.CardBody([
+                                    html.H4("📈 Aguardando Dados", className="text-center text-muted"),
+                                    html.P("Faça upload de um arquivo para visualizar os KPIs e gráficos.", 
+                                          className="text-center text-muted")
+                                ])
+                            ])
+                        ])
                     ])
                 ])
-            ], width=6)
-        ], justify="center")
-    ])
-
-@app.callback(
-    Output('login-message', 'children'),
-    [Input('login-button', 'n_clicks')],
-    [State('username', 'value'), State('password', 'value')],
-    prevent_initial_call=True
-)
-def handle_login(n_clicks, username, password):
-    """Callback simples para login"""
-    if username == 'admin' and password == 'admin':
-        return dbc.Alert("✅ Login realizado com sucesso!", color="success")
-    else:
-        return dbc.Alert("❌ Usuário ou senha incorretos!", color="danger")
+            ], fluid=True)
+        else:
+            # Login falhou - mostrar login com erro
+            return dbc.Row([
+                dbc.Col([
+                    html.H1("🎯 Dashboard Renov", className="text-center mb-4 text-primary"),
+                    dbc.Card([
+                        dbc.CardHeader([
+                            html.H4("Sistema de Login", className="mb-0 text-center")
+                        ]),
+                        dbc.CardBody([
+                            dbc.Form([
+                                dbc.Row([
+                                    dbc.Col([
+                                        dbc.Label("Usuário:", html_for="username"),
+                                        dbc.Input(
+                                            id="username",
+                                            placeholder="Digite seu usuário",
+                                            type="text",
+                                            className="mb-3"
+                                        )
+                                    ])
+                                ]),
+                                dbc.Row([
+                                    dbc.Col([
+                                        dbc.Label("Senha:", html_for="password"),
+                                        dbc.Input(
+                                            id="password",
+                                            placeholder="Digite sua senha",
+                                            type="password",
+                                            className="mb-3"
+                                        )
+                                    ])
+                                ]),
+                                dbc.Row([
+                                    dbc.Col([
+                                        dbc.Button(
+                                            "Entrar no Sistema",
+                                            id="login-button",
+                                            color="primary",
+                                            size="lg",
+                                            className="w-100 mb-3"
+                                        )
+                                    ])
+                                ])
+                            ])
+                        ])
+                    ], className="shadow"),
+                    html.Hr(),
+                    dbc.Alert("❌ Usuário ou senha incorretos! Use: admin/admin", color="danger"),
+                    dbc.Alert([
+                        html.I(className="fas fa-info-circle me-2"),
+                        "Sistema funcionando no Railway! Use: admin/admin"
+                    ], color="info")
+                ], width=6)
+            ], justify="center", className="mt-5")
+    
+    # Página inicial - mostrar login
+    return dbc.Row([
+        dbc.Col([
+            html.H1("🎯 Dashboard Renov", className="text-center mb-4 text-primary"),
+            dbc.Card([
+                dbc.CardHeader([
+                    html.H4("Sistema de Login", className="mb-0 text-center")
+                ]),
+                dbc.CardBody([
+                    dbc.Form([
+                        dbc.Row([
+                            dbc.Col([
+                                dbc.Label("Usuário:", html_for="username"),
+                                dbc.Input(
+                                    id="username",
+                                    placeholder="Digite seu usuário",
+                                    type="text",
+                                    className="mb-3"
+                                )
+                            ])
+                        ]),
+                        dbc.Row([
+                            dbc.Col([
+                                dbc.Label("Senha:", html_for="password"),
+                                dbc.Input(
+                                    id="password",
+                                    placeholder="Digite sua senha",
+                                    type="password",
+                                    className="mb-3"
+                                )
+                            ])
+                        ]),
+                        dbc.Row([
+                            dbc.Col([
+                                dbc.Button(
+                                    "Entrar no Sistema",
+                                    id="login-button",
+                                    color="primary",
+                                    size="lg",
+                                    className="w-100 mb-3"
+                                )
+                            ])
+                        ])
+                    ])
+                ])
+            ], className="shadow"),
+            html.Hr(),
+            dbc.Alert([
+                html.I(className="fas fa-info-circle me-2"),
+                "Sistema funcionando no Railway! Use: admin/admin"
+            ], color="info")
+        ], width=6)
+    ], justify="center", className="mt-5")
 
 @app.callback(
     Output('tab-content', 'children'),
@@ -743,6 +896,59 @@ def process_employee_upload(contents, filename):
 # ========================
 # 🎯 Callbacks
 # ========================
+
+# Comentar callbacks duplicados temporariamente para debugar
+"""
+@app.callback(
+    [Output('filters-section', 'style'),
+     Output('store-filtered-data', 'data')],
+    [Input('store-data', 'data'),
+     Input('filter-start-date', 'date'),
+     Input('filter-end-date', 'date'),
+     Input('filter-month', 'value'),
+     Input('filter-network', 'value'),
+     Input('filter-status', 'value')]
+)
+def update_filtered_data(data, start_date, end_date, months, networks, statuses):
+    return {'display': 'none'}, None
+
+@app.callback(
+    [Output('filter-month', 'options'),
+     Output('filter-network', 'options'),
+     Output('filter-status', 'options')],
+    [Input('store-data', 'data')]
+)
+def update_filter_options_duplicate(data):
+    return [], [], []
+
+@app.callback(
+    Output('store-data', 'data'),
+    [Input('upload-data', 'contents')],
+    [State('upload-data', 'filename')]
+)
+def update_output_duplicate(contents, filename):
+    return None
+
+@app.callback(
+    Output('clear-filters', 'n_clicks'),
+    [Input('clear-filters', 'n_clicks')],
+    [State('filter-start-date', 'date'),
+     State('filter-end-date', 'date'),
+     State('filter-month', 'value'),
+     State('filter-network', 'value'),
+     State('filter-status', 'value')]
+)
+def clear_filters_duplicate(n_clicks, start_date, end_date, months, networks, statuses):
+    return None
+
+@app.callback(
+    Output('upload-status', 'children'),
+    [Input('upload-data', 'contents'),
+     Input('upload-data', 'filename')]
+)
+def update_upload_status_duplicate(contents, filename):
+    return ''
+"""
 
 @app.callback(
     Output('tab-content-area', 'children'),
