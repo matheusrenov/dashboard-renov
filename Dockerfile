@@ -1,6 +1,10 @@
 FROM python:3.9-slim
 
-WORKDIR /app
+# Configurar variáveis de ambiente
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 
 # Instalar dependências do sistema
 RUN apt-get update && apt-get install -y \
@@ -8,21 +12,18 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copiar arquivos do projeto
-COPY . .
+# Criar e definir diretório de trabalho
+WORKDIR /app
 
-# Instalar dependências Python
+# Copiar requirements primeiro para aproveitar o cache do Docker
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Variáveis de ambiente
-ENV PORT=8080
-ENV FLASK_ENV=production
-ENV WEBHOOK_PORT=5000
-ENV PYTHONPATH=/app
+# Copiar o resto do código
+COPY . .
 
-# Expor portas
+# Expor a porta
 EXPOSE 8080
-EXPOSE 5000
 
-# Comando para iniciar
-CMD ["gunicorn", "app:server", "-c", "gunicorn.conf.py"] 
+# Comando para executar a aplicação
+CMD ["gunicorn", "--config", "gunicorn.conf.py", "app:server"] 
