@@ -14,6 +14,7 @@ import os
 import io
 import base64
 import secrets
+import traceback
 from datetime import datetime, timedelta
 from typing import Dict, Any
 
@@ -43,16 +44,15 @@ import plotly.express as px
 # Exportação de dados
 import xlsxwriter
 
-# Módulos locais
-from models import UserDatabase
-from models_network import NetworkDatabase
-from auth_layout import create_login_layout, create_register_layout, create_admin_approval_layout
-from error_layout import create_error_layout
+# Configuração dos assets e diretórios
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+assets_path = os.path.join(BASE_DIR, 'assets')
+data_path = os.path.join(BASE_DIR, 'data')
 
-# Configuração dos assets
-assets_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets')
-if not os.path.exists(assets_path):
-    os.makedirs(assets_path)
+# Criar diretórios necessários
+for directory in [assets_path, data_path]:
+    if not os.path.exists(directory):
+        os.makedirs(directory)
 
 # Inicialização do Flask
 server = Flask(__name__)
@@ -61,11 +61,15 @@ CORS(server)
 # Configurações do Flask
 server.config.update(
     SECRET_KEY=os.environ.get('SECRET_KEY', secrets.token_hex(16)),
-    SQLALCHEMY_DATABASE_URI=os.getenv('DATABASE_URL', 'sqlite:///database.db'),
-    SQLALCHEMY_TRACK_MODIFICATIONS=False
+    SQLALCHEMY_DATABASE_URI=f'sqlite:///{os.path.join(data_path, "network_data.db")}',
+    SQLALCHEMY_TRACK_MODIFICATIONS=False,
+    DEBUG=os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
 )
 
-# Inicialização do Dash com todas as configurações necessárias
+# Inicialização do SQLAlchemy
+db = SQLAlchemy(server)
+
+# Inicialização do Dash
 app = dash.Dash(
     __name__,
     server=server,
@@ -83,6 +87,12 @@ app = dash.Dash(
 # Vincula o servidor Flask ao Dash
 app.server = server
 app.title = "Dashboard Renov"
+
+# Módulos locais (importados após a inicialização do db)
+from models import UserDatabase
+from models_network import NetworkDatabase
+from auth_layout import create_login_layout, create_register_layout, create_admin_approval_layout
+from error_layout import create_error_layout
 
 # Layout inicial
 app.layout = html.Div([
@@ -141,9 +151,6 @@ def logout(n_clicks):
     if n_clicks:
         return '/login'
     raise PreventUpdate
-
-# Inicialização das extensões
-db = SQLAlchemy(server)
 
 # ========================
 # 📊 Layout do Dashboard
@@ -1541,6 +1548,330 @@ def process_employee_upload(contents, filename):
             f"Erro ao processar o arquivo: {str(e)}",
             color="danger"
         )
+
+# ========================
+# 🎯 Callbacks
+# ========================
+
+@app.callback(
+    Output('tab-content-area', 'children'),
+    [Input('main-tabs', 'active_tab'),
+     Input('store-data', 'data'),
+     Input('store-filtered-data', 'data')]
+)
+def update_tab_content(tab, data, filtered_data):
+    """Atualiza o conteúdo da aba selecionada"""
+    if not data:
+        return no_data_message()
+    
+    try:
+        # Converte dados JSON para DataFrame
+        df = pd.DataFrame(filtered_data if filtered_data else data)
+        
+        # Retorna conteúdo específico para cada aba
+        if tab == "tab-overview":
+            return generate_overview_content(df, include_kpis=True)
+        elif tab == "tab-tim":
+            return generate_tim_content(df)
+        elif tab == "tab-rankings":
+            return generate_rankings_content(df)
+        elif tab == "tab-projections":
+            return generate_projections_content(df)
+        elif tab == "tab-network-base":
+            return generate_networks_content(df)
+        elif tab == "tab-engagement":
+            return generate_engagement_content(df)
+        else:
+            return html.Div("Conteúdo não disponível")
+    
+    except Exception as e:
+        print(f"Erro ao atualizar conteúdo da aba: {str(e)}")
+        traceback.print_exc()
+        return error_message()
+
+@app.callback(
+    [Output('filters-section', 'style'),
+     Output('store-filtered-data', 'data')],
+    [Input('store-data', 'data'),
+     Input('filter-start-date', 'date'),
+     Input('filter-end-date', 'date'),
+     Input('filter-month', 'value'),
+     Input('filter-network', 'value'),
+     Input('filter-status', 'value')]
+)
+def update_filtered_data(data, start_date, end_date, months, networks, statuses):
+    """Atualiza os dados filtrados"""
+    if not data:
+        return {'display': 'none'}, None
+    
+    try:
+        df = pd.DataFrame(data)
+        
+        # Aplica filtros
+        if start_date:
+            df = df[df['data_criacao'] >= start_date]
+        if end_date:
+            df = df[df['data_criacao'] <= end_date]
+        if months:
+            df = df[df['data_criacao'].dt.strftime('%Y-%m').isin(months)]
+        if networks:
+            df = df[df['nome_rede'].isin(networks)]
+        if statuses:
+            df = df[df['situacao_voucher'].isin(statuses)]
+        
+        return {'display': 'block'}, df.to_dict('records')
+    
+    except Exception as e:
+        print(f"Erro ao filtrar dados: {str(e)}")
+        traceback.print_exc()
+        return {'display': 'none'}, None
+
+@app.callback(
+    [Output('filter-month', 'options'),
+     Output('filter-network', 'options'),
+     Output('filter-status', 'options')],
+    [Input('store-data', 'data')]
+)
+def update_filter_options(data):
+    """Atualiza as opções dos filtros"""
+    if not data:
+        return [], [], []
+    
+    try:
+        df = pd.DataFrame(data)
+        
+        # Prepara opções para cada filtro
+        months = sorted(df['data_criacao'].dt.strftime('%Y-%m').unique())
+        month_options = [{'label': m, 'value': m} for m in months]
+        
+        networks = sorted(df['nome_rede'].unique())
+        network_options = [{'label': n, 'value': n} for n in networks]
+        
+        statuses = sorted(df['situacao_voucher'].unique())
+        status_options = [{'label': s, 'value': s} for s in statuses]
+        
+        return month_options, network_options, status_options
+    
+    except Exception as e:
+        print(f"Erro ao atualizar opções dos filtros: {str(e)}")
+        traceback.print_exc()
+        return [], [], []
+
+@app.callback(
+    Output('store-data', 'data'),
+    [Input('upload-data', 'contents')],
+    [State('upload-data', 'filename')]
+)
+def update_output(contents, filename):
+    """Processa o arquivo carregado e atualiza os dados"""
+    if contents is None:
+        return None
+    
+    try:
+        # Decodifica o conteúdo do arquivo
+        content_type, content_string = contents.split(',')
+        decoded = base64.b64decode(content_string)
+        
+        # Lê o arquivo Excel
+        df = pd.read_excel(io.BytesIO(decoded))
+        
+        # Processa as datas
+        date_columns = ['data_criacao', 'data_utilizacao']
+        for col in date_columns:
+            if col in df.columns:
+                df[col] = pd.to_datetime(df[col]).dt.strftime('%Y-%m-%d')
+        
+        return df.to_dict('records')
+    
+    except Exception as e:
+        print(f"Erro ao processar arquivo: {str(e)}")
+        traceback.print_exc()
+        return None
+
+@app.callback(
+    Output('clear-filters', 'n_clicks'),
+    [Input('clear-filters', 'n_clicks')],
+    [State('filter-start-date', 'date'),
+     State('filter-end-date', 'date'),
+     State('filter-month', 'value'),
+     State('filter-network', 'value'),
+     State('filter-status', 'value')]
+)
+def clear_filters(n_clicks, start_date, end_date, months, networks, statuses):
+    """Limpa todos os filtros"""
+    if n_clicks:
+        return None
+    return no_update
+
+@app.callback(
+    Output('upload-status', 'children'),
+    [Input('upload-data', 'contents'),
+     Input('upload-data', 'filename')]
+)
+def update_upload_status(contents, filename):
+    """Atualiza o status do upload"""
+    if contents is None:
+        return ''
+    
+    try:
+        return html.Div([
+            html.I(className="fas fa-check-circle text-success me-2"),
+            f"Arquivo {filename} carregado com sucesso!"
+        ])
+    except Exception as e:
+        return html.Div([
+            html.I(className="fas fa-times-circle text-danger me-2"),
+            f"Erro ao carregar arquivo: {str(e)}"
+        ])
+
+@app.callback(
+    [Output('page-content', 'children'),
+     Output('session-store', 'data')],
+    [Input('url', 'pathname'),
+     Input('login-button', 'n_clicks'),
+     Input('logout-button', 'n_clicks')],
+    [State('username', 'value'),
+     State('password', 'value'),
+     State('session-store', 'data')]
+)
+def manage_auth(pathname, login_clicks, logout_clicks, username, password, session_data):
+    """Gerencia autenticação e navegação"""
+    ctx = callback_context
+    if not ctx.triggered:
+        button_id = None
+    else:
+        button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    
+    # Logout
+    if button_id == 'logout-button':
+        return create_login_layout(), None
+    
+    # Login
+    if button_id == 'login-button':
+        if username == 'admin' and password == 'admin':  # Simplificado para exemplo
+            return create_dashboard_layout(), {'user': username, 'is_admin': True}
+        else:
+            return create_login_layout(), None
+    
+    # Navegação normal
+    if session_data and session_data.get('user'):
+        return create_dashboard_layout(is_super_admin=session_data.get('is_admin', False)), session_data
+    else:
+        return create_login_layout(), None
+
+# Funções auxiliares para mensagens
+def no_data_message():
+    """Retorna mensagem quando não há dados disponíveis"""
+    return dbc.Alert(
+        [
+            html.I(className="fas fa-info-circle me-2"),
+            "Nenhum dado disponível. Por favor, faça o upload de um arquivo."
+        ],
+        color="info",
+        className="mb-4"
+    )
+
+def error_message(error_text=None):
+    """Retorna mensagem de erro padronizada"""
+    return dbc.Alert(
+        [
+            html.I(className="fas fa-exclamation-triangle me-2"),
+            error_text or "Ocorreu um erro ao processar os dados."
+        ],
+        color="danger",
+        className="mb-4"
+    )
+
+def generate_tim_content(df: pd.DataFrame) -> html.Div:
+    """
+    Gera o conteúdo da aba TIM.
+    
+    Args:
+        df: DataFrame com os dados de vouchers
+    
+    Returns:
+        Um componente Div com a análise específica da TIM
+    """
+    try:
+        if df.empty:
+            return no_data_message()
+        
+        # Filtrar apenas dados da TIM
+        df_tim = df[df['nome_rede'].str.contains('TIM', case=False, na=False)]
+        
+        if df_tim.empty:
+            return dbc.Alert("Nenhum dado da TIM disponível para análise.", color="warning")
+        
+        # Métricas específicas da TIM
+        total_vouchers = len(df_tim)
+        vouchers_utilizados = df_tim[df_tim['situacao_voucher'].str.lower().str.contains('utilizado|usado|ativo', na=False)]
+        total_utilizados = len(vouchers_utilizados)
+        valor_total = vouchers_utilizados['valor_dispositivo'].sum()
+        taxa_utilizacao = (total_utilizados / total_vouchers * 100) if total_vouchers > 0 else 0
+        
+        # Cards com métricas
+        cards = dbc.Row([
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H4("📱 Total de Vouchers TIM", className="card-title text-center"),
+                        html.H2(f"{total_vouchers:,}",
+                               className="text-primary text-center display-4"),
+                        html.P(f"Taxa de utilização: {taxa_utilizacao:.1f}%",
+                              className="text-muted text-center")
+                    ])
+                ], className="mb-4 shadow-sm")
+            ], md=6),
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H4("💰 Valor Total TIM", className="card-title text-center"),
+                        html.H2(f"R$ {valor_total:,.2f}",
+                               className="text-success text-center display-4"),
+                        html.P(f"{total_utilizados:,} vouchers utilizados",
+                              className="text-muted text-center")
+                    ])
+                ], className="mb-4 shadow-sm")
+            ], md=6)
+        ])
+        
+        # Análise temporal
+        df_tim['data'] = pd.to_datetime(df_tim['data_str'])
+        daily_data = df_tim.groupby('data').agg({
+            'imei': 'count',
+            'valor_dispositivo': 'sum'
+        }).reset_index()
+        
+        fig_evolution = go.Figure()
+        fig_evolution.add_trace(go.Scatter(
+            x=daily_data['data'],
+            y=daily_data['imei'],
+            mode='lines+markers',
+            name='Vouchers',
+            line=dict(color='#004691', width=2),  # Cor da TIM
+            marker=dict(size=6)
+        ))
+        
+        fig_evolution.update_layout(
+            title='📈 Evolução Diária TIM',
+            xaxis_title='Data',
+            yaxis_title='Quantidade de Vouchers',
+            height=400,
+            template='plotly_white',
+            showlegend=True
+        )
+        
+        return html.Div([
+            cards,
+            dbc.Row([
+                dbc.Col([dcc.Graph(figure=fig_evolution)], md=12)
+            ])
+        ])
+        
+    except Exception as e:
+        print(f"Erro ao gerar conteúdo TIM: {str(e)}")
+        traceback.print_exc()
+        return error_message()
 
 if __name__ == '__main__':
     app.run_server(debug=True, host='0.0.0.0', port=8080)
