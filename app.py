@@ -261,7 +261,6 @@ def serve_layout():
         dcc.Store(id='session-store', storage_type='session'),
         dcc.Store(id='error-store', storage_type='session'),
         html.Div(id='page-content', children=create_login_layout()),
-        html.Div(id='auth-status'),
         dcc.Store(id='store-data'),
         dcc.Store(id='store-filtered-data')
     ])
@@ -2270,7 +2269,7 @@ def create_login_layout():
                                 color="primary",
                                 className="w-100 mb-3"
                             ),
-                            html.Div(id="auth-status")
+                            html.Div(id="login-status")  # Alterado de auth-status para login-status
                         ])
                     ])
                 ], className="login-container")
@@ -2280,7 +2279,7 @@ def create_login_layout():
 
 @app.callback(
     [Output('url', 'pathname'),
-     Output('auth-status', 'children')],
+     Output('login-status', 'children')],  # Alterado de auth-status para login-status
     [Input('login-button', 'n_clicks')],
     [State('login-username', 'value'),
      State('login-password', 'value')],
