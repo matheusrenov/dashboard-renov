@@ -342,12 +342,7 @@ def create_dashboard_layout(is_super_admin=False):
             ], width=12)
         ], className="mb-4"),
         
-        # Área de conteúdo
-        html.Div([
-            no_data_message()
-        ], id='tab-content-area', className="mt-4")
-        
-        # Filtros (inicialmente ocultos)
+        # Filtros
         html.Div([
             dbc.Row([
                 dbc.Col([
@@ -356,14 +351,14 @@ def create_dashboard_layout(is_super_admin=False):
                         dbc.Col([
                             html.Label("Período:", className="filter-label"),
                             dbc.Row([
-                        dbc.Col([
+                                dbc.Col([
                                     dcc.DatePickerSingle(
                                         id='filter-start-date',
                                         placeholder="Data Inicial",
                                         display_format='DD/MM/YYYY'
                                     )
                                 ], width=6),
-                        dbc.Col([
+                                dbc.Col([
                                     dcc.DatePickerSingle(
                                         id='filter-end-date',
                                         placeholder="Data Final",
@@ -409,24 +404,23 @@ def create_dashboard_layout(is_super_admin=False):
         ], id='filters-section', style={'display': 'none'}, className="mb-4"),
         
         # Tabs
-        dcc.Tabs([
-            dcc.Tab(label="Visão Geral", value="overview"),
-            dcc.Tab(label="Redes", value="networks"),
-            dcc.Tab(label="Tim", value="tim"),
-            dcc.Tab(label="Rankings", value="rankings"),
-            dcc.Tab(label="Projeções", value="projections"),
-            dcc.Tab(label="Engajamento", value="engagement"),
-            dcc.Tab(label="Redes e Colaboradores", value="network-employees")
-        ],
-        id="main-tabs",
-        value="overview",
-        className="custom-tabs"),
+        dcc.Tabs(
+            id="main-tabs",
+            value="overview",
+            className="custom-tabs",
+            children=[
+                dcc.Tab(label="Visão Geral", value="overview"),
+                dcc.Tab(label="Redes", value="networks"),
+                dcc.Tab(label="Tim", value="tim"),
+                dcc.Tab(label="Rankings", value="rankings"),
+                dcc.Tab(label="Projeções", value="projections"),
+                dcc.Tab(label="Engajamento", value="engagement"),
+                dcc.Tab(label="Redes e Colaboradores", value="network-employees")
+            ]
+        ),
         
-        # Área de conteúdo (inicialmente mostra mensagem de nenhum dado)
-        html.Div([
-            no_data_message()
-        ], id='tab-content-area', className="mt-4")
-        
+        # Área de conteúdo
+        html.Div(id='tab-content-area', className="mt-4")
     ], fluid=True)
 
 # ========================
@@ -2195,23 +2189,33 @@ app.clientside_callback(
 @app.callback(
     Output('page-content', 'children'),
     [Input('url', 'pathname')],
-    prevent_initial_call=True
+    prevent_initial_call=False  # Alterado para False para permitir a chamada inicial
 )
 def display_page(pathname):
     """Gerencia o roteamento entre páginas"""
     print(f"\n=== Roteamento para: {pathname} ===")
     
-    if not pathname:
-        print("Sem pathname - Redirecionando para login")
+    if pathname is None:
+        print("Pathname é None - Exibindo login")
         return create_login_layout()
     
-    if pathname == '/':
-        print("Rota / - Exibindo login")
+    if pathname == '/' or pathname == '':
+        print("Rota / ou vazia - Exibindo login")
         return create_login_layout()
     
     elif pathname == '/dashboard':
         print("Rota /dashboard - Exibindo dashboard")
-        return create_dashboard_layout()
+        try:
+            layout = create_dashboard_layout()
+            print("Dashboard layout criado com sucesso")
+            return layout
+        except Exception as e:
+            print(f"Erro ao criar layout do dashboard: {str(e)}")
+            traceback.print_exc()
+            return dbc.Alert(
+                f"Erro ao carregar dashboard: {str(e)}",
+                color="danger"
+            )
     
     elif pathname == '/register':
         print("Rota /register - Exibindo registro")
