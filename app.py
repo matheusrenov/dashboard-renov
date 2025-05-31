@@ -61,7 +61,7 @@ CORS(server)
 # Configurações do Flask
 server.config.update(
     SECRET_KEY=os.environ.get('SECRET_KEY', secrets.token_hex(16)),
-    SQLALCHEMY_DATABASE_URI=os.environ.get('DATABASE_URL', f'sqlite:///{os.path.join(data_path, "network_data.db")}'),
+    SQLALCHEMY_DATABASE_URI=os.environ.get('DATABASE_URL', '').replace('postgres://', 'postgresql://') if os.environ.get('DATABASE_URL') else f'sqlite:///{os.path.join(data_path, "network_data.db")}',
     SQLALCHEMY_TRACK_MODIFICATIONS=False,
     DEBUG=os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
 )
@@ -214,19 +214,19 @@ def create_dashboard_layout(is_super_admin=False):
         dbc.Card([
             dbc.CardBody([
                 html.H6("🔍 Filtros", className="mb-3"),
+        dbc.Row([
+            dbc.Col([
+                        html.Label("Período"),
                 dbc.Row([
                     dbc.Col([
-                        html.Label("Período"),
-                        dbc.Row([
-                            dbc.Col([
                                 html.Label("De"),
                                 dcc.DatePickerSingle(
                                     id='date-from',
                                     placeholder="Selecione",
-                                    className="w-100"
+                                className="w-100"
                                 )
-                            ], width=6),
-                            dbc.Col([
+                    ], width=6),
+                    dbc.Col([
                                 html.Label("Até"),
                                 dcc.DatePickerSingle(
                                     id='date-to',
@@ -272,8 +272,8 @@ def create_dashboard_layout(is_super_admin=False):
                         dbc.Button(
                             "Limpar Filtros",
                             id="clear-filters",
-                            color="secondary",
-                            size="sm",
+                                color="secondary",
+                                size="sm",
                             className="mt-3"
                         )
                     ])
@@ -287,24 +287,24 @@ def create_dashboard_layout(is_super_admin=False):
                 dbc.Card([
                     dbc.CardBody([
                         html.H6("📊 Upload de Dados", className="text-center mb-3"),
-                        dcc.Upload(
-                            id='upload-data',
-                            children=html.Div([
+                dcc.Upload(
+                    id='upload-data',
+                    children=html.Div([
                                 html.P('Arraste e solte ou ', className="mb-0 d-inline"),
                                 html.A('selecione um arquivo Excel', className="text-primary"),
                             ], className="text-center p-3 border rounded"),
-                            style={
-                                'width': '100%',
-                                'height': '60px',
-                                'lineHeight': '60px',
-                                'borderWidth': '1px',
-                                'borderStyle': 'dashed',
-                                'borderRadius': '5px',
-                                'textAlign': 'center',
+                    style={
+                        'width': '100%',
+                        'height': '60px',
+                        'lineHeight': '60px',
+                        'borderWidth': '1px',
+                        'borderStyle': 'dashed',
+                        'borderRadius': '5px',
+                        'textAlign': 'center',
                                 'margin': '10px 0'
-                            },
-                            multiple=False
-                        ),
+                    },
+                    multiple=False
+                ),
                         html.Div(id='upload-status', className="mt-2")
                     ])
                 ])
@@ -312,10 +312,10 @@ def create_dashboard_layout(is_super_admin=False):
         ], className="mb-4"),
 
         # Seção de Upload de Redes e Colaboradores
-        dbc.Row([
-            dbc.Col([
-                dbc.Card([
-                    dbc.CardBody([
+            dbc.Row([
+        dbc.Col([
+            dbc.Card([
+                dbc.CardBody([
                         html.H6("Analisar Base de Redes e Filiais", className="text-center mb-3"),
                         dcc.Upload(
                             id='upload-networks-branches-file',
@@ -339,9 +339,9 @@ def create_dashboard_layout(is_super_admin=False):
                     ])
                 ])
             ], width=6),
-            dbc.Col([
-                dbc.Card([
-                    dbc.CardBody([
+        dbc.Col([
+            dbc.Card([
+                dbc.CardBody([
                         html.H6("Analisar Base de Colaboradores", className="text-center mb-3"),
                         dcc.Upload(
                             id='upload-employees-file',
@@ -627,7 +627,7 @@ def process_network_upload(contents, filename):
             'Ativo'  # Status da rede/filial
         ]
         
-        # Normalizar nomes das colunas (remover espaços extras, acentos, etc)
+        # Normalizar nomes das colunas
         df.columns = [unidecode(col).strip().lower() for col in df.columns]
         normalized_required = [unidecode(col).strip().lower() for col in required_columns]
         
@@ -1055,7 +1055,7 @@ def generate_tim_content(df: pd.DataFrame) -> html.Div:
             title='📈 Evolução Diária TIM',
             xaxis_title='Data',
             yaxis_title='Quantidade de Vouchers',
-            height=400,
+                height=400,
             template='plotly_white',
             showlegend=True
         )
@@ -1156,9 +1156,9 @@ def generate_overview_content(df: pd.DataFrame) -> html.Div:
 
         # Gráfico de evolução diária
         daily_data = df.groupby('data_str').agg({
-            'imei': 'count',
-            'valor_dispositivo': 'sum'
-        }).reset_index()
+                'imei': 'count',
+                'valor_dispositivo': 'sum'
+            }).reset_index()
         daily_data.columns = ['data', 'vouchers', 'valor']
         daily_data['data'] = pd.to_datetime(daily_data['data'])
         daily_data = daily_data.sort_values('data')
@@ -1168,7 +1168,7 @@ def generate_overview_content(df: pd.DataFrame) -> html.Div:
             x=daily_data['data'],
             y=daily_data['vouchers'],
             mode='lines+markers',
-            name='Vouchers',
+                name='Vouchers',
             line=dict(color='#3498db', width=2),
             marker=dict(size=6)
         ))
@@ -1184,14 +1184,14 @@ def generate_overview_content(df: pd.DataFrame) -> html.Div:
 
         fig_evolution.update_layout(
             title='📈 Evolução Diária',
-            xaxis_title='Data',
+                xaxis_title='Data',
             yaxis_title='Quantidade de Vouchers',
             yaxis2=dict(
                 title='Valor (R$)',
                 overlaying='y',
                 side='right'
             ),
-            height=400,
+                height=400,
             template='plotly_white',
             showlegend=True
         )
@@ -1202,7 +1202,7 @@ def generate_overview_content(df: pd.DataFrame) -> html.Div:
                 dbc.Col([dcc.Graph(figure=fig_evolution)], md=12)
             ])
         ])
-
+        
     except Exception as e:
         print(f"Erro ao gerar visão geral: {str(e)}")
         traceback.print_exc()
@@ -1493,7 +1493,7 @@ def generate_engagement_content(df: pd.DataFrame) -> html.Div:
                 ], md=12)
             ])
         ])
-        
+    
     except Exception as e:
         print(f"Erro ao gerar análise de engajamento: {str(e)}")
         traceback.print_exc()
