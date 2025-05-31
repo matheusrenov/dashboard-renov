@@ -781,126 +781,12 @@ def update_tab_content(tab, data, filtered_data):
         return error_message()
 
 @app.callback(
-    [Output('filters-section', 'style'),
-     Output('store-filtered-data', 'data')],
-    [Input('store-data', 'data'),
-     Input('filter-start-date', 'date'),
-     Input('filter-end-date', 'date'),
-     Input('filter-month', 'value'),
-     Input('filter-network', 'value'),
-     Input('filter-status', 'value')]
-)
-def update_filtered_data(data, start_date, end_date, months, networks, statuses):
-    """Atualiza os dados filtrados"""
-    if not data:
-        return {'display': 'none'}, None
-    
-    try:
-        df = pd.DataFrame(data)
-        
-        # Aplica filtros
-        if start_date:
-            df = df[df['data_criacao'] >= start_date]
-        if end_date:
-            df = df[df['data_criacao'] <= end_date]
-        if months:
-            df = df[df['data_criacao'].dt.strftime('%Y-%m').isin(months)]
-        if networks:
-            df = df[df['nome_rede'].isin(networks)]
-        if statuses:
-            df = df[df['situacao_voucher'].isin(statuses)]
-        
-        return {'display': 'block'}, df.to_dict('records')
-    
-    except Exception as e:
-        print(f"Erro ao filtrar dados: {str(e)}")
-        traceback.print_exc()
-        return {'display': 'none'}, None
-
-@app.callback(
-    [Output('filter-month', 'options'),
-     Output('filter-network', 'options'),
-     Output('filter-status', 'options')],
-    [Input('store-data', 'data')]
-)
-def update_filter_options(data):
-    """Atualiza as opções dos filtros"""
-    if not data:
-        return [], [], []
-    
-    try:
-        df = pd.DataFrame(data)
-        
-        # Prepara opções para cada filtro
-        months = sorted(df['data_criacao'].dt.strftime('%Y-%m').unique())
-        month_options = [{'label': m, 'value': m} for m in months]
-        
-        networks = sorted(df['nome_rede'].unique())
-        network_options = [{'label': n, 'value': n} for n in networks]
-        
-        statuses = sorted(df['situacao_voucher'].unique())
-        status_options = [{'label': s, 'value': s} for s in statuses]
-        
-        return month_options, network_options, status_options
-    
-    except Exception as e:
-        print(f"Erro ao atualizar opções dos filtros: {str(e)}")
-        traceback.print_exc()
-        return [], [], []
-
-@app.callback(
-    Output('store-data', 'data'),
-    [Input('upload-data', 'contents')],
-    [State('upload-data', 'filename')]
-)
-def update_output(contents, filename):
-    """Processa o arquivo carregado e atualiza os dados"""
-    if contents is None:
-        return None
-    
-    try:
-        # Decodifica o conteúdo do arquivo
-        content_type, content_string = contents.split(',')
-        decoded = base64.b64decode(content_string)
-        
-        # Lê o arquivo Excel
-        df = pd.read_excel(io.BytesIO(decoded))
-        
-        # Processa as datas
-        date_columns = ['data_criacao', 'data_utilizacao']
-        for col in date_columns:
-            if col in df.columns:
-                df[col] = pd.to_datetime(df[col]).dt.strftime('%Y-%m-%d')
-        
-        return df.to_dict('records')
-    
-    except Exception as e:
-        print(f"Erro ao processar arquivo: {str(e)}")
-        traceback.print_exc()
-        return None
-
-@app.callback(
-    Output('clear-filters', 'n_clicks'),
-    [Input('clear-filters', 'n_clicks')],
-    [State('filter-start-date', 'date'),
-     State('filter-end-date', 'date'),
-     State('filter-month', 'value'),
-     State('filter-network', 'value'),
-     State('filter-status', 'value')]
-)
-def clear_filters(n_clicks, start_date, end_date, months, networks, statuses):
-    """Limpa todos os filtros"""
-    if n_clicks:
-        return None
-    return no_update
-
-@app.callback(
-    Output('upload-status', 'children'),
+    Output('upload-status-main', 'children'),
     [Input('upload-data', 'contents'),
      Input('upload-data', 'filename')]
 )
-def update_upload_status(contents, filename):
-    """Atualiza o status do upload"""
+def update_upload_status_main(contents, filename):
+    """Atualiza o status do upload principal"""
     if contents is None:
         return ''
     
