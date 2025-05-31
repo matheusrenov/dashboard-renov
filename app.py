@@ -295,9 +295,6 @@ def create_dashboard_layout(is_super_admin=False):
             ], width=2)
         ], className="mb-4"),
         
-        # KPIs Section
-        html.Div(id='kpi-section', className="mb-4"),
-        
         # Upload Section
         dbc.Row([
             dbc.Col([
@@ -344,64 +341,69 @@ def create_dashboard_layout(is_super_admin=False):
             ], width=12)
         ], className="mb-4"),
         
-        # Filtros
-        dbc.Row([
-            dbc.Col([
-                html.H5("🔍 Filtros", className="mb-3"),
-                dbc.Row([
-                    dbc.Col([
-                        html.Label("Período:", className="filter-label"),
-                        dbc.Row([
-                            dbc.Col([
-                                dcc.DatePickerSingle(
-                                    id='filter-start-date',
-                                    placeholder="Data Inicial",
-                                    display_format='DD/MM/YYYY'
-                                )
-                            ], width=6),
-                            dbc.Col([
-                                dcc.DatePickerSingle(
-                                    id='filter-end-date',
-                                    placeholder="Data Final",
-                                    display_format='DD/MM/YYYY'
-                                )
-                            ], width=6)
-                        ])
-                    ], md=3),
-                    dbc.Col([
-                        html.Label("Mês:", className="filter-label"),
-                        dcc.Dropdown(
-                            id='filter-month',
-                            multi=True,
-                            placeholder="Selecione o(s) mês(es)"
-                        )
-                    ], md=3),
-                    dbc.Col([
-                        html.Label("Rede:", className="filter-label"),
-                        dcc.Dropdown(
-                            id='filter-network',
-                            multi=True,
-                            placeholder="Selecione a(s) rede(s)"
-                        )
-                    ], md=3),
-                    dbc.Col([
-                        html.Label("Situação:", className="filter-label"),
-                        dcc.Dropdown(
-                            id='filter-status',
-                            multi=True,
-                            placeholder="Selecione a(s) situação(ões)"
-                        )
-                    ], md=3)
-                ]),
-                dbc.Button(
-                    "Limpar Filtros",
-                    id="clear-filters",
-                    color="secondary",
-                    size="sm",
-                    className="mt-3"
-                )
+        # KPIs Section (inicialmente oculta)
+        html.Div(id='kpi-section', style={'display': 'none'}, className="mb-4"),
+        
+        # Filtros (inicialmente ocultos)
+        html.Div([
+            dbc.Row([
+                dbc.Col([
+                    html.H5("🔍 Filtros", className="mb-3"),
+                    dbc.Row([
+                        dbc.Col([
+                            html.Label("Período:", className="filter-label"),
+                            dbc.Row([
+                                dbc.Col([
+                                    dcc.DatePickerSingle(
+                                        id='filter-start-date',
+                                        placeholder="Data Inicial",
+                                        display_format='DD/MM/YYYY'
+                                    )
+                                ], width=6),
+                                dbc.Col([
+                                    dcc.DatePickerSingle(
+                                        id='filter-end-date',
+                                        placeholder="Data Final",
+                                        display_format='DD/MM/YYYY'
+                                    )
+                                ], width=6)
+                            ])
+                        ], md=3),
+                        dbc.Col([
+                            html.Label("Mês:", className="filter-label"),
+                            dcc.Dropdown(
+                                id='filter-month',
+                                multi=True,
+                                placeholder="Selecione o(s) mês(es)"
+                            )
+                        ], md=3),
+                        dbc.Col([
+                            html.Label("Rede:", className="filter-label"),
+                            dcc.Dropdown(
+                                id='filter-network',
+                                multi=True,
+                                placeholder="Selecione a(s) rede(s)"
+                            )
+                        ], md=3),
+                        dbc.Col([
+                            html.Label("Situação:", className="filter-label"),
+                            dcc.Dropdown(
+                                id='filter-status',
+                                multi=True,
+                                placeholder="Selecione a(s) situação(ões)"
+                            )
+                        ], md=3)
+                    ]),
+                    dbc.Button(
+                        "Limpar Filtros",
+                        id="clear-filters",
+                        color="secondary",
+                        size="sm",
+                        className="mt-3"
+                    )
+                ])
             ])
-        ], className="mb-4"),
+        ], id='filters-section', style={'display': 'none'}, className="mb-4"),
         
         # Tabs
         dcc.Tabs([
@@ -417,7 +419,11 @@ def create_dashboard_layout(is_super_admin=False):
         value="overview",
         className="custom-tabs"),
         
-        html.Div(id='tab-content-area', className="mt-4")
+        # Área de conteúdo (inicialmente mostra mensagem de nenhum dado)
+        html.Div([
+            no_data_message()
+        ], id='tab-content-area', className="mt-4")
+        
     ], fluid=True)
 
 # ========================
@@ -1932,75 +1938,83 @@ def export_excel(n_clicks, rede_selecionada, situacao_selecionada, data):
 # 📥 Callbacks de Upload e Filtros
 # ========================
 
+def no_data_message():
+    return html.Div([
+        dbc.Alert([
+            html.H4("Nenhum dado disponível", className="alert-heading"),
+            html.P("Por favor, faça o upload de um arquivo Excel com os dados para visualização.",
+                   className="mb-0")
+        ], color="warning", className="mb-3")
+    ])
+
 @app.callback(
     [Output('upload-status', 'children'),
      Output('store-data', 'data'),
-     Output('welcome-message', 'style'),
-     Output('tabs-section', 'style'),
      Output('filter-month', 'options'),
      Output('filter-network', 'options'),
-     Output('filter-status', 'options')],
+     Output('filter-status', 'options'),
+     Output('tab-content-area', 'children')],
     [Input('upload-data', 'contents')],
     [State('upload-data', 'filename')],
     prevent_initial_call=True
 )
 def handle_upload(contents, filename):
+    """Processa o upload do arquivo de dados e atualiza os filtros"""
     if contents is None:
-        raise PreventUpdate
+        return no_update, no_update, no_update, no_update, no_update, no_data_message()
     
     try:
         print(f"\n=== Processando upload do arquivo: {filename} ===")
         
         # Processar o arquivo
-        df = parse_upload_content(contents, filename)
+        content_type, content_string = contents.split(',')
+        decoded = base64.b64decode(content_string)
         
-        if df is None or df.empty:
-            return no_data_message(), None, {'display': 'block'}, {'display': 'none'}, [], [], []
+        # Ler o arquivo Excel
+        df = pd.read_excel(io.BytesIO(decoded))
         
-        print(f"Dados carregados com sucesso. Registros: {len(df)}")
+        if df.empty:
+            return (
+                dbc.Alert("Arquivo vazio!", color="warning"),
+                None, [], [], [],
+                no_data_message()
+            )
+        
+        print(f"Colunas encontradas: {df.columns.tolist()}")
+        
+        # Processar datas
+        if 'criado_em' in df.columns:
+            df['criado_em'] = pd.to_datetime(df['criado_em'], errors='coerce')
+            df = df.dropna(subset=['criado_em'])
+            df['mes'] = df['criado_em'].dt.strftime('%Y-%m')  # Formato YYYY-MM
+            df['data_str'] = df['criado_em'].dt.strftime('%Y-%m-%d')
         
         # Preparar opções para os filtros
-        try:
-            month_options = [{'label': str(m), 'value': str(m)} for m in sorted(df['mes'].unique()) if pd.notna(m)]
-            network_options = [{'label': str(n), 'value': str(n)} for n in sorted(df['nome_rede'].unique()) if pd.notna(n)]
-            status_options = [{'label': str(s), 'value': str(s)} for s in sorted(df['situacao_voucher'].unique()) if pd.notna(s)]
-            
-            print("\nOpções de filtros geradas:")
-            print("Meses:", len(month_options))
-            print("Redes:", len(network_options))
-            print("Status:", len(status_options))
+        month_options = [{'label': mes, 'value': mes} for mes in sorted(df['mes'].unique())] if 'mes' in df.columns else []
+        network_options = [{'label': rede, 'value': rede} for rede in sorted(df['nome_rede'].unique())] if 'nome_rede' in df.columns else []
+        status_options = [{'label': status, 'value': status} for status in sorted(df['situacao_voucher'].unique())] if 'situacao_voucher' in df.columns else []
         
-        except Exception as e:
-            print(f"Erro ao gerar opções de filtros: {str(e)}")
-            traceback.print_exc()
-            month_options, network_options, status_options = [], [], []
+        print(f"Dados processados com sucesso. Total de registros: {len(df)}")
         
-        # Mostrar mensagem de sucesso
-        success_message = dbc.Alert(
-            f"Arquivo '{filename}' carregado com sucesso! ({len(df)} registros)",
-            color="success",
-            duration=4000
-        )
+        # Gerar conteúdo inicial
+        initial_content = generate_overview_content(df)
         
         return (
-            success_message,           # upload-status
-            df.to_dict('records'),     # store-data
-            {'display': 'none'},       # welcome-message
-            {'display': 'block'},      # tabs-section
-            month_options,             # filter-month options
-            network_options,           # filter-network options
-            status_options            # filter-status options
+            dbc.Alert(f"✅ Arquivo '{filename}' carregado com sucesso! ({len(df)} registros)", color="success", duration=4000),
+            df.to_dict('records'),
+            month_options,
+            network_options,
+            status_options,
+            initial_content
         )
     
     except Exception as e:
-        print(f"Erro no upload: {str(e)}")
+        print(f"Erro ao processar arquivo: {str(e)}")
         traceback.print_exc()
         return (
-            error_message(f"Erro ao processar arquivo: {str(e)}"),
-            None,
-            {'display': 'block'},
-            {'display': 'none'},
-            [], [], []
+            dbc.Alert(f"❌ Erro ao processar arquivo: {str(e)}", color="danger"),
+            None, [], [], [],
+            no_data_message()
         )
 
 @app.callback(
@@ -2499,13 +2513,6 @@ Instruções de Execução:
 """
 
 # Funções auxiliares
-
-def no_data_message():
-    return dbc.Alert(
-        "Nenhum dado disponível. Por favor, faça o upload de um arquivo.",
-        color="warning",
-        className="mb-3"
-    )
 
 def error_message(message="Ocorreu um erro ao processar os dados."):
     return dbc.Alert(
