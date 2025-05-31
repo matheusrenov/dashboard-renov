@@ -233,4 +233,42 @@ body {
     margin: 0;
     color: #2c3e50;
     font-weight: bold;
+}
+
+.login-container {
+    max-width: 400px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.login-logo {
+    max-width: 200px;
+    margin: 0 auto;
+    display: block;
+}
+
+.vh-100 {
+    min-height: 100vh;
+}
+
+.card {
+    border: none;
+    box-shadow: 0 0 20px rgba(0,0,0,0.1);
+}
+
+.card-body {
+    padding: 30px;
+}
+
+.form-control {
+    height: 45px;
+}
+
+.btn-primary {
+    height: 45px;
+    font-size: 16px;
+}
+
+#auth-status {
+    margin-top: 15px;
 } 

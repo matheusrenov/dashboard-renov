@@ -2189,7 +2189,7 @@ app.clientside_callback(
 @app.callback(
     Output('page-content', 'children'),
     [Input('url', 'pathname')],
-    prevent_initial_call=False  # Alterado para False para permitir a chamada inicial
+    prevent_initial_call=False
 )
 def display_page(pathname):
     """Gerencia o roteamento entre páginas"""
@@ -2217,10 +2217,6 @@ def display_page(pathname):
                 color="danger"
             )
     
-    elif pathname == '/register':
-        print("Rota /register - Exibindo registro")
-        return create_register_layout()
-    
     else:
         print(f"Rota desconhecida ({pathname}) - Redirecionando para login")
         return create_login_layout()
@@ -2243,6 +2239,45 @@ def handle_navigation(show_login_clicks):
 # 🔐 Callbacks de Autenticação
 # ========================
 
+def create_login_layout():
+    """Cria o layout da página de login"""
+    return dbc.Container([
+        dbc.Row([
+            dbc.Col([
+                html.Div([
+                    html.Img(
+                        src='/assets/images/Logo Roxo.png',
+                        className="login-logo mb-4"
+                    ),
+                    html.H2("Login", className="text-center mb-4"),
+                    dbc.Card([
+                        dbc.CardBody([
+                            dbc.Input(
+                                id="login-username",
+                                type="text",
+                                placeholder="Usuário",
+                                className="mb-3"
+                            ),
+                            dbc.Input(
+                                id="login-password",
+                                type="password",
+                                placeholder="Senha",
+                                className="mb-4"
+                            ),
+                            dbc.Button(
+                                "Entrar",
+                                id="login-button",
+                                color="primary",
+                                className="w-100 mb-3"
+                            ),
+                            html.Div(id="auth-status")
+                        ])
+                    ])
+                ], className="login-container")
+            ], width={"size": 6, "offset": 3}, md={"size": 4, "offset": 4})
+        ], className="vh-100 align-items-center")
+    ], fluid=True)
+
 @app.callback(
     [Output('url', 'pathname'),
      Output('auth-status', 'children')],
@@ -2253,10 +2288,17 @@ def handle_navigation(show_login_clicks):
 )
 def handle_login(n_clicks, username, password):
     """Gerencia o processo de login"""
+    print("\n=== Login Attempt ===")
+    print(f"Clicks: {n_clicks}")
+    print(f"Username: {username}")
+    print(f"Password: {'*' * len(password) if password else None}")
+    
     if not n_clicks:
+        print("No clicks - preventing update")
         raise PreventUpdate
     
     if not username or not password:
+        print("Missing credentials")
         return no_update, dbc.Alert(
             "Por favor, preencha todos os campos.",
             color="warning",
@@ -2265,12 +2307,14 @@ def handle_login(n_clicks, username, password):
     
     # Usuário e senha fixos para teste
     if username == "admin" and password == "admin":
+        print("Login successful - redirecting to dashboard")
         return '/dashboard', dbc.Alert(
             "Login realizado com sucesso!",
             color="success",
             duration=2000
         )
     
+    print("Invalid credentials")
     return no_update, dbc.Alert(
         "Usuário ou senha inválidos.",
         color="danger",
