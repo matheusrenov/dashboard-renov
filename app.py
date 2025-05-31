@@ -58,10 +58,20 @@ for directory in [assets_path, data_path]:
 server = Flask(__name__)
 CORS(server)
 
+# Configuração do banco de dados
+database_url = os.environ.get('DATABASE_URL')
+if database_url:
+    # Se existe DATABASE_URL, usar ela (Railway)
+    if database_url.startswith('postgres://'):
+        database_url = database_url.replace('postgres://', 'postgresql://', 1)
+else:
+    # SQLite local
+    database_url = f'sqlite:///{os.path.join(data_path, "network_data.db")}'
+
 # Configurações do Flask
 server.config.update(
     SECRET_KEY=os.environ.get('SECRET_KEY', secrets.token_hex(16)),
-    SQLALCHEMY_DATABASE_URI=os.environ.get('DATABASE_URL', '').replace('postgres://', 'postgresql://') if os.environ.get('DATABASE_URL') else f'sqlite:///{os.path.join(data_path, "network_data.db")}',
+    SQLALCHEMY_DATABASE_URI=database_url,
     SQLALCHEMY_TRACK_MODIFICATIONS=False,
     DEBUG=os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
 )
