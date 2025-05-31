@@ -4,7 +4,8 @@ FROM python:3.9-slim
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    DATABASE_URL=/app/data/network_data.db
 
 # Instalar dependências do sistema
 RUN apt-get update && apt-get install -y \
@@ -14,6 +15,12 @@ RUN apt-get update && apt-get install -y \
 
 # Criar e definir diretório de trabalho
 WORKDIR /app
+
+# Criar diretório para dados e definir permissões
+RUN mkdir -p /app/data && \
+    chmod 777 /app/data && \
+    touch /app/data/network_data.db && \
+    chmod 666 /app/data/network_data.db
 
 # Copiar requirements primeiro para aproveitar o cache do Docker
 COPY requirements.txt .

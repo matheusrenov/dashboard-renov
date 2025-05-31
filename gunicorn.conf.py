@@ -3,7 +3,7 @@ import os
 
 # Configurações básicas
 bind = "0.0.0.0:8080"
-workers = multiprocessing.cpu_count() * 2 + 1
+workers = 3  # Valor fixo mais conservador
 threads = 2
 worker_class = "gthread"
 worker_connections = 1000
