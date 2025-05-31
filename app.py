@@ -105,12 +105,10 @@ def display_page(pathname):
 
 # Callback de autenticação
 @app.callback(
+    Output('page-content', 'children'),
     [
-        Output('url', 'pathname'),
-        Output('login-error', 'children')
-    ],
-    [
-        Input('login-button', 'n_clicks')
+        Input('login-button', 'n_clicks'),
+        Input('url', 'pathname')
     ],
     [
         State('login-username', 'value'),
@@ -118,24 +116,35 @@ def display_page(pathname):
     ],
     prevent_initial_call=True
 )
-def authenticate(n_clicks, username, password):
-    if not n_clicks:
-        return no_update, no_update
+def authenticate(n_clicks, pathname, username, password):
+    ctx = callback_context
+    if not ctx.triggered:
+        return create_login_layout()
+    
+    trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    
+    if trigger_id == 'url':
+        if pathname == '/login' or pathname == '/':
+            return create_login_layout()
+        elif pathname == '/dashboard':
+            return create_dashboard_layout()
+        else:
+            return create_error_layout('404')
     
     if not username or not password:
-        return no_update, html.Div('Por favor, preencha todos os campos', style={'color': 'red'})
+        return create_login_layout("Por favor, preencha todos os campos")
     
     try:
         user_db = UserDatabase()
         user = user_db.verify_user(username, password)
         
         if user:
-            return '/dashboard', no_update
+            return create_dashboard_layout()
         else:
-            return no_update, html.Div('Usuário ou senha inválidos', style={'color': 'red'})
+            return create_login_layout("Usuário ou senha inválidos")
     except Exception as e:
         print(f"Erro na autenticação: {str(e)}")
-        return no_update, html.Div('Erro ao tentar fazer login. Tente novamente.', style={'color': 'red'})
+        return create_login_layout("Erro ao tentar fazer login. Tente novamente.")
 
 # Callback de logout
 @app.callback(

@@ -1,7 +1,7 @@
 import dash_bootstrap_components as dbc
 from dash import html, dcc
 
-def create_login_layout():
+def create_login_layout(error_message=None):
     return dbc.Container([
         dbc.Row([
             dbc.Col([
@@ -38,6 +38,12 @@ def create_login_layout():
                             color="primary",
                             className="w-100 mb-3",
                             n_clicks=0
+                        ),
+                        
+                        html.Div(
+                            error_message,
+                            id="login-error",
+                            className="text-danger text-center mb-3" if error_message else "d-none"
                         ),
                         
                         html.Div([
