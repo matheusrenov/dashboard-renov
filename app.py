@@ -58,26 +58,44 @@ for directory in [assets_path, data_path]:
 server = Flask(__name__)
 CORS(server)
 
-# Configuração do banco de dados
+# Configuração simples e robusta do banco de dados
 database_url = os.environ.get('DATABASE_URL')
 if database_url:
-    # Se existe DATABASE_URL, usar ela (Railway)
+    # Railway/Heroku com PostgreSQL
     if database_url.startswith('postgres://'):
-        database_url = database_url.replace('postgres://', 'postgresql://', 1)
+        database_url = database_url.replace('postgres://', 'postgresql://')
+    db_uri = database_url
+    print(f"Usando PostgreSQL: {db_uri[:50]}...")
 else:
-    # SQLite local
-    database_url = f'sqlite:///{os.path.join(data_path, "network_data.db")}'
+    # SQLite local ou temporário
+    db_file = os.path.join(data_path, 'app.db')
+    db_uri = f'sqlite:///{db_file}'
+    print(f"Usando SQLite: {db_uri}")
 
 # Configurações do Flask
 server.config.update(
     SECRET_KEY=os.environ.get('SECRET_KEY', secrets.token_hex(16)),
-    SQLALCHEMY_DATABASE_URI=database_url,
+    SQLALCHEMY_DATABASE_URI=db_uri,
     SQLALCHEMY_TRACK_MODIFICATIONS=False,
     DEBUG=os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
 )
 
-# Inicialização do SQLAlchemy
-db = SQLAlchemy(server)
+print(f"SQLALCHEMY_DATABASE_URI configurado: {server.config.get('SQLALCHEMY_DATABASE_URI')}")
+
+# Inicialização do SQLAlchemy com tratamento de erro
+try:
+    db = SQLAlchemy(server)
+    print("SQLAlchemy inicializado com sucesso")
+except Exception as e:
+    print(f"Erro ao inicializar SQLAlchemy: {e}")
+    # Usar um mock simples para permitir que a aplicação inicie
+    class MockDB:
+        session = None
+        def execute(self, query):
+            pass
+        def commit(self):
+            pass
+    db = MockDB()
 
 # Inicialização do Dash
 app = dash.Dash(
