@@ -43,6 +43,17 @@ import plotly.express as px
 # Exportação de dados
 import xlsxwriter
 
+# Módulos locais
+from models import UserDatabase
+from models_network import NetworkDatabase
+from auth_layout import create_login_layout, create_register_layout, create_admin_approval_layout
+from error_layout import create_error_layout
+
+# Configuração dos assets
+assets_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets')
+if not os.path.exists(assets_path):
+    os.makedirs(assets_path)
+
 # Inicialização do Flask
 server = Flask(__name__)
 CORS(server)
@@ -53,11 +64,6 @@ server.config.update(
     SQLALCHEMY_DATABASE_URI=os.getenv('DATABASE_URL', 'sqlite:///database.db'),
     SQLALCHEMY_TRACK_MODIFICATIONS=False
 )
-
-# Configuração dos assets
-assets_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets')
-if not os.path.exists(assets_path):
-    os.makedirs(assets_path)
 
 # Inicialização do Dash com todas as configurações necessárias
 app = dash.Dash(
@@ -97,122 +103,53 @@ def display_page(pathname):
     else:
         return create_error_layout('404')
 
+# Callback de autenticação
+@app.callback(
+    [
+        Output('url', 'pathname'),
+        Output('login-error', 'children')
+    ],
+    [
+        Input('login-button', 'n_clicks')
+    ],
+    [
+        State('login-username', 'value'),
+        State('login-password', 'value')
+    ],
+    prevent_initial_call=True
+)
+def authenticate(n_clicks, username, password):
+    if not n_clicks:
+        return no_update, no_update
+    
+    if not username or not password:
+        return no_update, html.Div('Por favor, preencha todos os campos', style={'color': 'red'})
+    
+    try:
+        user_db = UserDatabase()
+        user = user_db.verify_user(username, password)
+        
+        if user:
+            return '/dashboard', no_update
+        else:
+            return no_update, html.Div('Usuário ou senha inválidos', style={'color': 'red'})
+    except Exception as e:
+        print(f"Erro na autenticação: {str(e)}")
+        return no_update, html.Div('Erro ao tentar fazer login. Tente novamente.', style={'color': 'red'})
+
+# Callback de logout
+@app.callback(
+    Output('url', 'pathname', allow_duplicate=True),
+    Input('logout-button', 'n_clicks'),
+    prevent_initial_call=True
+)
+def logout(n_clicks):
+    if n_clicks:
+        return '/login'
+    return no_update
+
 # Inicialização das extensões
 db = SQLAlchemy(server)
-
-# ========================
-# 📱 Funções de Layout
-# ========================
-
-def create_login_layout():
-    """
-    Cria o layout da página de login.
-    
-    Returns:
-        Um componente Div com o layout de login
-    """
-    return html.Div([
-        dbc.Container([
-            dbc.Row([
-                dbc.Col([
-                    html.H1("Dashboard Renov", className="text-center mb-4"),
-                    dbc.Card([
-                        dbc.CardBody([
-                            html.H4("Login", className="card-title text-center"),
-                            dbc.Input(
-                                id="login-username",
-                                type="text",
-                                placeholder="Usuário",
-                                className="mb-3"
-                            ),
-                            dbc.Input(
-                                id="login-password",
-                                type="password",
-                                placeholder="Senha",
-                                className="mb-3"
-                            ),
-                            dbc.Button(
-                                "Entrar",
-                                id="login-button",
-                                color="primary",
-                                className="w-100 mb-3"
-                            ),
-                            html.Div(id="login-error")
-                        ])
-                    ], className="shadow-sm")
-                ], md=6, className="mx-auto")
-            ], className="vh-100 align-items-center")
-        ], fluid=True)
-    ])
-
-def create_error_layout(error_type='deploy', error_message=None, error_details=None):
-    """
-    Cria o layout da página de erro.
-    
-    Args:
-        error_type: Tipo do erro (404, 500, etc)
-        error_message: Mensagem de erro
-        error_details: Detalhes do erro
-    
-    Returns:
-        Um componente Div com o layout de erro
-    """
-    error_configs = {
-        '404': {
-            'icon': '🔍',
-            'title': 'Página não encontrada',
-            'message': error_message or 'A página que você está procurando não existe.',
-            'color': 'warning'
-        },
-        '401': {
-            'icon': '🔒',
-            'title': 'Acesso não autorizado',
-            'message': error_message or 'Você não tem permissão para acessar esta página.',
-            'color': 'danger'
-        },
-        '500': {
-            'icon': '⚠️',
-            'title': 'Erro interno do servidor',
-            'message': error_message or 'Ocorreu um erro ao processar sua solicitação.',
-            'color': 'danger'
-        },
-        'deploy': {
-            'icon': '🚀',
-            'title': 'Erro de implantação',
-            'message': error_message or 'Ocorreu um erro durante a implantação da aplicação.',
-            'color': 'danger'
-        }
-    }
-
-    error_config = error_configs.get(error_type, error_configs['500'])
-
-    return html.Div([
-        dbc.Container([
-            dbc.Row([
-                dbc.Col([
-                    html.H1([
-                        error_config['icon'],
-                        " ",
-                        error_config['title']
-                    ], className="text-center mb-4"),
-                    dbc.Alert([
-                        html.P(error_config['message'], className="mb-0"),
-                        html.Hr() if error_details else None,
-                        html.P(error_details, className="mb-0 text-muted")
-                        if error_details else None
-                    ], color=error_config['color'], className="text-center"),
-                    html.Div([
-                        dbc.Button(
-                            "Voltar para o início",
-                            id="show-login",
-                            color="primary",
-                            className="mt-3"
-                        )
-                    ], className="text-center")
-                ], md=8, className="mx-auto")
-            ], className="vh-100 align-items-center")
-        ], fluid=True)
-    ])
 
 # ========================
 # 📊 Layout do Dashboard
