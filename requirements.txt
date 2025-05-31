@@ -1,12 +1,9 @@
 # Web Framework e Dash
 dash==2.14.1
 dash-bootstrap-components==1.5.0
-dash-core-components==2.0.0
-dash-html-components==2.0.0
-dash-table==5.0.0
-Flask==2.3.3
-Flask-Cors==4.0.0
-Flask-SQLAlchemy==3.0.5
+flask==2.3.3
+flask-sqlalchemy==3.0.5
+flask-cors==4.0.0
 gunicorn==21.2.0
 
 # Data Processing e Análise
@@ -15,32 +12,8 @@ numpy==1.25.2
 plotly==5.17.0
 psutil==5.9.6
 openpyxl==3.1.2
-
-# Sistema e Monitoramento
-python-dotenv==1.0.0
-SQLAlchemy==2.0.23
-
-# Utilitários
-Unidecode==1.3.7
-XlsxWriter==3.1.9
-
-# Dependências do Flask
-Werkzeug==3.0.1
-click==8.1.7
-itsdangerous==2.1.2
-Jinja2==3.1.2
-MarkupSafe==2.1.3
-
-# Segurança
-bcrypt==4.0.1
-cryptography==41.0.5
-typing_extensions==4.9.0
-
-# HTTP e Rede
-urllib3==2.1.0
-certifi==2023.11.17
-charset-normalizer==3.3.2
-idna==3.4
+xlsxwriter==3.1.9
+unidecode==1.3.7
 
 # Banco de Dados
 psycopg2-binary==2.9.8

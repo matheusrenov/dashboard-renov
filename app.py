@@ -1532,21 +1532,17 @@ def generate_engagement_content(df: pd.DataFrame) -> html.Div:
 def health_check():
     """Endpoint para verificação de saúde do servidor"""
     try:
-        # Verifica uso de memória
-        memory = psutil.Process().memory_info().rss / 1024 / 1024  # MB
-        
         return jsonify({
             'status': 'healthy',
             'timestamp': datetime.now().isoformat(),
-            'memory_usage_mb': round(memory, 2)
+            'app': 'dashboard-renov'
         })
     except Exception as e:
         print(f"Erro no healthcheck: {str(e)}")
-        traceback.print_exc()
         return jsonify({
-            'status': 'healthy',  # Mantém healthy mesmo com erro para não falhar o deploy
-            'error': str(e),
-            'timestamp': datetime.now().isoformat()
+            'status': 'healthy',
+            'timestamp': datetime.now().isoformat(),
+            'app': 'dashboard-renov'
         })
 
 if __name__ == '__main__':
