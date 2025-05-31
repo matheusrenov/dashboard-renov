@@ -97,15 +97,18 @@ from error_layout import create_error_layout
 # Layout inicial
 app.layout = html.Div([
     dcc.Location(id='url', refresh=False),
+    dcc.Store(id='store-data'),
+    dcc.Store(id='store-filtered-data'),
+    dcc.Store(id='session-store'),
     html.Div(id='page-content')
 ])
 
-# Callback inicial para renderizar a página
 @app.callback(
     Output('page-content', 'children'),
-    Input('url', 'pathname')
+    [Input('url', 'pathname')]
 )
 def display_page(pathname):
+    """Renderiza a página apropriada baseado na URL"""
     if pathname == '/dashboard':
         return create_dashboard_layout()
     elif pathname == '/login' or pathname == '/' or pathname is None:
@@ -113,44 +116,73 @@ def display_page(pathname):
     else:
         return create_error_layout('404')
 
-# Callback de autenticação
 @app.callback(
-    Output('url', 'pathname'),
-    Input('login-button', 'n_clicks'),
-    [
-        State('login-username', 'value'),
-        State('login-password', 'value')
-    ],
-    prevent_initial_call=True
+    [Output('page-content', 'children'),
+     Output('session-store', 'data')],
+    [Input('url', 'pathname'),
+     Input('login-button', 'n_clicks'),
+     Input('logout-button', 'n_clicks')],
+    [State('username', 'value'),
+     State('password', 'value'),
+     State('session-store', 'data')]
 )
-def authenticate(n_clicks, username, password):
-    if not n_clicks:
-        raise PreventUpdate
+def manage_auth(pathname, login_clicks, logout_clicks, username, password, session_data):
+    """Gerencia autenticação e navegação"""
+    ctx = callback_context
+    if not ctx.triggered:
+        button_id = None
+    else:
+        button_id = ctx.triggered[0]['prop_id'].split('.')[0]
     
-    if not username or not password:
-        return no_update
+    # Logout
+    if button_id == 'logout-button':
+        return create_login_layout(), None
+    
+    # Login
+    if button_id == 'login-button':
+        if username == 'admin' and password == 'admin':  # Simplificado para exemplo
+            return create_dashboard_layout(), {'user': username, 'is_admin': True}
+        else:
+            return create_login_layout(), None
+    
+    # Navegação normal
+    if session_data and session_data.get('user'):
+        return create_dashboard_layout(is_super_admin=session_data.get('is_admin', False)), session_data
+    else:
+        return create_login_layout(), None
+
+@app.callback(
+    Output('tab-content', 'children'),
+    [Input('main-tabs', 'active_tab'),
+     Input('store-filtered-data', 'data')]
+)
+def update_tab_content(tab, filtered_data):
+    """Atualiza o conteúdo da aba selecionada"""
+    if not filtered_data:
+        return no_data_message()
     
     try:
-        user_db = UserDatabase()
-        user = user_db.verify_user(username, password)
+        df = pd.DataFrame(filtered_data)
         
-        if user:
-            return '/dashboard'
-        return no_update
+        if tab == "overview":
+            return generate_overview_content(df)
+        elif tab == "networks":
+            return generate_networks_content(df)
+        elif tab == "rankings":
+            return generate_rankings_content(df)
+        elif tab == "projections":
+            return generate_projections_content(df)
+        elif tab == "engagement":
+            return generate_engagement_content(df)
+        elif tab == "tim":
+            return generate_tim_content(df)
+        
+        return html.Div("Conteúdo não disponível")
+    
     except Exception as e:
-        print(f"Erro na autenticação: {str(e)}")
-        return no_update
-
-# Callback de logout
-@app.callback(
-    Output('url', 'pathname', allow_duplicate=True),
-    Input('logout-button', 'n_clicks'),
-    prevent_initial_call=True
-)
-def logout(n_clicks):
-    if n_clicks:
-        return '/login'
-    raise PreventUpdate
+        print(f"Erro ao atualizar conteúdo da aba: {str(e)}")
+        traceback.print_exc()
+        return error_message()
 
 # ========================
 # 📊 Layout do Dashboard
@@ -344,7 +376,8 @@ def create_dashboard_layout(is_super_admin=False):
             dbc.Tab(label="🏢 Redes", tab_id="networks"),
             dbc.Tab(label="🏆 Rankings", tab_id="rankings"),
             dbc.Tab(label="🔮 Projeções", tab_id="projections"),
-            dbc.Tab(label="👥 Engajamento", tab_id="engagement")
+            dbc.Tab(label="👥 Engajamento", tab_id="engagement"),
+            dbc.Tab(label="📊 TIM", tab_id="tim")
         ], id="main-tabs", active_tab="overview"),
         
         html.Div(id="tab-content"),
@@ -366,805 +399,6 @@ def update_kpis(filtered_data):
     
     df = pd.DataFrame(filtered_data)
     return generate_kpi_cards(df)
-
-# Callback para atualizar o conteúdo das abas
-@app.callback(
-    Output('tab-content', 'children'),
-    [
-        Input('main-tabs', 'active_tab'),
-        Input('store-filtered-data', 'data')
-    ]
-)
-def render_tab_content(active_tab, filtered_data):
-    if not filtered_data:
-        return dbc.Alert("Por favor, faça o upload dos dados para visualizar as análises.", color="info")
-    
-    df = pd.DataFrame(filtered_data)
-    
-    if active_tab == "overview":
-        return generate_overview_content(df)
-    elif active_tab == "networks":
-        return generate_networks_content(df)
-    elif active_tab == "rankings":
-        return generate_rankings_content(df)
-    elif active_tab == "projections":
-        return generate_projections_content(df)
-    elif active_tab == "engagement":
-        return generate_engagement_content(df)
-    
-    return html.P("Esta aba está em desenvolvimento.")
-
-# ========================
-# 📊 Funções de Geração de Conteúdo
-# ========================
-
-def generate_kpi_cards(df: pd.DataFrame) -> html.Div:
-    """
-    Gera cards com KPIs principais.
-    
-    Args:
-        df: DataFrame com os dados de vouchers
-    
-    Returns:
-        Um componente Div com os cards de KPIs
-    """
-    try:
-        # Calcular métricas
-        total_vouchers = len(df)
-        vouchers_utilizados = df[df['situacao_voucher'].str.lower().str.contains('utilizado|usado|ativo', na=False)]
-        total_utilizados = len(vouchers_utilizados)
-        valor_total = vouchers_utilizados['valor_dispositivo'].sum()
-        ticket_medio = valor_total / total_utilizados if total_utilizados > 0 else 0
-        taxa_utilizacao = (total_utilizados / total_vouchers * 100) if total_vouchers > 0 else 0
-
-        # Criar cards
-        return dbc.Row([
-            dbc.Col([
-                dbc.Card([
-                    dbc.CardBody([
-                        html.H4("📊 Total de Vouchers", className="card-title text-center"),
-                        html.H2(f"{total_vouchers:,}",
-                               className="text-primary text-center display-4"),
-                        html.P("Vouchers emitidos", className="text-muted text-center")
-                    ])
-                ], className="mb-4 shadow-sm")
-            ], md=3),
-            dbc.Col([
-                dbc.Card([
-                    dbc.CardBody([
-                        html.H4("✅ Vouchers Utilizados", className="card-title text-center"),
-                        html.H2(f"{total_utilizados:,}",
-                               className="text-success text-center display-4"),
-                        html.P(f"Taxa de utilização: {taxa_utilizacao:.1f}%",
-                              className="text-muted text-center")
-                    ])
-                ], className="mb-4 shadow-sm")
-            ], md=3),
-            dbc.Col([
-                dbc.Card([
-                    dbc.CardBody([
-                        html.H4("💰 Valor Total", className="card-title text-center"),
-                        html.H2(f"R$ {valor_total:,.2f}",
-                               className="text-info text-center display-4"),
-                        html.P("Valor total dos vouchers utilizados",
-                              className="text-muted text-center")
-                    ])
-                ], className="mb-4 shadow-sm")
-            ], md=3),
-            dbc.Col([
-                dbc.Card([
-                    dbc.CardBody([
-                        html.H4("🎯 Ticket Médio", className="card-title text-center"),
-                        html.H2(f"R$ {ticket_medio:,.2f}",
-                               className="text-warning text-center display-4"),
-                        html.P("Valor médio por voucher utilizado",
-                              className="text-muted text-center")
-                    ])
-                ], className="mb-4 shadow-sm")
-            ], md=3)
-        ])
-
-    except Exception as e:
-        print(f"Erro ao gerar KPIs: {str(e)}")
-        return html.Div()
-
-def generate_overview_content(df: pd.DataFrame) -> html.Div:
-    """
-    Gera o conteúdo da aba de visão geral.
-    
-    Args:
-        df: DataFrame com os dados de vouchers
-    
-    Returns:
-        Um componente Div com a visão geral
-    """
-    try:
-        if df.empty:
-            return dbc.Alert("Nenhum dado disponível para análise.", color="warning")
-
-        # Gráfico de evolução diária
-        daily_data = df.groupby('data_str').agg({
-            'imei': 'count',
-            'valor_dispositivo': 'sum'
-        }).reset_index()
-        daily_data.columns = ['data', 'vouchers', 'valor']
-        daily_data['data'] = pd.to_datetime(daily_data['data'])
-        daily_data = daily_data.sort_values('data')
-
-        fig_evolution = go.Figure()
-        fig_evolution.add_trace(go.Scatter(
-            x=daily_data['data'],
-            y=daily_data['vouchers'],
-            mode='lines+markers',
-            name='Vouchers',
-            line=dict(color='#3498db', width=2),
-            marker=dict(size=6)
-        ))
-        fig_evolution.add_trace(go.Scatter(
-            x=daily_data['data'],
-            y=daily_data['valor'],
-            mode='lines+markers',
-            name='Valor (R$)',
-            line=dict(color='#2ecc71', width=2),
-            marker=dict(size=6),
-            yaxis='y2'
-        ))
-
-        fig_evolution.update_layout(
-            title='📈 Evolução Diária',
-            xaxis_title='Data',
-            yaxis_title='Quantidade de Vouchers',
-            yaxis2=dict(
-                title='Valor (R$)',
-                overlaying='y',
-                side='right'
-            ),
-            height=400,
-            hovermode='x unified',
-            template='plotly_white',
-            showlegend=True,
-            legend=dict(
-                orientation="h",
-                yanchor="bottom",
-                y=1.02,
-                xanchor="right",
-                x=1
-            )
-        )
-
-        # Gráfico de distribuição por status
-        status_data = df['situacao_voucher'].value_counts()
-        fig_status = go.Figure(data=[go.Pie(
-            labels=status_data.index,
-            values=status_data.values,
-            hole=.3,
-            marker_colors=['#3498db', '#2ecc71', '#e74c3c', '#f1c40f']
-        )])
-        fig_status.update_layout(
-            title='🔄 Distribuição por Status',
-            height=400,
-            template='plotly_white',
-            showlegend=True,
-            legend=dict(
-                orientation="h",
-                yanchor="bottom",
-                y=1.02,
-                xanchor="right",
-                x=1
-            )
-        )
-
-        # Gráfico de distribuição por rede
-        network_data = df['nome_rede'].value_counts().head(10)
-        fig_networks = go.Figure(data=[go.Bar(
-            x=network_data.values,
-            y=network_data.index,
-            orientation='h',
-            marker_color='#3498db'
-        )])
-        fig_networks.update_layout(
-            title='🏢 Top 10 Redes',
-            xaxis_title='Quantidade de Vouchers',
-            height=400,
-            template='plotly_white',
-            showlegend=False
-        )
-
-        return html.Div([
-            dbc.Row([
-                dbc.Col([dcc.Graph(figure=fig_evolution)], md=12)
-            ], className="mb-4"),
-            dbc.Row([
-                dbc.Col([dcc.Graph(figure=fig_status)], md=6),
-                dbc.Col([dcc.Graph(figure=fig_networks)], md=6)
-            ])
-        ])
-
-    except Exception as e:
-        print(f"Erro ao gerar visão geral: {str(e)}")
-        return dbc.Alert(f"Erro ao gerar análise: {str(e)}", color="danger")
-
-def generate_networks_content(df: pd.DataFrame) -> html.Div:
-    """
-    Gera o conteúdo da aba de redes.
-    
-    Args:
-        df: DataFrame com os dados de vouchers
-    
-    Returns:
-        Um componente Div com a análise de redes
-    """
-    try:
-        if df.empty:
-            return dbc.Alert("Nenhum dado disponível para análise de redes.", color="warning")
-
-        # Análise por rede
-        network_metrics = df.groupby('nome_rede').agg({
-            'imei': 'count',
-            'valor_dispositivo': 'sum'
-        }).reset_index()
-        network_metrics.columns = ['rede', 'total_vouchers', 'valor_total']
-        
-        # Calcular vouchers utilizados por rede
-        utilizados = df[df['situacao_voucher'].str.lower().str.contains('utilizado|usado|ativo', na=False)]
-        network_metrics['vouchers_utilizados'] = utilizados.groupby('nome_rede')['imei'].count().reindex(network_metrics['rede']).fillna(0)
-        
-        # Calcular métricas adicionais
-        network_metrics['taxa_utilizacao'] = (network_metrics['vouchers_utilizados'] / network_metrics['total_vouchers'] * 100).fillna(0)
-        network_metrics['ticket_medio'] = (network_metrics['valor_total'] / network_metrics['vouchers_utilizados']).fillna(0)
-        network_metrics = network_metrics.sort_values('valor_total', ascending=False)
-
-        # Tabela de métricas por rede
-        table = dash_table.DataTable(
-            id='network-metrics-table',
-            columns=[
-                {'name': 'Rede', 'id': 'rede'},
-                {'name': 'Total Vouchers', 'id': 'total_vouchers', 'type': 'numeric', 'format': {'specifier': ',d'}},
-                {'name': 'Vouchers Utilizados', 'id': 'vouchers_utilizados', 'type': 'numeric', 'format': {'specifier': ',d'}},
-                {'name': 'Taxa Utilização (%)', 'id': 'taxa_utilizacao', 'type': 'numeric', 'format': {'specifier': '.1f'}},
-                {'name': 'Valor Total (R$)', 'id': 'valor_total', 'type': 'numeric', 'format': {'specifier': ',.2f'}},
-                {'name': 'Ticket Médio (R$)', 'id': 'ticket_medio', 'type': 'numeric', 'format': {'specifier': ',.2f'}}
-            ],
-            data=network_metrics.to_dict('records'),
-            style_table={'overflowX': 'auto'},
-            style_cell={'textAlign': 'left', 'padding': '10px', 'whiteSpace': 'normal'},
-            style_header={'backgroundColor': '#f8f9fa', 'fontWeight': 'bold'},
-            style_data_conditional=[{'if': {'row_index': 'odd'}, 'backgroundColor': '#f8f9fa'}],
-            page_size=10,
-            sort_action='native',
-            filter_action='native'
-        )
-
-        # Gráfico de desempenho por rede
-        top_10_networks = network_metrics.head(10)
-        fig_performance = go.Figure()
-        fig_performance.add_trace(go.Bar(
-            name='Valor Total (R$)',
-            x=top_10_networks['rede'],
-            y=top_10_networks['valor_total'],
-            marker_color='#3498db'
-        ))
-        fig_performance.add_trace(go.Scatter(
-            name='Taxa de Utilização (%)',
-            x=top_10_networks['rede'],
-            y=top_10_networks['taxa_utilizacao'],
-            mode='lines+markers',
-            yaxis='y2',
-            line=dict(color='#e74c3c', width=2),
-            marker=dict(size=8)
-        ))
-
-        fig_performance.update_layout(
-            title='📊 Desempenho das Top 10 Redes',
-            xaxis_title='Rede',
-            yaxis_title='Valor Total (R$)',
-            yaxis2=dict(
-                title='Taxa de Utilização (%)',
-                overlaying='y',
-                side='right'
-            ),
-            height=400,
-            template='plotly_white',
-            showlegend=True,
-            legend=dict(
-                orientation="h",
-                yanchor="bottom",
-                y=1.02,
-                xanchor="right",
-                x=1
-            ),
-            barmode='group'
-        )
-
-        return html.Div([
-            dbc.Row([
-                dbc.Col([
-                    html.H4("📋 Métricas por Rede", className="mb-4"),
-                    table
-                ], md=12, className="mb-4")
-            ]),
-            dbc.Row([
-                dbc.Col([
-                    dcc.Graph(figure=fig_performance)
-                ], md=12)
-            ])
-        ])
-
-    except Exception as e:
-        print(f"Erro ao gerar análise de redes: {str(e)}")
-        return dbc.Alert(f"Erro ao gerar análise de redes: {str(e)}", color="danger")
-
-def generate_rankings_content(df: pd.DataFrame) -> html.Div:
-    """
-    Gera o conteúdo da aba de rankings.
-    
-    Args:
-        df: DataFrame com os dados de vouchers
-    
-    Returns:
-        Um componente Div com os rankings
-    """
-    try:
-        if df.empty:
-            return dbc.Alert("Nenhum dado disponível para análise de rankings.", color="warning")
-
-        # Filtrar apenas vouchers utilizados
-        df_utilizados = df[df['situacao_voucher'].str.lower().str.contains('utilizado|usado|ativo', na=False)]
-
-        # Rankings por vendedor
-        vendedor_metrics = df_utilizados.groupby('nome_vendedor').agg({
-            'imei': 'count',
-            'valor_dispositivo': 'sum'
-        }).reset_index()
-        vendedor_metrics.columns = ['vendedor', 'total_vouchers', 'valor_total']
-        vendedor_metrics['ticket_medio'] = vendedor_metrics['valor_total'] / vendedor_metrics['total_vouchers']
-        vendedor_metrics = vendedor_metrics.sort_values('valor_total', ascending=False)
-
-        # Rankings por filial
-        filial_metrics = df_utilizados.groupby(['nome_rede', 'nome_filial']).agg({
-            'imei': 'count',
-            'valor_dispositivo': 'sum'
-        }).reset_index()
-        filial_metrics.columns = ['rede', 'filial', 'total_vouchers', 'valor_total']
-        filial_metrics['ticket_medio'] = filial_metrics['valor_total'] / filial_metrics['total_vouchers']
-        filial_metrics = filial_metrics.sort_values('valor_total', ascending=False)
-
-        # Tabela Top Vendedores
-        table_vendedores = dash_table.DataTable(
-            id='vendedor-metrics-table',
-            columns=[
-                {'name': 'Vendedor', 'id': 'vendedor'},
-                {'name': 'Vouchers', 'id': 'total_vouchers', 'type': 'numeric', 'format': {'specifier': ',d'}},
-                {'name': 'Valor Total (R$)', 'id': 'valor_total', 'type': 'numeric', 'format': {'specifier': ',.2f'}},
-                {'name': 'Ticket Médio (R$)', 'id': 'ticket_medio', 'type': 'numeric', 'format': {'specifier': ',.2f'}}
-            ],
-            data=vendedor_metrics.head(10).to_dict('records'),
-            style_table={'overflowX': 'auto'},
-            style_cell={'textAlign': 'left', 'padding': '10px', 'whiteSpace': 'normal'},
-            style_header={'backgroundColor': '#f8f9fa', 'fontWeight': 'bold'},
-            style_data_conditional=[{'if': {'row_index': 'odd'}, 'backgroundColor': '#f8f9fa'}]
-        )
-
-        # Tabela Top Filiais
-        table_filiais = dash_table.DataTable(
-            id='filial-metrics-table',
-            columns=[
-                {'name': 'Rede', 'id': 'rede'},
-                {'name': 'Filial', 'id': 'filial'},
-                {'name': 'Vouchers', 'id': 'total_vouchers', 'type': 'numeric', 'format': {'specifier': ',d'}},
-                {'name': 'Valor Total (R$)', 'id': 'valor_total', 'type': 'numeric', 'format': {'specifier': ',.2f'}},
-                {'name': 'Ticket Médio (R$)', 'id': 'ticket_medio', 'type': 'numeric', 'format': {'specifier': ',.2f'}}
-            ],
-            data=filial_metrics.head(10).to_dict('records'),
-            style_table={'overflowX': 'auto'},
-            style_cell={'textAlign': 'left', 'padding': '10px', 'whiteSpace': 'normal'},
-            style_header={'backgroundColor': '#f8f9fa', 'fontWeight': 'bold'},
-            style_data_conditional=[{'if': {'row_index': 'odd'}, 'backgroundColor': '#f8f9fa'}]
-        )
-
-        # Gráfico de Top 10 Vendedores
-        top_10_vendedores = vendedor_metrics.head(10)
-        fig_vendedores = go.Figure()
-        fig_vendedores.add_trace(go.Bar(
-            name='Valor Total (R$)',
-            x=top_10_vendedores['vendedor'],
-            y=top_10_vendedores['valor_total'],
-            marker_color='#3498db'
-        ))
-        fig_vendedores.add_trace(go.Scatter(
-            name='Ticket Médio (R$)',
-            x=top_10_vendedores['vendedor'],
-            y=top_10_vendedores['ticket_medio'],
-            mode='lines+markers',
-            yaxis='y2',
-            line=dict(color='#e74c3c', width=2),
-            marker=dict(size=8)
-        ))
-
-        fig_vendedores.update_layout(
-            title='🏆 Top 10 Vendedores',
-            xaxis_title='Vendedor',
-            yaxis_title='Valor Total (R$)',
-            yaxis2=dict(
-                title='Ticket Médio (R$)',
-                overlaying='y',
-                side='right'
-            ),
-            height=400,
-            template='plotly_white',
-            showlegend=True,
-            legend=dict(
-                orientation="h",
-                yanchor="bottom",
-                y=1.02,
-                xanchor="right",
-                x=1
-            )
-        )
-
-        return html.Div([
-            dbc.Row([
-                dbc.Col([
-                    html.H4("🥇 Top 10 Vendedores", className="mb-4"),
-                    table_vendedores
-                ], md=12, className="mb-4")
-            ]),
-            dbc.Row([
-                dbc.Col([dcc.Graph(figure=fig_vendedores)], md=12, className="mb-4")
-            ]),
-            dbc.Row([
-                dbc.Col([
-                    html.H4("🏪 Top 10 Filiais", className="mb-4"),
-                    table_filiais
-                ], md=12)
-            ])
-        ])
-
-    except Exception as e:
-        print(f"Erro ao gerar rankings: {str(e)}")
-        return dbc.Alert(f"Erro ao gerar rankings: {str(e)}", color="danger")
-
-def generate_projections_content(df: pd.DataFrame) -> html.Div:
-    """
-    Gera o conteúdo da aba de projeções.
-    
-    Args:
-        df: DataFrame com os dados de vouchers
-    
-    Returns:
-        Um componente Div com as projeções
-    """
-    try:
-        if df.empty:
-            return dbc.Alert("Nenhum dado disponível para análise de projeções.", color="warning")
-
-        # Preparar dados para projeção
-        df['data'] = pd.to_datetime(df['data_str'])
-        df_utilizados = df[df['situacao_voucher'].str.lower().str.contains('utilizado|usado|ativo', na=False)]
-        
-        # Análise diária
-        daily_data = df_utilizados.groupby('data').agg({
-            'imei': 'count',
-            'valor_dispositivo': 'sum'
-        }).reset_index()
-        daily_data.columns = ['data', 'vouchers', 'valor']
-
-        # Calcular médias móveis
-        daily_data['mm_7d_vouchers'] = daily_data['vouchers'].rolling(window=7, min_periods=1).mean()
-        daily_data['mm_7d_valor'] = daily_data['valor'].rolling(window=7, min_periods=1).mean()
-        daily_data['mm_30d_vouchers'] = daily_data['vouchers'].rolling(window=30, min_periods=1).mean()
-        daily_data['mm_30d_valor'] = daily_data['valor'].rolling(window=30, min_periods=1).mean()
-
-        # Projetar próximos 30 dias
-        last_date = daily_data['data'].max()
-        future_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=30, freq='D')
-        
-        # Usar média dos últimos 30 dias para projeção
-        avg_vouchers = daily_data['vouchers'].tail(30).mean()
-        avg_valor = daily_data['valor'].tail(30).mean()
-        
-        projection_data = pd.DataFrame({
-            'data': future_dates,
-            'vouchers': [avg_vouchers] * 30,
-            'valor': [avg_valor] * 30,
-            'tipo': ['projeção'] * 30
-        })
-
-        # Gráfico de projeção de vouchers
-        fig_vouchers = go.Figure()
-        
-        # Dados reais
-        fig_vouchers.add_trace(go.Scatter(
-            name='Vouchers Diários',
-            x=daily_data['data'],
-            y=daily_data['vouchers'],
-            mode='markers',
-            marker=dict(size=6, color='#3498db', opacity=0.5)
-        ))
-        
-        fig_vouchers.add_trace(go.Scatter(
-            name='Média Móvel (7 dias)',
-            x=daily_data['data'],
-            y=daily_data['mm_7d_vouchers'],
-            mode='lines',
-            line=dict(color='#2ecc71', width=2)
-        ))
-        
-        fig_vouchers.add_trace(go.Scatter(
-            name='Média Móvel (30 dias)',
-            x=daily_data['data'],
-            y=daily_data['mm_30d_vouchers'],
-            mode='lines',
-            line=dict(color='#e74c3c', width=2)
-        ))
-        
-        # Projeção
-        fig_vouchers.add_trace(go.Scatter(
-            name='Projeção',
-            x=projection_data['data'],
-            y=projection_data['vouchers'],
-            mode='lines',
-            line=dict(color='#f1c40f', width=2, dash='dash')
-        ))
-
-        fig_vouchers.update_layout(
-            title='📈 Projeção de Vouchers',
-            xaxis_title='Data',
-            yaxis_title='Quantidade de Vouchers',
-            height=400,
-            template='plotly_white',
-            showlegend=True,
-            legend=dict(
-                orientation="h",
-                yanchor="bottom",
-                y=1.02,
-                xanchor="right",
-                x=1
-            )
-        )
-
-        # Gráfico de projeção de valor
-        fig_valor = go.Figure()
-        
-        # Dados reais
-        fig_valor.add_trace(go.Scatter(
-            name='Valor Diário (R$)',
-            x=daily_data['data'],
-            y=daily_data['valor'],
-            mode='markers',
-            marker=dict(size=6, color='#3498db', opacity=0.5)
-        ))
-        
-        fig_valor.add_trace(go.Scatter(
-            name='Média Móvel (7 dias)',
-            x=daily_data['data'],
-            y=daily_data['mm_7d_valor'],
-            mode='lines',
-            line=dict(color='#2ecc71', width=2)
-        ))
-        
-        fig_valor.add_trace(go.Scatter(
-            name='Média Móvel (30 dias)',
-            x=daily_data['data'],
-            y=daily_data['mm_30d_valor'],
-            mode='lines',
-            line=dict(color='#e74c3c', width=2)
-        ))
-        
-        # Projeção
-        fig_valor.add_trace(go.Scatter(
-            name='Projeção',
-            x=projection_data['data'],
-            y=projection_data['valor'],
-            mode='lines',
-            line=dict(color='#f1c40f', width=2, dash='dash')
-        ))
-
-        fig_valor.update_layout(
-            title='💰 Projeção de Valor',
-            xaxis_title='Data',
-            yaxis_title='Valor Total (R$)',
-            height=400,
-            template='plotly_white',
-            showlegend=True,
-            legend=dict(
-                orientation="h",
-                yanchor="bottom",
-                y=1.02,
-                xanchor="right",
-                x=1
-            )
-        )
-
-        # Calcular métricas de projeção
-        projecao_mensal_vouchers = avg_vouchers * 30
-        projecao_mensal_valor = avg_valor * 30
-
-        # Cards com métricas de projeção
-        cards = dbc.Row([
-            dbc.Col([
-                dbc.Card([
-                    dbc.CardBody([
-                        html.H4("📊 Projeção Mensal de Vouchers", className="card-title text-center"),
-                        html.H2(f"{projecao_mensal_vouchers:,.0f}",
-                               className="text-primary text-center display-4"),
-                        html.P(f"Média diária: {avg_vouchers:,.1f}",
-                              className="text-muted text-center")
-                    ])
-                ], className="mb-4 shadow-sm")
-            ], md=6),
-            dbc.Col([
-                dbc.Card([
-                    dbc.CardBody([
-                        html.H4("💰 Projeção Mensal de Valor", className="card-title text-center"),
-                        html.H2(f"R$ {projecao_mensal_valor:,.2f}",
-                               className="text-success text-center display-4"),
-                        html.P(f"Média diária: R$ {avg_valor:,.2f}",
-                              className="text-muted text-center")
-                    ])
-                ], className="mb-4 shadow-sm")
-            ], md=6)
-        ])
-
-        return html.Div([
-            cards,
-            dbc.Row([
-                dbc.Col([dcc.Graph(figure=fig_vouchers)], md=12, className="mb-4")
-            ]),
-            dbc.Row([
-                dbc.Col([dcc.Graph(figure=fig_valor)], md=12)
-            ])
-        ])
-
-    except Exception as e:
-        print(f"Erro ao gerar projeções: {str(e)}")
-        return dbc.Alert(f"Erro ao gerar projeções: {str(e)}", color="danger")
-
-def generate_engagement_content(df: pd.DataFrame) -> html.Div:
-    """
-    Gera o conteúdo da aba de engajamento.
-    
-    Args:
-        df: DataFrame com os dados de vouchers
-    
-    Returns:
-        Um componente Div com as métricas de engajamento
-    """
-    try:
-        if df.empty:
-            return dbc.Alert("Nenhum dado disponível para análise de engajamento.", color="warning")
-
-        # Calcular métricas de engajamento
-        total_redes = df['nome_rede'].nunique()
-        total_filiais = df.groupby('nome_rede')['nome_filial'].nunique().sum()
-        total_vendedores = df['nome_vendedor'].nunique()
-        
-        # Vendedores ativos (com vouchers utilizados)
-        df_utilizados = df[df['situacao_voucher'].str.lower().str.contains('utilizado|usado|ativo', na=False)]
-        vendedores_ativos = df_utilizados['nome_vendedor'].nunique()
-        taxa_ativacao = (vendedores_ativos / total_vendedores * 100) if total_vendedores > 0 else 0
-
-        # Análise de frequência de vendedores
-        freq_vendedores = df_utilizados.groupby('nome_vendedor').size()
-        freq_dist = freq_vendedores.value_counts().sort_index()
-        
-        # Gráfico de distribuição de frequência
-        fig_freq = go.Figure(data=[go.Bar(
-            x=freq_dist.index,
-            y=freq_dist.values,
-            marker_color='#3498db'
-        )])
-        
-        fig_freq.update_layout(
-            title='📊 Distribuição de Vouchers por Vendedor',
-            xaxis_title='Quantidade de Vouchers',
-            yaxis_title='Número de Vendedores',
-            height=400,
-            template='plotly_white',
-            showlegend=False
-        )
-
-        # Análise temporal de engajamento
-        df['data'] = pd.to_datetime(df['data_str'])
-        daily_engagement = df_utilizados.groupby('data').agg({
-            'nome_vendedor': 'nunique',
-            'nome_filial': 'nunique',
-            'nome_rede': 'nunique'
-        }).reset_index()
-        
-        # Gráfico de engajamento diário
-        fig_engagement = go.Figure()
-        
-        fig_engagement.add_trace(go.Scatter(
-            name='Vendedores Ativos',
-            x=daily_engagement['data'],
-            y=daily_engagement['nome_vendedor'],
-            mode='lines',
-            line=dict(color='#3498db', width=2)
-        ))
-        
-        fig_engagement.add_trace(go.Scatter(
-            name='Filiais Ativas',
-            x=daily_engagement['data'],
-            y=daily_engagement['nome_filial'],
-            mode='lines',
-            line=dict(color='#2ecc71', width=2)
-        ))
-        
-        fig_engagement.add_trace(go.Scatter(
-            name='Redes Ativas',
-            x=daily_engagement['data'],
-            y=daily_engagement['nome_rede'],
-            mode='lines',
-            line=dict(color='#e74c3c', width=2)
-        ))
-
-        fig_engagement.update_layout(
-            title='📈 Engajamento Diário',
-            xaxis_title='Data',
-            yaxis_title='Quantidade',
-            height=400,
-            template='plotly_white',
-            showlegend=True,
-            legend=dict(
-                orientation="h",
-                yanchor="bottom",
-                y=1.02,
-                xanchor="right",
-                x=1
-            )
-        )
-
-        # Cards com métricas principais
-        cards = dbc.Row([
-            dbc.Col([
-                dbc.Card([
-                    dbc.CardBody([
-                        html.H4("🏢 Total de Redes", className="card-title text-center"),
-                        html.H2(f"{total_redes:,}",
-                               className="text-primary text-center display-4"),
-                        html.P(f"Com {total_filiais:,} filiais",
-                              className="text-muted text-center")
-                    ])
-                ], className="mb-4 shadow-sm")
-            ], md=4),
-            dbc.Col([
-                dbc.Card([
-                    dbc.CardBody([
-                        html.H4("👥 Total de Vendedores", className="card-title text-center"),
-                        html.H2(f"{total_vendedores:,}",
-                               className="text-success text-center display-4"),
-                        html.P(f"{vendedores_ativos:,} vendedores ativos",
-                              className="text-muted text-center")
-                    ])
-                ], className="mb-4 shadow-sm")
-            ], md=4),
-            dbc.Col([
-                dbc.Card([
-                    dbc.CardBody([
-                        html.H4("📊 Taxa de Ativação", className="card-title text-center"),
-                        html.H2(f"{taxa_ativacao:.1f}%",
-                               className="text-info text-center display-4"),
-                        html.P("Vendedores com vouchers utilizados",
-                              className="text-muted text-center")
-                    ])
-                ], className="mb-4 shadow-sm")
-            ], md=4)
-        ])
-
-        return html.Div([
-            cards,
-            dbc.Row([
-                dbc.Col([dcc.Graph(figure=fig_engagement)], md=12, className="mb-4")
-            ]),
-            dbc.Row([
-                dbc.Col([dcc.Graph(figure=fig_freq)], md=12)
-            ])
-        ])
-
-    except Exception as e:
-        print(f"Erro ao gerar análise de engajamento: {str(e)}")
-        return dbc.Alert(f"Erro ao gerar análise de engajamento: {str(e)}", color="danger")
 
 # Callback para popular os filtros
 @app.callback(
@@ -1724,41 +958,6 @@ def update_upload_status(contents, filename):
             f"Erro ao carregar arquivo: {str(e)}"
         ])
 
-@app.callback(
-    [Output('page-content', 'children'),
-     Output('session-store', 'data')],
-    [Input('url', 'pathname'),
-     Input('login-button', 'n_clicks'),
-     Input('logout-button', 'n_clicks')],
-    [State('username', 'value'),
-     State('password', 'value'),
-     State('session-store', 'data')]
-)
-def manage_auth(pathname, login_clicks, logout_clicks, username, password, session_data):
-    """Gerencia autenticação e navegação"""
-    ctx = callback_context
-    if not ctx.triggered:
-        button_id = None
-    else:
-        button_id = ctx.triggered[0]['prop_id'].split('.')[0]
-    
-    # Logout
-    if button_id == 'logout-button':
-        return create_login_layout(), None
-    
-    # Login
-    if button_id == 'login-button':
-        if username == 'admin' and password == 'admin':  # Simplificado para exemplo
-            return create_dashboard_layout(), {'user': username, 'is_admin': True}
-        else:
-            return create_login_layout(), None
-    
-    # Navegação normal
-    if session_data and session_data.get('user'):
-        return create_dashboard_layout(is_super_admin=session_data.get('is_admin', False)), session_data
-    else:
-        return create_login_layout(), None
-
 # Funções auxiliares para mensagens
 def no_data_message():
     """Retorna mensagem quando não há dados disponíveis"""
@@ -1872,6 +1071,422 @@ def generate_tim_content(df: pd.DataFrame) -> html.Div:
         print(f"Erro ao gerar conteúdo TIM: {str(e)}")
         traceback.print_exc()
         return error_message()
+
+def generate_kpi_cards(df: pd.DataFrame) -> html.Div:
+    """
+    Gera cards com KPIs principais.
+    
+    Args:
+        df: DataFrame com os dados de vouchers
+    
+    Returns:
+        Um componente Div com os cards de KPIs
+    """
+    try:
+        # Calcular métricas
+        total_vouchers = len(df)
+        vouchers_utilizados = df[df['situacao_voucher'].str.lower().str.contains('utilizado|usado|ativo', na=False)]
+        total_utilizados = len(vouchers_utilizados)
+        valor_total = vouchers_utilizados['valor_dispositivo'].sum()
+        ticket_medio = valor_total / total_utilizados if total_utilizados > 0 else 0
+        taxa_utilizacao = (total_utilizados / total_vouchers * 100) if total_vouchers > 0 else 0
+
+        # Criar cards
+        return dbc.Row([
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H4("📊 Total de Vouchers", className="card-title text-center"),
+                        html.H2(f"{total_vouchers:,}",
+                               className="text-primary text-center display-4"),
+                        html.P("Vouchers emitidos", className="text-muted text-center")
+                    ])
+                ], className="mb-4 shadow-sm")
+            ], md=3),
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H4("✅ Vouchers Utilizados", className="card-title text-center"),
+                        html.H2(f"{total_utilizados:,}",
+                               className="text-success text-center display-4"),
+                        html.P(f"Taxa de utilização: {taxa_utilizacao:.1f}%",
+                              className="text-muted text-center")
+                    ])
+                ], className="mb-4 shadow-sm")
+            ], md=3),
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H4("💰 Valor Total", className="card-title text-center"),
+                        html.H2(f"R$ {valor_total:,.2f}",
+                               className="text-info text-center display-4"),
+                        html.P("Valor total dos vouchers utilizados",
+                              className="text-muted text-center")
+                    ])
+                ], className="mb-4 shadow-sm")
+            ], md=3),
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H4("🎯 Ticket Médio", className="card-title text-center"),
+                        html.H2(f"R$ {ticket_medio:,.2f}",
+                               className="text-warning text-center display-4"),
+                        html.P("Valor médio por voucher utilizado",
+                              className="text-muted text-center")
+                    ])
+                ], className="mb-4 shadow-sm")
+            ], md=3)
+        ])
+
+    except Exception as e:
+        print(f"Erro ao gerar KPIs: {str(e)}")
+        traceback.print_exc()
+        return error_message()
+
+def generate_overview_content(df: pd.DataFrame) -> html.Div:
+    """
+    Gera o conteúdo da aba de visão geral.
+    """
+    try:
+        if df.empty:
+            return no_data_message()
+
+        # Gerar KPIs
+        kpi_cards = generate_kpi_cards(df)
+
+        # Gráfico de evolução diária
+        daily_data = df.groupby('data_str').agg({
+            'imei': 'count',
+            'valor_dispositivo': 'sum'
+        }).reset_index()
+        daily_data.columns = ['data', 'vouchers', 'valor']
+        daily_data['data'] = pd.to_datetime(daily_data['data'])
+        daily_data = daily_data.sort_values('data')
+
+        fig_evolution = go.Figure()
+        fig_evolution.add_trace(go.Scatter(
+            x=daily_data['data'],
+            y=daily_data['vouchers'],
+            mode='lines+markers',
+            name='Vouchers',
+            line=dict(color='#3498db', width=2),
+            marker=dict(size=6)
+        ))
+        fig_evolution.add_trace(go.Scatter(
+            x=daily_data['data'],
+            y=daily_data['valor'],
+            mode='lines+markers',
+            name='Valor (R$)',
+            line=dict(color='#2ecc71', width=2),
+            marker=dict(size=6),
+            yaxis='y2'
+        ))
+
+        fig_evolution.update_layout(
+            title='📈 Evolução Diária',
+            xaxis_title='Data',
+            yaxis_title='Quantidade de Vouchers',
+            yaxis2=dict(
+                title='Valor (R$)',
+                overlaying='y',
+                side='right'
+            ),
+            height=400,
+            template='plotly_white',
+            showlegend=True
+        )
+
+        return html.Div([
+            kpi_cards,
+            dbc.Row([
+                dbc.Col([dcc.Graph(figure=fig_evolution)], md=12)
+            ])
+        ])
+
+    except Exception as e:
+        print(f"Erro ao gerar visão geral: {str(e)}")
+        traceback.print_exc()
+        return error_message()
+
+def generate_networks_content(df: pd.DataFrame) -> html.Div:
+    """
+    Gera o conteúdo da aba de redes.
+    """
+    try:
+        if df.empty:
+            return no_data_message()
+
+        # Análise por rede
+        network_metrics = df.groupby('nome_rede').agg({
+            'imei': 'count',
+            'valor_dispositivo': 'sum'
+        }).reset_index()
+        network_metrics.columns = ['rede', 'total_vouchers', 'valor_total']
+        
+        # Calcular vouchers utilizados por rede
+        utilizados = df[df['situacao_voucher'].str.lower().str.contains('utilizado|usado|ativo', na=False)]
+        network_metrics['vouchers_utilizados'] = utilizados.groupby('nome_rede')['imei'].count().reindex(network_metrics['rede']).fillna(0)
+        
+        # Calcular métricas adicionais
+        network_metrics['taxa_utilizacao'] = (network_metrics['vouchers_utilizados'] / network_metrics['total_vouchers'] * 100).fillna(0)
+        network_metrics['ticket_medio'] = (network_metrics['valor_total'] / network_metrics['vouchers_utilizados']).fillna(0)
+        network_metrics = network_metrics.sort_values('valor_total', ascending=False)
+
+        # Tabela de métricas por rede
+        table = dash_table.DataTable(
+            id='network-metrics-table',
+            columns=[
+                {'name': 'Rede', 'id': 'rede'},
+                {'name': 'Total Vouchers', 'id': 'total_vouchers', 'type': 'numeric', 'format': {'specifier': ',d'}},
+                {'name': 'Vouchers Utilizados', 'id': 'vouchers_utilizados', 'type': 'numeric', 'format': {'specifier': ',d'}},
+                {'name': 'Taxa Utilização (%)', 'id': 'taxa_utilizacao', 'type': 'numeric', 'format': {'specifier': '.1f'}},
+                {'name': 'Valor Total (R$)', 'id': 'valor_total', 'type': 'numeric', 'format': {'specifier': ',.2f'}},
+                {'name': 'Ticket Médio (R$)', 'id': 'ticket_medio', 'type': 'numeric', 'format': {'specifier': ',.2f'}}
+            ],
+            data=network_metrics.to_dict('records'),
+            style_table={'overflowX': 'auto'},
+            style_cell={'textAlign': 'left', 'padding': '10px'},
+            style_header={'backgroundColor': '#f8f9fa', 'fontWeight': 'bold'},
+            page_size=10,
+            sort_action='native',
+            filter_action='native'
+        )
+
+        return html.Div([
+            dbc.Row([
+                dbc.Col([
+                    html.H4("📋 Métricas por Rede", className="mb-4"),
+                    table
+                ], md=12)
+            ])
+        ])
+
+    except Exception as e:
+        print(f"Erro ao gerar análise de redes: {str(e)}")
+        traceback.print_exc()
+        return error_message()
+
+def generate_rankings_content(df: pd.DataFrame) -> html.Div:
+    """
+    Gera o conteúdo da aba de rankings.
+    """
+    try:
+        if df.empty:
+            return no_data_message()
+
+        # Filtrar apenas vouchers utilizados
+        df_utilizados = df[df['situacao_voucher'].str.lower().str.contains('utilizado|usado|ativo', na=False)]
+
+        # Rankings por vendedor
+        vendedor_metrics = df_utilizados.groupby('nome_vendedor').agg({
+            'imei': 'count',
+            'valor_dispositivo': 'sum'
+        }).reset_index()
+        vendedor_metrics.columns = ['vendedor', 'total_vouchers', 'valor_total']
+        vendedor_metrics['ticket_medio'] = vendedor_metrics['valor_total'] / vendedor_metrics['total_vouchers']
+        vendedor_metrics = vendedor_metrics.sort_values('valor_total', ascending=False)
+
+        # Tabela Top Vendedores
+        table_vendedores = dash_table.DataTable(
+            id='vendedor-metrics-table',
+            columns=[
+                {'name': 'Vendedor', 'id': 'vendedor'},
+                {'name': 'Vouchers', 'id': 'total_vouchers', 'type': 'numeric', 'format': {'specifier': ',d'}},
+                {'name': 'Valor Total (R$)', 'id': 'valor_total', 'type': 'numeric', 'format': {'specifier': ',.2f'}},
+                {'name': 'Ticket Médio (R$)', 'id': 'ticket_medio', 'type': 'numeric', 'format': {'specifier': ',.2f'}}
+            ],
+            data=vendedor_metrics.head(10).to_dict('records'),
+            style_table={'overflowX': 'auto'},
+            style_cell={'textAlign': 'left', 'padding': '10px'},
+            style_header={'backgroundColor': '#f8f9fa', 'fontWeight': 'bold'}
+        )
+
+        return html.Div([
+            dbc.Row([
+                dbc.Col([
+                    html.H4("🏆 Top 10 Vendedores", className="mb-4"),
+                    table_vendedores
+                ], md=12)
+            ])
+        ])
+
+    except Exception as e:
+        print(f"Erro ao gerar rankings: {str(e)}")
+        traceback.print_exc()
+        return error_message()
+
+def generate_projections_content(df: pd.DataFrame) -> html.Div:
+    """
+    Gera o conteúdo da aba de projeções.
+    """
+    try:
+        if df.empty:
+            return no_data_message()
+
+        # Preparar dados para projeção
+        df['data'] = pd.to_datetime(df['data_str'])
+        df_utilizados = df[df['situacao_voucher'].str.lower().str.contains('utilizado|usado|ativo', na=False)]
+        
+        # Análise diária
+        daily_data = df_utilizados.groupby('data').agg({
+            'imei': 'count',
+            'valor_dispositivo': 'sum'
+        }).reset_index()
+        daily_data.columns = ['data', 'vouchers', 'valor']
+
+        # Calcular médias móveis
+        daily_data['mm_7d_vouchers'] = daily_data['vouchers'].rolling(window=7, min_periods=1).mean()
+        daily_data['mm_30d_vouchers'] = daily_data['vouchers'].rolling(window=30, min_periods=1).mean()
+
+        # Projetar próximos 30 dias
+        last_date = daily_data['data'].max()
+        future_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=30, freq='D')
+        
+        # Usar média dos últimos 30 dias para projeção
+        avg_vouchers = daily_data['vouchers'].tail(30).mean()
+        avg_valor = daily_data['valor'].tail(30).mean()
+        
+        projection_data = pd.DataFrame({
+            'data': future_dates,
+            'vouchers': [avg_vouchers] * 30,
+            'valor': [avg_valor] * 30
+        })
+
+        # Gráfico de projeção
+        fig = go.Figure()
+        
+        # Dados reais
+        fig.add_trace(go.Scatter(
+            name='Vouchers Diários',
+            x=daily_data['data'],
+            y=daily_data['vouchers'],
+            mode='markers',
+            marker=dict(size=6, color='#3498db', opacity=0.5)
+        ))
+        
+        fig.add_trace(go.Scatter(
+            name='Média Móvel (30 dias)',
+            x=daily_data['data'],
+            y=daily_data['mm_30d_vouchers'],
+            mode='lines',
+            line=dict(color='#e74c3c', width=2)
+        ))
+        
+        # Projeção
+        fig.add_trace(go.Scatter(
+            name='Projeção',
+            x=projection_data['data'],
+            y=projection_data['vouchers'],
+            mode='lines',
+            line=dict(color='#f1c40f', width=2, dash='dash')
+        ))
+
+        fig.update_layout(
+            title='📈 Projeção de Vouchers',
+            xaxis_title='Data',
+            yaxis_title='Quantidade de Vouchers',
+            height=400,
+            template='plotly_white',
+            showlegend=True
+        )
+
+        return html.Div([
+            dbc.Row([
+                dbc.Col([dcc.Graph(figure=fig)], md=12)
+            ])
+        ])
+
+    except Exception as e:
+        print(f"Erro ao gerar projeções: {str(e)}")
+        traceback.print_exc()
+        return error_message()
+
+def generate_engagement_content(df: pd.DataFrame) -> html.Div:
+    """
+    Gera o conteúdo da aba de engajamento.
+    """
+    try:
+        if df.empty:
+            return no_data_message()
+
+        # Calcular métricas de engajamento
+        total_redes = df['nome_rede'].nunique()
+        total_filiais = df.groupby('nome_rede')['nome_filial'].nunique().sum()
+        total_vendedores = df['nome_vendedor'].nunique()
+        
+        # Vendedores ativos (com vouchers utilizados)
+        df_utilizados = df[df['situacao_voucher'].str.lower().str.contains('utilizado|usado|ativo', na=False)]
+        vendedores_ativos = df_utilizados['nome_vendedor'].nunique()
+        taxa_ativacao = (vendedores_ativos / total_vendedores * 100) if total_vendedores > 0 else 0
+
+        # Cards com métricas principais
+        cards = dbc.Row([
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H4("🏢 Total de Redes", className="card-title text-center"),
+                        html.H2(f"{total_redes:,}",
+                               className="text-primary text-center display-4"),
+                        html.P(f"Com {total_filiais:,} filiais",
+                              className="text-muted text-center")
+                    ])
+                ], className="mb-4 shadow-sm")
+            ], md=4),
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H4("👥 Total de Vendedores", className="card-title text-center"),
+                        html.H2(f"{total_vendedores:,}",
+                               className="text-success text-center display-4"),
+                        html.P(f"{vendedores_ativos:,} vendedores ativos",
+                              className="text-muted text-center")
+                    ])
+                ], className="mb-4 shadow-sm")
+            ], md=4),
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H4("📊 Taxa de Ativação", className="card-title text-center"),
+                        html.H2(f"{taxa_ativacao:.1f}%",
+                               className="text-info text-center display-4"),
+                        html.P("Vendedores com vouchers utilizados",
+                              className="text-muted text-center")
+                    ])
+                ], className="mb-4 shadow-sm")
+            ], md=4)
+        ])
+
+        return html.Div([cards])
+
+    except Exception as e:
+        print(f"Erro ao gerar análise de engajamento: {str(e)}")
+        traceback.print_exc()
+        return error_message()
+
+# Healthcheck endpoint
+@server.route('/health')
+def health_check():
+    """Endpoint para verificação de saúde do servidor"""
+    try:
+        # Verifica se o banco de dados está acessível
+        db.session.execute('SELECT 1')
+        db.session.commit()
+        
+        # Verifica uso de memória
+        memory = psutil.Process().memory_info().rss / 1024 / 1024  # MB
+        
+        return jsonify({
+            'status': 'healthy',
+            'timestamp': datetime.now().isoformat(),
+            'memory_usage_mb': round(memory, 2),
+            'database': 'connected'
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'unhealthy',
+            'error': str(e),
+            'timestamp': datetime.now().isoformat()
+        }), 500
 
 if __name__ == '__main__':
     app.run_server(debug=True, host='0.0.0.0', port=8080)
